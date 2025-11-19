@@ -3,14 +3,36 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { useAuth } from "@/hooks/useAuth";
+import Landing from "@/pages/Landing";
+import Dashboard from "@/pages/Dashboard";
+import Chat from "@/pages/Chat";
+import LiveSession from "@/pages/LiveSession";
+import Courses from "@/pages/Courses";
+import Marketplace from "@/pages/Marketplace";
+import Exams from "@/pages/Exams";
 import NotFound from "@/pages/not-found";
 
 function Router() {
+  const { isAuthenticated, isLoading } = useAuth();
+
   return (
     <Switch>
-      {/* Add pages below */}
-      {/* <Route path="/" component={Home}/> */}
-      {/* Fallback to 404 */}
+      {isLoading || !isAuthenticated ? (
+        <Route path="/" component={Landing} />
+      ) : (
+        <>
+          <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/chat" component={Chat} />
+          <Route path="/live-session" component={LiveSession} />
+          <Route path="/live-session/:id" component={LiveSession} />
+          <Route path="/courses" component={Courses} />
+          <Route path="/marketplace" component={Marketplace} />
+          <Route path="/exams" component={Exams} />
+        </>
+      )}
       <Route component={NotFound} />
     </Switch>
   );
@@ -19,10 +41,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <ThemeProvider defaultTheme="dark">
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
