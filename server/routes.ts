@@ -66,9 +66,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attachments: null,
       });
 
-      // Get conversation history (last 10 messages for context)
-      const history = await storage.getChatMessagesByUser(userId, 10);
-      const messages = history.reverse().map(msg => ({
+      // Get conversation history (last 20 messages for context - includes user's new message)
+      const history = await storage.getChatMessagesByUser(userId, 20);
+      const messages = history.map(msg => ({
         role: msg.role,
         content: msg.content
       }));
@@ -88,6 +88,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error sending message:", error);
       res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Clear all chat messages for user
+  app.post('/api/chat/clear', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.deleteChatMessagesByUser(userId);
+      res.json({ message: "Chat cleared successfully" });
+    } catch (error) {
+      console.error("Error clearing chat:", error);
+      res.status(500).json({ message: "Failed to clear chat" });
     }
   });
 

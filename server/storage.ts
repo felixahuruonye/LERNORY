@@ -88,6 +88,7 @@ export interface IStorage {
   // Chat message operations
   getChatMessagesByUser(userId: string, limit?: number): Promise<ChatMessage[]>;
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
+  deleteChatMessagesByUser(userId: string): Promise<void>;
   
   // Memory entry operations
   getMemoryEntriesByUser(userId: string): Promise<MemoryEntry[]>;
@@ -249,13 +250,17 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(chatMessages)
       .where(eq(chatMessages.userId, userId))
-      .orderBy(desc(chatMessages.createdAt))
+      .orderBy(chatMessages.createdAt)
       .limit(limit);
   }
 
   async createChatMessage(message: InsertChatMessage): Promise<ChatMessage> {
     const [newMessage] = await db.insert(chatMessages).values(message).returning();
     return newMessage;
+  }
+
+  async deleteChatMessagesByUser(userId: string): Promise<void> {
+    await db.delete(chatMessages).where(eq(chatMessages.userId, userId));
   }
 
   // Memory entry operations

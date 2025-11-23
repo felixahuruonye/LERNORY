@@ -141,20 +141,20 @@ export default function Chat() {
   };
 
   const clearChat = async () => {
-    if (!window.confirm("Are you sure you want to clear all chat messages?")) {
+    if (!window.confirm("Are you sure you want to clear all chat messages? This cannot be undone.")) {
       return;
     }
 
     try {
+      // Delete from backend
+      await apiRequest("POST", "/api/chat/clear", {});
+      
       // Clear local cache
       queryClient.setQueryData(["/api/chat/messages"], []);
       
-      // Optional: You can also call an API endpoint to clear messages from backend
-      // await apiRequest("POST", "/api/chat/clear");
-      
       toast({
         title: "Chat cleared",
-        description: "All messages have been deleted.",
+        description: "All messages have been permanently deleted.",
       });
     } catch (error) {
       console.error("Clear chat error:", error);
