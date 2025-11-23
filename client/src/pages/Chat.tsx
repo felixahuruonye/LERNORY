@@ -41,16 +41,19 @@ export default function Chat() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      await apiRequest("/api/chat/send", {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      });
+      const response = await apiRequest("POST", "/api/chat/send", { content });
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/messages"] });
       setMessage("");
+      toast({
+        title: "Message sent",
+        description: "Your message was sent successfully.",
+      });
     },
     onError: (error: Error) => {
+      console.error("Send message error:", error);
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -64,7 +67,7 @@ export default function Chat() {
       }
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
+        description: error.message || "Failed to send message. Please try again.",
         variant: "destructive",
       });
     },
