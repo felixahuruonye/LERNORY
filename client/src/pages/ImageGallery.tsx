@@ -97,11 +97,7 @@ export default function ImageGallery() {
                 Go to Chat
               </Button>
             </div>
-          ) : images.length > 0 && (
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">All Generated Images</h2>
-            </div>
-          ), selectedImage ? (
+          ) : selectedImage ? (
             // Image Detail View
             <div className="max-w-3xl mx-auto">
               <Button
