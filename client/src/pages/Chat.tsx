@@ -270,7 +270,7 @@ export default function Chat() {
       {/* Messages */}
       <div
         {...getRootProps()}
-        className="flex-1 overflow-y-auto max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col justify-end"
+        className="flex-1 overflow-y-auto max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6"
       >
         <input {...getInputProps()} />
         {isDragActive && (
@@ -344,7 +344,7 @@ export default function Chat() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 mt-auto w-full">
+          <div className="space-y-4 w-full">
             {messages.map((msg) => (
               <div
                 key={msg.id}
