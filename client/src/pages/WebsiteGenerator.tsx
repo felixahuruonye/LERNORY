@@ -105,19 +105,24 @@ export default function WebsiteGenerator() {
       {/* Header */}
       <div className="border-b border-border/50 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setLocation("/chat")}
-                data-testid="button-back"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-            </div>
+          <div className="flex items-center justify-between gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setLocation("/chat")}
+              data-testid="button-back"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
             <h1 className="text-2xl font-bold text-center flex-1">Website Generator</h1>
-            <div className="w-10" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/website-menu")}
+              data-testid="button-open-menu"
+            >
+              Features Menu
+            </Button>
           </div>
         </div>
       </div>

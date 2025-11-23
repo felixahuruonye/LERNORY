@@ -20,7 +20,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -214,6 +214,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error explaining code:", error);
       res.status(500).json({ message: `Failed to explain code: ${error instanceof Error ? error.message : "Unknown error"}` });
+    }
+  });
+
+  app.post('/api/websites/:id/debug', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { debugPrompt } = req.body;
+      
+      if (!debugPrompt?.trim()) {
+        return res.status(400).json({ message: "Debug prompt is required" });
+      }
+
+      const website = await storage.getGeneratedWebsite(req.params.id);
+      if (!website) {
+        return res.status(404).json({ message: "Website not found" });
+      }
+
+      const suggestion = await debugCodeWithLEARNORY(
+        website.htmlCode,
+        website.cssCode,
+        website.jsCode || "",
+        debugPrompt
+      );
+
+      res.json({ suggestion });
+    } catch (error) {
+      console.error("Error debugging code:", error);
+      res.status(500).json({ message: `Failed to debug code: ${error instanceof Error ? error.message : "Unknown error"}` });
     }
   });
 

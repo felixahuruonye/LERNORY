@@ -26,20 +26,20 @@ Response format (ONLY output valid JSON, no other text):
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log("Calling Gemini API with prompt length:", prompt.length);
+    console.log("Calling LEARNORY AI with prompt length:", prompt.length);
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: fullPrompt,
     });
 
-    console.log("Gemini API response received, extracting text...");
+    console.log("LEARNORY AI response received, extracting text...");
     
     const responseText = response.text;
     
     if (!responseText) {
-      console.error("Empty response from Gemini API");
-      throw new Error("Empty response from Gemini API");
+      console.error("Empty response from LEARNORY AI");
+      throw new Error("Empty response from LEARNORY AI");
     }
     
     console.log("Response text length:", responseText.length);
@@ -49,7 +49,7 @@ Response format (ONLY output valid JSON, no other text):
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("Could not extract JSON from response:", responseText.substring(0, 500));
-      throw new Error(`Failed to extract JSON from Gemini response`);
+      throw new Error(`Failed to extract JSON from LEARNORY AI response`);
     }
 
     console.log("JSON extracted, parsing...");
@@ -64,7 +64,7 @@ Response format (ONLY output valid JSON, no other text):
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error generating website with Gemini:", errorMsg);
+    console.error("Error generating website with LEARNORY AI:", errorMsg);
     throw error;
   }
 }
@@ -84,25 +84,63 @@ Explain it like you're teaching someone who has never written code before. Be de
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log("Calling Gemini API to explain code...");
+    console.log("Calling LEARNORY AI to explain code...");
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
 
-    console.log("Gemini API response received for code explanation");
+    console.log("LEARNORY AI response received for code explanation");
     
     const explanation = response.text;
     
     if (!explanation) {
-      throw new Error("Empty response from Gemini API");
+      throw new Error("Empty response from LEARNORY AI");
     }
 
     return explanation;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error explaining code with Gemini:", errorMsg);
+    console.error("Error explaining code with LEARNORY AI:", errorMsg);
+    throw error;
+  }
+}
+
+export async function debugCodeWithLEARNORY(html: string, css: string, js: string, debugPrompt: string): Promise<string> {
+  const codeSnippet = `HTML:\n${html}\n\nCSS:\n${css}\n\nJavaScript:\n${js}`;
+  
+  const prompt = `You are an expert web developer helping someone debug and improve their code. The user wants to: ${debugPrompt}
+
+Current code:
+${codeSnippet}
+
+Provide specific code suggestions or explanations on how to achieve what they're asking for. Be practical and direct.`;
+
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("Calling LEARNORY AI for debugging...");
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    console.log("LEARNORY AI debug response received");
+    
+    const suggestion = response.text;
+    
+    if (!suggestion) {
+      throw new Error("Empty response from LEARNORY AI");
+    }
+
+    return suggestion;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error debugging code with LEARNORY AI:", errorMsg);
     throw error;
   }
 }
