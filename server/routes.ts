@@ -3,6 +3,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import {
@@ -505,22 +508,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   wss.on('connection', (ws: WebSocket) => {
     console.log('New WebSocket connection established');
+    const audioBuffer: Buffer[] = [];
 
     ws.on('message', async (message: string) => {
       try {
         const data = JSON.parse(message.toString());
 
-        if (data.type === 'audio_chunk') {
-          // In real implementation, process audio chunk with Whisper
-          // For now, echo back a simulated transcript
-          ws.send(JSON.stringify({
-            type: 'transcript_segment',
-            data: {
-              speaker: 'Speaker 1',
-              text: 'Sample transcribed text...',
-              timestamp: Date.now(),
-            },
-          }));
+        if (data.type === 'audio_chunk' && data.data) {
+          // Data comes as data:audio/webm;base64,...
+          const base64Data = data.data.split(',')[1];
+          if (base64Data) {
+            // Collect audio chunks
+            audioBuffer.push(Buffer.from(base64Data, 'base64'));
+
+            // Process every few chunks to send back transcripts
+            if (audioBuffer.length >= 5) {
+              // Combine audio chunks and transcribe
+              const combinedAudio = Buffer.concat(audioBuffer);
+              
+              // Save to temporary file for Whisper API
+              const tempDir = os.tmpdir();
+              const tempFile = path.join(tempDir, `audio_${Date.now()}.webm`);
+              
+              fs.writeFileSync(tempFile, combinedAudio);
+              
+              try {
+                // Transcribe audio using Whisper API
+                const transcription = await transcribeAudio(tempFile);
+                
+                // Send transcript segment back to client
+                ws.send(JSON.stringify({
+                  type: 'transcript_segment',
+                  data: {
+                    speaker: 'Speaker',
+                    text: transcription.text,
+                    timestamp: Date.now(),
+                  },
+                }));
+                
+                // Clean up temp file
+                fs.unlinkSync(tempFile);
+              } catch (transcriptionError) {
+                console.error('Transcription error:', transcriptionError);
+                // Send error response
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  data: { message: 'Transcription failed' },
+                }));
+              }
+              
+              // Clear audio buffer for next batch
+              audioBuffer.length = 0;
+            }
+          }
         }
       } catch (error) {
         console.error('WebSocket error:', error);
@@ -529,6 +569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     ws.on('close', () => {
       console.log('WebSocket connection closed');
+      audioBuffer.length = 0;
     });
   });
 

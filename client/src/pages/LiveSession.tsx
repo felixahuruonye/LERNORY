@@ -277,11 +277,9 @@ export default function LiveSession() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="icon" asChild className="hover-elevate active-elevate-2">
-                <Link href="/dashboard">
-                  <a data-testid="link-back">
-                    <ArrowLeft className="h-5 w-5" />
-                  </a>
-                </Link>
+                <a href="/dashboard" data-testid="link-back">
+                  <ArrowLeft className="h-5 w-5" />
+                </a>
               </Button>
               <div>
                 <h1 className="font-display font-semibold text-lg">Live Session</h1>
