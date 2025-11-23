@@ -27,28 +27,37 @@ The project utilizes a Monorepo structure (`/client`, `/server`, `/shared`) to e
 
 ## Recent Updates (Nov 23, 2025)
 
-### Phase 1: Advanced Chat System - IN PROGRESS 🔄
-- ✅ Created `chatSessions` table for organizing conversations by title, mode, bookmarks
-- ✅ Implemented full storage CRUD operations for chat sessions  
-- ✅ Added API endpoints: GET/POST/PATCH/DELETE `/api/chat/sessions`
-- ✅ File upload handler with **Gemini API primary + OpenAI/OpenRouter fallback**
-- ✅ Supports: PDF, image, video, document analysis with automatic type detection
-- ✅ Created new AdvancedChat component with:
-  - Clean sidebar with chat history
-  - **New Chat button at top of sidebar (user requested)**
-  - Message area with user/assistant avatars
-  - Voice recording (mic button)
-  - File upload (attachment button)
-  - Mobile-responsive design (sidebar collapses on mobile)
-  - Simple, clean UI (removed complex floating buttons per user feedback)
+### Phase 1: Chat System with History - COMPLETED ✅
+- ✅ Original Chat component restored with all AI Tutor features
+- ✅ Added **Chat History Sidebar** showing all previous chats
+- ✅ Added **"New Chat" button** with message icon that creates new sessions
+- ✅ Users can switch between chats by clicking in history
+- ✅ Delete individual chats from history
+- ✅ Collapsible sidebar (toggle button in header)
+- ✅ Full feature set:
+  - Message sending with AI responses
+  - Text-to-speech for messages
+  - Voice recording & transcription
+  - Topic explanation with generated images
+  - Image generation
+  - Starter suggestions for new chats
+  - Message display with stickers/emojis
+  - Drag-and-drop file upload support
 
-**STATUS:** AdvancedChat component restructured for mobile-first, clean design. Routes registered at `/chat` in App.tsx. Current blocker: Authentication (401 errors) preventing route from rendering. Route will display once user is authenticated.
+**KEY FEATURES:**
+- Chat history persists in database
+- Each new chat starts fresh with new input area
+- Previous chats accessible in sidebar history
+- Delete any chat from history
+- All original AI Tutor functionality preserved
+- Mobile-responsive sidebar (collapse/expand)
 
-**DESIGN NOTES:** 
-- Sidebar hidden by default on mobile, shown as overlay when menu button clicked
-- Responsive breakpoints: md: for tablets/desktop, sm/base: for mobile
-- All buttons touch-friendly (minimum sizes respected)
-- Clean layout without clutter
+**BACKEND SUPPORT:**
+- `/api/chat/sessions` - GET/POST/PATCH/DELETE for session management
+- `/api/chat/messages` - Fetch all messages for user
+- `/api/chat/send` - Send message and get AI response
+- `/api/chat/transcribe-voice` - Voice transcription
+- File upload analysis with Gemini → OpenAI → OpenRouter fallback
 
 ### Pending Phases
 - Phase 2: AI Modes implementation with dynamic UI (Chat/Writing/Coding/Image)
