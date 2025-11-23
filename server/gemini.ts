@@ -244,50 +244,31 @@ interface ImageGenerationResult {
 }
 
 export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
-  // Generate real educational images using OpenAI DALL-E 3
-  const imagePrompt = `Create a clear, realistic, educational infographic or illustration based on this concept: ${prompt}. The image should be suitable for students learning this topic, with clear visuals, diagrams, or illustrative elements.`;
-  
+  // Use Unsplash API for reliable, permanent image URLs
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY environment variable is not set");
+    console.log("LEARNORY AI: Fetching educational image from Unsplash");
+    
+    // Extract key terms from prompt for better search
+    const searchTerms = prompt.split(' ').slice(0, 3).join('+');
+    const unsplashUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(searchTerms)},education,learning,science`;
+    
+    // Verify the image URL works by making a request
+    const response = await fetch(unsplashUrl, { method: 'HEAD' });
+    if (response.ok) {
+      console.log("Image fetched successfully from Unsplash");
+      return {
+        imageUrl: unsplashUrl,
+        description: prompt
+      };
     }
-
-    console.log("LEARNORY AI: Generating educational image with DALL-E 3");
-    
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
-
-    // Generate actual image using DALL-E 3
-    const imageResponse = await openai.images.generate({
-      model: "dall-e-3",
-      prompt: imagePrompt,
-      n: 1,
-      size: "1024x1024",
-      quality: "standard",
-      response_format: "b64_json" // Get base64 encoded image
-    });
-
-    const imageData = imageResponse.data[0]?.b64_json;
-    if (!imageData) {
-      throw new Error("Failed to generate image - no image data returned");
-    }
-
-    // Convert base64 to data URL
-    const imageUrl = `data:image/png;base64,${imageData}`;
-    
-    console.log("Image generated successfully (base64 encoded)");
-    
-    return {
-      imageUrl,
-      description: imagePrompt
-    };
+    throw new Error("Failed to fetch image from Unsplash");
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error generating image with DALL-E 3:", errorMsg);
-    // Fallback to a solid color placeholder with text
+    console.error("Error generating image:", errorMsg);
+    
+    // Fallback: Use a generic Unsplash image that always works
     return {
-      imageUrl: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Crect fill='%234f46e5' width='1024' height='1024'/%3E%3Ctext x='50%25' y='50%25' font-size='32' fill='white' text-anchor='middle' dy='.3em' font-family='Arial'%3E${encodeURIComponent(prompt.substring(0, 30))}%3C/text%3E%3C/svg%3E`,
+      imageUrl: `https://source.unsplash.com/1024x1024/?learning,education,classroom`,
       description: prompt
     };
   }
