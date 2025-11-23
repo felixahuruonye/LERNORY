@@ -20,6 +20,9 @@ import {
   Volume2,
   Trash2,
   History,
+  Edit3,
+  Eye,
+  Wand2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +59,11 @@ export default function LiveSession() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [activeTab, setActiveTab] = useState<'record' | 'history'>('record');
   const [livePreviewText, setLivePreviewText] = useState("");
+  const [expandedRecordingId, setExpandedRecordingId] = useState<string | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [isSummarizing, setIsSummarizing] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -266,6 +274,110 @@ export default function LiveSession() {
     });
   };
 
+  const readAllText = async (recording: Recording) => {
+    if (!window.speechSynthesis) {
+      toast({
+        title: "Not supported",
+        description: "Text-to-speech is not supported in your browser",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    const fullText = recording.transcript.map((seg) => seg.text).join(" ");
+    if (!fullText) {
+      toast({
+        title: "No text",
+        description: "No transcribed text to read",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSpeaking(true);
+    const utterance = new SpeechSynthesisUtterance(fullText);
+    utterance.onend = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const summarizeAndCorrect = async (recording: Recording) => {
+    setIsSummarizing(true);
+    const fullText = recording.transcript.map((seg) => seg.text).join(" ");
+
+    try {
+      const response = await apiRequest("POST", "/api/summarize-and-correct", {
+        text: fullText,
+      });
+
+      const data = await response.json();
+
+      // Update recording with corrected text
+      setRecordings((prev) =>
+        prev.map((rec) =>
+          rec.id === recording.id
+            ? {
+                ...rec,
+                transcript: [
+                  ...rec.transcript,
+                  {
+                    speaker: "AI Corrected",
+                    text: data.correctedText,
+                    timestamp: Date.now(),
+                  },
+                ],
+              }
+            : rec
+        )
+      );
+
+      toast({
+        title: "Text corrected",
+        description: data.summary ? "Summary: " + data.summary.slice(0, 100) + "..." : "Text has been corrected",
+      });
+    } catch (error) {
+      console.error("Summarize/correct error:", error);
+      toast({
+        title: "Processing failed",
+        description: "Could not summarize and correct text",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
+  const saveEditedText = (recordingId: string) => {
+    setRecordings((prev) =>
+      prev.map((rec) =>
+        rec.id === recordingId
+          ? {
+              ...rec,
+              transcript: [
+                ...rec.transcript,
+                {
+                  speaker: "Edited",
+                  text: editingText,
+                  timestamp: Date.now(),
+                },
+              ],
+            }
+          : rec
+      )
+    );
+    setEditingId(null);
+    setEditingText("");
+    toast({
+      title: "Text updated",
+      description: "Your edits have been saved",
+    });
+  };
+
   const playHistoryRecording = (recording: Recording) => {
     try {
       const audioUrl = URL.createObjectURL(recording.audioBlob);
@@ -316,11 +428,20 @@ export default function LiveSession() {
         yPosition += 2;
       });
 
-      doc.save(`${recording.title}-transcript.pdf`);
+      // Generate PDF and trigger download via blob
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${recording.title}-transcript.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
       toast({
         title: "PDF downloaded",
-        description: "Your transcript has been saved",
+        description: "Your transcript has been saved to your device",
       });
     } catch (error) {
       console.error("PDF download error:", error);
@@ -499,12 +620,20 @@ export default function LiveSession() {
         yPosition += 2;
       });
 
-      // Save PDF
-      doc.save(`${sessionTitle || "session"}-transcript.pdf`);
+      // Generate PDF and trigger download via blob
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${sessionTitle || "session"}-transcript.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       
       toast({
         title: "PDF downloaded",
-        description: "Your transcript has been saved",
+        description: "Your transcript has been saved to your device",
       });
     } catch (error) {
       console.error("PDF download error:", error);
@@ -873,8 +1002,53 @@ export default function LiveSession() {
                       </p>
                     </div>
 
-                    {/* Transcript Preview */}
-                    {recording.transcript.length > 0 && (
+                    {/* Transcript Preview / Full Text */}
+                    {expandedRecordingId === recording.id ? (
+                      <div className="mb-4 bg-muted/50 p-3 rounded">
+                        {editingId === recording.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              className="w-full p-2 bg-background border border-border rounded text-sm min-h-24"
+                              data-testid={`textarea-edit-${recording.id}`}
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => saveEditedText(recording.id)}
+                                size="sm"
+                                className="hover-elevate active-elevate-2"
+                                data-testid={`button-save-edit-${recording.id}`}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setEditingText("");
+                                }}
+                                size="sm"
+                                variant="outline"
+                                className="hover-elevate active-elevate-2"
+                                data-testid={`button-cancel-edit-${recording.id}`}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="max-h-48 overflow-y-auto text-sm space-y-2">
+                              {recording.transcript.map((seg, idx) => (
+                                <p key={idx} className="text-xs">
+                                  <span className="font-semibold text-primary">{seg.speaker}:</span> {seg.text}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
                       <div className="mb-4 max-h-32 overflow-y-auto bg-muted/50 p-2 rounded text-sm">
                         {recording.transcript.map((seg, idx) => (
                           <p key={idx} className="text-xs mb-1">
@@ -885,7 +1059,7 @@ export default function LiveSession() {
                     )}
 
                     {/* Action Buttons */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                       <Button
                         onClick={() => playHistoryRecording(recording)}
                         size="sm"
@@ -895,6 +1069,17 @@ export default function LiveSession() {
                       >
                         <Volume2 className="h-3 w-3 mr-1" />
                         Play
+                      </Button>
+
+                      <Button
+                        onClick={() => setExpandedRecordingId(expandedRecordingId === recording.id ? null : recording.id)}
+                        size="sm"
+                        variant="outline"
+                        className="hover-elevate active-elevate-2"
+                        data-testid={`button-show-text-${recording.id}`}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        {expandedRecordingId === recording.id ? "Hide" : "Show"} Text
                       </Button>
 
                       <Button
@@ -909,16 +1094,64 @@ export default function LiveSession() {
                       </Button>
 
                       <Button
-                        onClick={() => deleteRecording(recording.id)}
+                        onClick={() => readAllText(recording)}
                         size="sm"
                         variant="outline"
-                        className="hover-elevate active-elevate-2 text-destructive"
-                        data-testid={`button-delete-${recording.id}`}
+                        className={`hover-elevate active-elevate-2 ${isSpeaking ? "bg-primary text-primary-foreground" : ""}`}
+                        data-testid={`button-read-${recording.id}`}
                       >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Delete
+                        <Mic className="h-3 w-3 mr-1" />
+                        {isSpeaking ? "Stop" : "Read"}
+                      </Button>
+
+                      <Button
+                        onClick={() => {
+                          setEditingId(recording.id);
+                          setEditingText(recording.transcript.map((seg) => seg.text).join(" "));
+                          setExpandedRecordingId(recording.id);
+                        }}
+                        size="sm"
+                        variant="outline"
+                        className="hover-elevate active-elevate-2"
+                        data-testid={`button-edit-${recording.id}`}
+                      >
+                        <Edit3 className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
+
+                      <Button
+                        onClick={() => summarizeAndCorrect(recording)}
+                        disabled={isSummarizing}
+                        size="sm"
+                        variant="outline"
+                        className="hover-elevate active-elevate-2"
+                        data-testid={`button-summarize-${recording.id}`}
+                      >
+                        {isSummarizing ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Processing
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="h-3 w-3 mr-1" />
+                            AI Fix
+                          </>
+                        )}
                       </Button>
                     </div>
+
+                    {/* Delete Button - Full Width */}
+                    <Button
+                      onClick={() => deleteRecording(recording.id)}
+                      size="sm"
+                      variant="outline"
+                      className="w-full hover-elevate active-elevate-2 text-destructive"
+                      data-testid={`button-delete-${recording.id}`}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Delete Recording
+                    </Button>
                   </Card>
                 ))}
               </div>

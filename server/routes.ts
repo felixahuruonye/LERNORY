@@ -543,6 +543,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Summarize and correct text using OpenAI
+  app.post('/api/summarize-and-correct', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { text } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+
+      // Use OpenAI to summarize and correct
+      const response = await chatWithAI([
+        {
+          role: "user",
+          content: `Please do the following:\n1. Correct all spelling and grammar mistakes in this text\n2. Provide a brief summary (2-3 sentences)\n\nText:\n${text}\n\nResponse format:\nCORRECTED:\n[corrected text]\n\nSUMMARY:\n[summary]`,
+        },
+      ]);
+
+      const responseText = response.content;
+      const correctedMatch = responseText.match(/CORRECTED:\n([\s\S]*?)(?:\n\nSUMMARY:|$)/);
+      const summaryMatch = responseText.match(/SUMMARY:\n([\s\S]*?)$/);
+
+      const correctedText = correctedMatch ? correctedMatch[1].trim() : text;
+      const summary = summaryMatch ? summaryMatch[1].trim() : "";
+
+      res.json({
+        correctedText,
+        summary,
+      });
+    } catch (error) {
+      console.error("Error summarizing and correcting:", error);
+      res.status(500).json({ message: "Failed to process text" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // WebSocket integration for real-time transcription
@@ -563,8 +597,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Collect audio chunks
             audioBuffer.push(Buffer.from(base64Data, 'base64'));
 
-            // Process every few chunks to send back transcripts
-            if (audioBuffer.length >= 5) {
+            // Process every 2 chunks to send back transcripts (faster live preview)
+            if (audioBuffer.length >= 2) {
               // Combine audio chunks and transcribe
               const combinedAudio = Buffer.concat(audioBuffer);
               
