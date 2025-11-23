@@ -60,7 +60,7 @@ export default function AdvancedChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Hidden by default on mobile
   const [expandedMenuId, setExpandedMenuId] = useState<string | null>(null);
   const [showSideNotes, setShowSideNotes] = useState(false);
   const [sideNotes, setSideNotes] = useState("");
@@ -283,9 +283,9 @@ export default function AdvancedChat() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <div className={`${isSidebarOpen ? "w-64" : "w-0"} transition-all duration-300 border-r border-border bg-muted/30 flex flex-col overflow-hidden`}>
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* Sidebar - Mobile overlay, desktop fixed */}
+      <div className={`fixed md:relative top-0 left-0 h-full md:h-auto z-50 md:z-auto ${isSidebarOpen ? "w-64" : "w-0"} transition-all duration-300 border-r border-border bg-muted/30 flex flex-col overflow-hidden`}>
         {isSidebarOpen && (
           <>
             {/* New Chat Button */}
@@ -384,25 +384,33 @@ export default function AdvancedChat() {
         )}
       </div>
 
+      {/* Mobile overlay backdrop */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          data-testid="overlay-sidebar"
+        />
+      )}
+
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col w-full">
         {/* Header */}
-        <header className="border-b border-border/50 backdrop-blur-lg bg-background/80 p-4 flex items-center justify-between sticky top-0 z-40">
-          <div className="flex items-center gap-4">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              data-testid="button-toggle-sidebar"
-            >
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-            <h1 className="font-display font-semibold text-lg">
-              {currentSessionId ? (sessions as ChatSession[]).find((s: ChatSession) => s.id === currentSessionId)?.title : "New Chat"}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="icon" variant="ghost" onClick={() => setShowSideNotes(!showSideNotes)} data-testid="button-side-notes">
+        <header className="border-b border-border/50 backdrop-blur-lg bg-background/80 p-2 md:p-4 flex items-center justify-between sticky top-0 z-40 gap-1 md:gap-2">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            data-testid="button-toggle-sidebar"
+            className="shrink-0"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+          <h1 className="font-display font-semibold text-sm md:text-lg truncate flex-1">
+            {currentSessionId ? (sessions as ChatSession[]).find((s: ChatSession) => s.id === currentSessionId)?.title : "New Chat"}
+          </h1>
+          <div className="flex items-center gap-1">
+            <Button size="icon" variant="ghost" onClick={() => setShowSideNotes(!showSideNotes)} data-testid="button-side-notes" className="hidden md:inline-flex">
               <MessageSquare className="h-4 w-4" />
             </Button>
             <ThemeToggle />
@@ -411,8 +419,8 @@ export default function AdvancedChat() {
 
         <div className="flex flex-1 overflow-hidden">
           {/* Chat Messages */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 flex flex-col w-full">
+            <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-3 md:space-y-4">
               {messages.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center max-w-md">
@@ -425,7 +433,7 @@ export default function AdvancedChat() {
                 messages.map((msg, idx) => (
                   <Card
                     key={msg.id || idx}
-                    className={`p-4 hover-elevate ${msg.role === "user" ? "ml-12" : "mr-12"} cursor-pointer`}
+                    className={`p-3 md:p-4 hover-elevate ${msg.role === "user" ? "ml-4 md:ml-12" : "mr-4 md:mr-12"} cursor-pointer`}
                     onClick={() => {
                       setSelectedMessages((prev) => {
                         const newSet = new Set(prev);
@@ -469,9 +477,9 @@ export default function AdvancedChat() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Floating suggestion buttons - after last message */}
+            {/* Floating suggestion buttons - after last message (hidden on mobile) */}
             {messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
-              <div className="px-6 pb-4 flex flex-wrap gap-2">
+              <div className="px-3 md:px-6 pb-4 hidden md:flex flex-wrap gap-2">
                 {floatingActions.map((action, idx) => (
                   <Button
                     key={idx}
@@ -489,14 +497,14 @@ export default function AdvancedChat() {
             )}
 
             {/* AI Mode Selector */}
-            <div className="px-6 pb-4 flex gap-2">
+            <div className="px-3 md:px-6 pb-4 flex gap-1 md:gap-2 overflow-x-auto">
               {(["chat", "writing", "coding", "image"] as const).map((mode) => (
                 <Button
                   key={mode}
                   size="sm"
                   variant={aiMode === mode ? "default" : "outline"}
                   onClick={() => setAiMode(mode)}
-                  className="hover-elevate capitalize"
+                  className="hover-elevate capitalize whitespace-nowrap"
                   data-testid={`button-mode-${mode}`}
                 >
                   {mode}
@@ -505,21 +513,21 @@ export default function AdvancedChat() {
             </div>
 
             {/* Input Area */}
-            <div className={`border-t border-border p-4 space-y-3 ${isDragActive ? "bg-primary/5" : ""}`} {...getRootProps()}>
+            <div className={`border-t border-border p-2 md:p-4 space-y-2 md:space-y-3 ${isDragActive ? "bg-primary/5" : ""}`} {...getRootProps()}>
               <input {...getInputProps()} />
 
               {uploadedFiles.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-32 overflow-y-auto">
                   {uploadedFiles.map((file, idx) => (
                     <Card key={idx} className="p-2 text-xs">
-                      <p className="font-semibold">{file.name}</p>
-                      <p className="text-muted-foreground">{file.analysis.slice(0, 100)}...</p>
+                      <p className="font-semibold truncate">{file.name}</p>
+                      <p className="text-muted-foreground line-clamp-2">{file.analysis.slice(0, 80)}...</p>
                     </Card>
                   ))}
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex gap-1 md:gap-2">
                 <Textarea
                   ref={textareaRef}
                   value={message}
@@ -530,11 +538,11 @@ export default function AdvancedChat() {
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Type your message... or upload files"
-                  className="resize-none flex-1"
+                  placeholder="Message..."
+                  className="resize-none flex-1 min-h-10 max-h-24 text-sm"
                   data-testid="input-message"
                 />
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
                   <Button
                     size="icon"
                     onClick={() => {
@@ -542,19 +550,19 @@ export default function AdvancedChat() {
                       else startRecording();
                     }}
                     variant={isRecording ? "destructive" : "default"}
-                    className="hover-elevate"
+                    className="hover-elevate h-10 w-10"
                     data-testid="button-record"
                   >
                     <Mic className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="outline" className="hover-elevate" data-testid="button-upload">
+                  <Button size="icon" variant="outline" className="hover-elevate h-10 w-10 hidden sm:inline-flex" data-testid="button-upload">
                     <Paperclip className="h-4 w-4" />
                   </Button>
                   <Button
                     size="icon"
                     onClick={handleSendMessage}
                     disabled={sendMessageMutation.isPending}
-                    className="hover-elevate"
+                    className="hover-elevate h-10 w-10"
                     data-testid="button-send"
                   >
                     {sendMessageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -564,11 +572,11 @@ export default function AdvancedChat() {
             </div>
           </div>
 
-          {/* Side Notes Panel */}
+          {/* Side Notes Panel - Desktop only */}
           {showSideNotes && (
-            <div className="w-64 border-l border-border p-4 flex flex-col bg-muted/20">
-              <h3 className="font-semibold mb-3">Side Notes</h3>
-              <Textarea value={sideNotes} onChange={(e) => setSideNotes(e.target.value)} placeholder="Add notes..." className="flex-1 resize-none" data-testid="textarea-notes" />
+            <div className="hidden md:flex w-64 border-l border-border p-4 flex-col bg-muted/20">
+              <h3 className="font-semibold mb-3 text-sm">Notes</h3>
+              <Textarea value={sideNotes} onChange={(e) => setSideNotes(e.target.value)} placeholder="Add notes..." className="flex-1 resize-none text-sm" data-testid="textarea-notes" />
             </div>
           )}
         </div>
