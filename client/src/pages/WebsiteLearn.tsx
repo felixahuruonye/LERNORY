@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,11 @@ export default function WebsiteLearn() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const [explanation, setExplanation] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [displayedText, setDisplayedText] = useState("");
 
   // Fetch website
-  const { data: website, isLoading } = useQuery({
+  const { data: website, isLoading: websiteLoading } = useQuery({
     queryKey: ["/api/websites", id],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/websites/${id}`);
@@ -24,30 +25,44 @@ export default function WebsiteLearn() {
     enabled: !!id,
   });
 
-  // Explain code mutation
-  const explainMutation = useMutation({
-    mutationFn: async () => {
+  // Stream explanation character by character for visual effect
+  useEffect(() => {
+    if (!explanation) return;
+    
+    setDisplayedText("");
+    let index = 0;
+    
+    const interval = setInterval(() => {
+      if (index < explanation.length) {
+        setDisplayedText(explanation.substring(0, index + 1));
+        index++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 5); // 5ms per character for smooth streaming effect
+    
+    return () => clearInterval(interval);
+  }, [explanation]);
+
+  const handleExplain = async () => {
+    setIsLoading(true);
+    setExplanation("");
+    setDisplayedText("");
+    
+    try {
       const res = await apiRequest("POST", `/api/websites/${id}/explain`);
-      return res.json();
-    },
-    onSuccess: (data) => {
+      const data = await res.json();
       setExplanation(data.explanation);
-      setIsStreaming(false);
-    },
-    onError: (error: any) => {
+    } catch (error: any) {
       const message = error?.message || error?.error || "Failed to explain code";
       toast({
         title: "Explanation Failed",
         description: message,
         variant: "destructive",
       });
-      setIsStreaming(false);
-    },
-  });
-
-  const handleExplain = () => {
-    setIsStreaming(true);
-    explainMutation.mutate();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!id) {
@@ -87,7 +102,7 @@ export default function WebsiteLearn() {
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {isLoading ? (
+        {websiteLoading ? (
           <Card className="p-12 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto" />
           </Card>
@@ -100,29 +115,29 @@ export default function WebsiteLearn() {
             </Card>
 
             {/* Explanation Section */}
-            {!explanation ? (
+            {!explanation && !isLoading ? (
               <Card className="p-8 text-center">
                 <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                 <p className="text-muted-foreground mb-6">Click the button below to get a detailed explanation of how this code works</p>
                 <Button
                   onClick={handleExplain}
-                  disabled={isStreaming || explainMutation.isPending}
                   size="lg"
                   className="hover-elevate active-elevate-2"
                   data-testid="button-get-explanation"
                 >
-                  {isStreaming || explainMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Getting Explanation...
-                    </>
-                  ) : (
-                    <>
-                      <BookOpen className="h-4 w-4 mr-2" />
-                      Get Explanation from LEARNORY
-                    </>
-                  )}
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Get Explanation from LEARNORY
                 </Button>
+              </Card>
+            ) : isLoading ? (
+              <Card className="p-8">
+                <div className="flex flex-col items-center gap-4">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <div className="text-center">
+                    <p className="font-semibold">LEARNORY is analyzing your code...</p>
+                    <p className="text-xs text-muted-foreground mt-1">This should take 10-15 seconds</p>
+                  </div>
+                </div>
               </Card>
             ) : (
               <Card className="p-6 space-y-4">
@@ -131,27 +146,33 @@ export default function WebsiteLearn() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setExplanation("")}
+                    onClick={() => {
+                      setExplanation("");
+                      setDisplayedText("");
+                    }}
                     data-testid="button-clear-explanation"
                   >
                     Clear
                   </Button>
                 </div>
                 <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                    {explanation}
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground min-h-[100px]">
+                    {displayedText}
+                    {displayedText.length < explanation.length && (
+                      <span className="animate-pulse">▌</span>
+                    )}
                   </p>
                 </div>
                 <Button
                   onClick={handleExplain}
-                  disabled={isStreaming || explainMutation.isPending}
+                  disabled={isLoading}
                   className="w-full hover-elevate active-elevate-2 mt-4"
                   data-testid="button-refresh-explanation"
                 >
-                  {isStreaming || explainMutation.isPending ? (
+                  {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Refreshing...
+                      Generating...
                     </>
                   ) : (
                     "Get Another Explanation"

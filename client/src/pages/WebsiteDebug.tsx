@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,7 @@ import { Loader2, ChevronLeft, Zap, Send } from "lucide-react";
 interface DebugMessage {
   type: "user" | "ai";
   content: string;
+  isStreaming?: boolean;
 }
 
 export default function WebsiteDebug() {
@@ -19,10 +20,20 @@ export default function WebsiteDebug() {
   const { toast } = useToast();
   const [debugPrompt, setDebugPrompt] = useState("");
   const [debugHistory, setDebugHistory] = useState<DebugMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [scrollRef, setScrollRef] = useState<HTMLDivElement | null>(null);
 
+  // Auto-scroll when messages update
+  useEffect(() => {
+    setTimeout(() => {
+      if (scrollRef) {
+        scrollRef.scrollTop = scrollRef.scrollHeight;
+      }
+    }, 100);
+  }, [debugHistory]);
+
   // Fetch website
-  const { data: website, isLoading } = useQuery({
+  const { data: website, isLoading: websiteLoading } = useQuery({
     queryKey: ["/api/websites", id],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/websites/${id}`);
@@ -31,37 +42,29 @@ export default function WebsiteDebug() {
     enabled: !!id,
   });
 
-  // Debug mutation
-  const debugMutation = useMutation({
-    mutationFn: async (prompt: string) => {
-      const res = await apiRequest("POST", `/api/websites/${id}/debug`, { debugPrompt: prompt });
-      return res.json();
-    },
-    onSuccess: (data) => {
+  const handleSubmit = async () => {
+    if (!debugPrompt.trim() || isLoading) return;
+
+    const userPrompt = debugPrompt;
+    setDebugPrompt("");
+    setDebugHistory((prev) => [...prev, { type: "user", content: userPrompt }]);
+    setIsLoading(true);
+
+    try {
+      const res = await apiRequest("POST", `/api/websites/${id}/debug`, { debugPrompt: userPrompt });
+      const data = await res.json();
+      
       setDebugHistory((prev) => [...prev, { type: "ai", content: data.suggestion }]);
-      setDebugPrompt("");
-      // Auto-scroll
-      setTimeout(() => {
-        if (scrollRef) {
-          scrollRef.scrollTop = scrollRef.scrollHeight;
-        }
-      }, 100);
-    },
-    onError: (error: any) => {
+    } catch (error: any) {
       const message = error?.message || error?.error || "Failed to get suggestion";
       toast({
         title: "Error",
         description: message,
         variant: "destructive",
       });
-    },
-  });
-
-  const handleSubmit = () => {
-    if (!debugPrompt.trim()) return;
-
-    setDebugHistory((prev) => [...prev, { type: "user", content: debugPrompt }]);
-    debugMutation.mutate(debugPrompt);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleClearHistory = () => {
@@ -106,7 +109,7 @@ export default function WebsiteDebug() {
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex-1 flex flex-col">
-        {isLoading ? (
+        {websiteLoading ? (
           <Card className="p-12 text-center flex-1 flex items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto" />
           </Card>
@@ -153,7 +156,7 @@ export default function WebsiteDebug() {
                     </div>
                   ))
                 )}
-                {debugMutation.isPending && (
+                {isLoading && (
                   <div className="flex gap-3 justify-start">
                     <div className="bg-muted p-3 rounded-lg">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -179,11 +182,11 @@ export default function WebsiteDebug() {
                 <div className="flex gap-2">
                   <Button
                     onClick={handleSubmit}
-                    disabled={!debugPrompt.trim() || debugMutation.isPending}
+                    disabled={!debugPrompt.trim() || isLoading}
                     className="flex-1 hover-elevate active-elevate-2"
                     data-testid="button-submit-debug"
                   >
-                    {debugMutation.isPending ? (
+                    {isLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Getting Suggestion...
