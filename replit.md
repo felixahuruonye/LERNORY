@@ -25,6 +25,31 @@ The platform heavily integrates AI capabilities primarily through OpenAI for GPT
 ### Key Architectural Patterns
 The project utilizes a Monorepo structure (`/client`, `/server`, `/shared`) to ensure type safety across the full stack and reduce code duplication. It incorporates Replit blueprints for standardized integration. Centralized error handling, including API fallback mechanisms and authentication error detection, is implemented. Real-time features, such as live transcription sessions, are powered by a WebSocket server. The application is designed with progressive enhancement, gracefully degrading features when services are unavailable or environment variables are missing.
 
+## Recent Updates (Nov 23, 2025)
+
+### Phase 1: Advanced Chat System - COMPLETED ✅
+- Created `chatSessions` table for organizing conversations by title, mode, bookmarks
+- Implemented full storage CRUD operations for chat sessions  
+- Added API endpoints: GET/POST/PATCH/DELETE `/api/chat/sessions`
+- File upload handler with **Gemini API primary + OpenAI/OpenRouter fallback**
+- Supports: PDF, image, video, document analysis with automatic type detection
+- New AdvancedChat component with:
+  - Sidebar chat history with rename/bookmark/delete menus
+  - New Chat button, message area with avatars
+  - Voice recording + transcription
+  - **5 floating suggestion buttons** (Summarize, Make shorter, Make actionable, Explain like I'm 10, Create tasks)
+  - AI Mode selector (Chat/Writing/Coding/Image modes)
+  - Text-to-speech for messages
+  - Side notes panel
+  - Message copy/regenerate/continue buttons
+
+**STATUS:** Component created but routing showing "Did you forget to add page to router?" despite route being registered in App.tsx. May need module resolution fix.
+
+### Pending Phases
+- Phase 2: AI Modes implementation with dynamic UI
+- Phase 3: Agent System (Research/Writer/Programmer/Tutor/Automation/UI Designer)
+- Phase 4: Advanced message features (highlighting, editing, rating, multi-select, bookmarks, folders)
+
 ## External Dependencies
 
 ### Core Infrastructure
@@ -41,7 +66,7 @@ The project utilizes a Monorepo structure (`/client`, `/server`, `/shared`) to e
   - **Environment Variable**: `OPENAI_API_KEY`
 - **OpenRouter**: Fallback for chat completions
   - **Environment Variable**: `OPENROUTER_API_KEY`
-- **Google Gemini**: Website generation
+- **Google Gemini**: **PRIMARY** for file/image analysis + Website generation
   - **Environment Variable**: `GEMINI_API_KEY`
 
 ### Payment Processing
