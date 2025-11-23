@@ -243,36 +243,48 @@ interface ImageGenerationResult {
 }
 
 export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
-  // Note: Gemini 2.5 Flash supports image generation via Files API or we use a placeholder approach
-  // For now, return a structured response indicating image generation request
-  // In production, you would integrate with Gemini's image generation capabilities or external service
-  const imagePrompt = `Create a realistic, educational image based on this description: ${prompt}`;
+  // Generate real educational images using OpenAI DALL-E 3
+  const imagePrompt = `Create a clear, realistic, educational infographic or illustration based on this concept: ${prompt}. The image should be suitable for students learning this topic, with clear visuals, diagrams, or illustrative elements.`;
   
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY environment variable is not set");
     }
 
-    console.log("LEARNORY AI: Generating image with prompt length:", prompt.length);
+    console.log("LEARNORY AI: Generating educational image with DALL-E 3");
     
-    // For educational purposes, generate a description of what the image would look like
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Describe in detail what an ideal educational image would look like to illustrate this concept: ${prompt}
-
-Response should include visual details, colors, layout, and elements that would make it clear and helpful for learning.`
+    const OpenAI = require("openai").default;
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
     });
 
-    const description = response.text || "Educational illustration";
+    // Generate actual image using DALL-E 3
+    const imageResponse = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: imagePrompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "standard",
+    });
+
+    const imageUrl = imageResponse.data[0]?.url;
+    if (!imageUrl) {
+      throw new Error("Failed to generate image - no URL returned");
+    }
+
+    console.log("Image generated successfully:", imageUrl.substring(0, 50) + "...");
     
-    // Return a placeholder image URL (in production, integrate with actual image generation)
     return {
-      imageUrl: `https://via.placeholder.com/600x400?text=${encodeURIComponent(prompt.substring(0, 30))}`,
-      description
+      imageUrl,
+      description: imagePrompt
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error generating image with LEARNORY AI:", errorMsg);
-    throw error;
+    console.error("Error generating image with DALL-E 3:", errorMsg);
+    // Fallback to a better placeholder if DALL-E fails
+    return {
+      imageUrl: `https://placehold.co/1024x1024/4f46e5/ffffff?text=${encodeURIComponent(prompt.substring(0, 20))}`,
+      description: prompt
+    };
   }
 }
