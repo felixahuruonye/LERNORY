@@ -556,20 +556,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const response = await chatWithAI([
         {
           role: "user",
-          content: `Please do the following:\n1. Correct all spelling and grammar mistakes in this text\n2. Provide a brief summary (2-3 sentences)\n\nText:\n${text}\n\nResponse format:\nCORRECTED:\n[corrected text]\n\nSUMMARY:\n[summary]`,
+          content: `Fix spelling and grammar, then summarize in 2-3 sentences. Extract key points.
+
+Text: ${text.slice(0, 500)}
+
+Format your response as:
+CORRECTED: [fixed text]
+SUMMARY: [2-3 sentences]
+KEY_WORDS: [keywords separated by commas]`,
         },
       ]);
 
-      const responseText = response.content;
-      const correctedMatch = responseText.match(/CORRECTED:\n([\s\S]*?)(?:\n\nSUMMARY:|$)/);
-      const summaryMatch = responseText.match(/SUMMARY:\n([\s\S]*?)$/);
+      const correctedMatch = response.match(/CORRECTED:\s*([\s\S]*?)(?:\nSUMMARY:|$)/);
+      const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?:\nKEY_WORDS:|$)/);
+      const keywordsMatch = response.match(/KEY_WORDS:\s*(.+?)$/s);
 
       const correctedText = correctedMatch ? correctedMatch[1].trim() : text;
       const summary = summaryMatch ? summaryMatch[1].trim() : "";
+      const keywords = keywordsMatch ? keywordsMatch[1].trim().split(',').map(k => k.trim()) : [];
 
       res.json({
         correctedText,
         summary,
+        keywords,
       });
     } catch (error) {
       console.error("Error summarizing and correcting:", error);

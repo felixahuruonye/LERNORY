@@ -66,6 +66,7 @@ export default function LiveSession() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [manualTranscriptInput, setManualTranscriptInput] = useState("");
   const [showManualTranscriptModal, setShowManualTranscriptModal] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -427,9 +428,20 @@ export default function LiveSession() {
     try {
       const audioUrl = URL.createObjectURL(recording.audioBlob);
       if (audioPlayerRef.current) {
-        audioPlayerRef.current.src = audioUrl;
-        audioPlayerRef.current.play();
-        setIsPlaying(true);
+        if (isPlaying && audioPlayerRef.current.src === audioUrl) {
+          // Toggle pause/play
+          if (audioPlayerRef.current.paused) {
+            audioPlayerRef.current.play();
+            setIsPlaying(true);
+          } else {
+            audioPlayerRef.current.pause();
+            setIsPlaying(false);
+          }
+        } else {
+          audioPlayerRef.current.src = audioUrl;
+          audioPlayerRef.current.play();
+          setIsPlaying(true);
+        }
       }
     } catch (error) {
       console.error("Error playing recording:", error);

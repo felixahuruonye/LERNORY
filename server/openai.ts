@@ -54,15 +54,15 @@ async function tryWithFallback<T>(
 export async function chatWithAI(messages: Array<{role: string; content: string}>): Promise<string> {
   return tryWithFallback(
     () => openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-3.5-turbo",
       messages: messages as any,
-      max_completion_tokens: 4096,
+      max_tokens: 1000,
     }).then(response => response.choices[0].message.content || ""),
     
     () => openrouter.chat.completions.create({
-      model: "openai/gpt-4-turbo",
+      model: "meta-llama/llama-3-8b-instruct",
       messages: messages as any,
-      max_tokens: 2000, // Reduced for OpenRouter credit limits
+      max_tokens: 800, // Very low for OpenRouter to work within credits
     }).then(response => response.choices[0].message.content || "")
   );
 }
@@ -70,33 +70,60 @@ export async function chatWithAI(messages: Array<{role: string; content: string}
 export async function generateLesson(transcriptText: string): Promise<any> {
   return tryWithFallback(
     () => openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-3.5-turbo",
       messages: [
         {
           role: "system",
-          content: "You are an expert educational content creator. Convert transcripts into structured lessons with title, objectives, key points, and summary. Respond with JSON in this format: { 'title': string, 'objectives': string[], 'keyPoints': string[], 'summary': string }",
+          content: "Create a lesson from the transcript. Respond with: TITLE: [title]\nOBJECTIVES: [list]\nKEY_POINTS: [list]\nSUMMARY: [summary]",
         },
         {
           role: "user",
-          content: `Convert this transcript into a structured lesson:\n\n${transcriptText}`,
+          content: `Convert this transcript into a lesson:\n\n${transcriptText.slice(0, 1000)}`,
         },
       ],
-      response_format: { type: "json_object" },
-    }).then(response => JSON.parse(response.choices[0].message.content || "{}")),
+      max_tokens: 800,
+    }).then(response => {
+      const text = response.choices[0].message.content || "";
+      const titleMatch = text.match(/TITLE:\s*(.+?)(?:\n|$)/);
+      const objMatch = text.match(/OBJECTIVES:\s*(.+?)(?:\nKEY|$)/);
+      const keyMatch = text.match(/KEY_POINTS:\s*(.+?)(?:\nSUMMARY|$)/);
+      const sumMatch = text.match(/SUMMARY:\s*([\s\S]*?)$/);
+      
+      return {
+        title: titleMatch ? titleMatch[1].trim() : "Untitled Lesson",
+        objectives: objMatch ? objMatch[1].split(',').map(o => o.trim()) : [],
+        keyPoints: keyMatch ? keyMatch[1].split(',').map(k => k.trim()) : [],
+        summary: sumMatch ? sumMatch[1].trim() : "",
+      };
+    }),
     
     () => openrouter.chat.completions.create({
-      model: "openai/gpt-4-turbo",
+      model: "meta-llama/llama-3-8b-instruct",
       messages: [
         {
           role: "system",
-          content: "You are an expert educational content creator. Convert transcripts into structured lessons with title, objectives, key points, and summary. Respond with JSON in this format: { 'title': string, 'objectives': string[], 'keyPoints': string[], 'summary': string }",
+          content: "Create a lesson from the transcript. Respond with: TITLE: [title]\nOBJECTIVES: [list]\nKEY_POINTS: [list]\nSUMMARY: [summary]",
         },
         {
           role: "user",
-          content: `Convert this transcript into a structured lesson:\n\n${transcriptText}`,
+          content: `Convert this transcript into a lesson:\n\n${transcriptText.slice(0, 800)}`,
         },
       ],
-    }).then(response => JSON.parse(response.choices[0].message.content || "{}"))
+      max_tokens: 600,
+    }).then(response => {
+      const text = response.choices[0].message.content || "";
+      const titleMatch = text.match(/TITLE:\s*(.+?)(?:\n|$)/);
+      const objMatch = text.match(/OBJECTIVES:\s*(.+?)(?:\nKEY|$)/);
+      const keyMatch = text.match(/KEY_POINTS:\s*(.+?)(?:\nSUMMARY|$)/);
+      const sumMatch = text.match(/SUMMARY:\s*([\s\S]*?)$/);
+      
+      return {
+        title: titleMatch ? titleMatch[1].trim() : "Untitled Lesson",
+        objectives: objMatch ? objMatch[1].split(',').map(o => o.trim()) : [],
+        keyPoints: keyMatch ? keyMatch[1].split(',').map(k => k.trim()) : [],
+        summary: sumMatch ? sumMatch[1].trim() : "",
+      };
+    })
   );
 }
 
