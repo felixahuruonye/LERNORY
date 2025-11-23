@@ -265,14 +265,18 @@ export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGe
       n: 1,
       size: "1024x1024",
       quality: "standard",
+      response_format: "b64_json" // Get base64 encoded image
     });
 
-    const imageUrl = imageResponse.data[0]?.url;
-    if (!imageUrl) {
-      throw new Error("Failed to generate image - no URL returned");
+    const imageData = imageResponse.data[0]?.b64_json;
+    if (!imageData) {
+      throw new Error("Failed to generate image - no image data returned");
     }
 
-    console.log("Image generated successfully:", imageUrl.substring(0, 50) + "...");
+    // Convert base64 to data URL
+    const imageUrl = `data:image/png;base64,${imageData}`;
+    
+    console.log("Image generated successfully (base64 encoded)");
     
     return {
       imageUrl,
@@ -281,9 +285,9 @@ export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGe
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("Error generating image with DALL-E 3:", errorMsg);
-    // Fallback to a better placeholder if DALL-E fails
+    // Fallback to a solid color placeholder with text
     return {
-      imageUrl: `https://placehold.co/1024x1024/4f46e5/ffffff?text=${encodeURIComponent(prompt.substring(0, 20))}`,
+      imageUrl: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Crect fill='%234f46e5' width='1024' height='1024'/%3E%3Ctext x='50%25' y='50%25' font-size='32' fill='white' text-anchor='middle' dy='.3em' font-family='Arial'%3E${encodeURIComponent(prompt.substring(0, 30))}%3C/text%3E%3C/svg%3E`,
       description: prompt
     };
   }
