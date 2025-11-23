@@ -167,7 +167,17 @@ export default function WebsiteGenerator() {
           </div>
 
           {/* Right Panel - Preview & Code */}
-          {selectedWebsiteData ? (
+          {generateMutation.isPending ? (
+            <div className="lg:col-span-3">
+              <Card className="p-12 text-center text-muted-foreground space-y-4">
+                <Loader2 className="h-12 w-12 mx-auto animate-spin" />
+                <div>
+                  <p className="text-lg font-semibold mb-2">Generating your website...</p>
+                  <p className="text-sm text-muted-foreground">This may take a moment. Gemini AI is creating your custom website.</p>
+                </div>
+              </Card>
+            </div>
+          ) : selectedWebsiteData ? (
             <div className="lg:col-span-3 space-y-4">
               {/* Toolbar */}
               <Card className="p-3 flex items-center justify-between gap-2">
