@@ -97,6 +97,7 @@ export default function Chat() {
       setTopicSubject("");
       setTopicName("");
       queryClient.invalidateQueries({ queryKey: ["/api/learning-history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to explain topic", variant: "destructive" });
@@ -113,6 +114,7 @@ export default function Chat() {
       toast({ title: "Image generated!", description: "See the image below." });
       setShowImageGenerator(false);
       setImagePrompt("");
+      queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to generate image", variant: "destructive" });

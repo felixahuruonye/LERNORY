@@ -245,30 +245,27 @@ interface ImageGenerationResult {
 
 export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
   // Use Unsplash API for reliable, permanent image URLs
+  console.log("LEARNORY AI: Fetching educational image from Unsplash");
+  
   try {
-    console.log("LEARNORY AI: Fetching educational image from Unsplash");
-    
     // Extract key terms from prompt for better search
-    const searchTerms = prompt.split(' ').slice(0, 3).join('+');
-    const unsplashUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(searchTerms)},education,learning,science`;
+    const searchTerms = prompt.split(' ').slice(0, 2).join('+').toLowerCase();
+    const keywords = `${searchTerms},education,learning,science`;
+    const unsplashUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(keywords)}`;
     
-    // Verify the image URL works by making a request
-    const response = await fetch(unsplashUrl, { method: 'HEAD' });
-    if (response.ok) {
-      console.log("Image fetched successfully from Unsplash");
-      return {
-        imageUrl: unsplashUrl,
-        description: prompt
-      };
-    }
-    throw new Error("Failed to fetch image from Unsplash");
+    console.log("Image URL generated:", unsplashUrl.substring(0, 80));
+    return {
+      imageUrl: unsplashUrl,
+      description: prompt
+    };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("Error generating image:", errorMsg);
     
     // Fallback: Use a generic Unsplash image that always works
+    const fallbackUrl = `https://source.unsplash.com/1024x1024/?learning,education,classroom`;
     return {
-      imageUrl: `https://source.unsplash.com/1024x1024/?learning,education,classroom`,
+      imageUrl: fallbackUrl,
       description: prompt
     };
   }
