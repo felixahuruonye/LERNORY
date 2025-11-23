@@ -54,6 +54,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { content } = req.body;
 
+      if (!content?.trim()) {
+        return res.status(400).json({ message: "Message content is required" });
+      }
+
       // Save user message
       await storage.createChatMessage({
         userId,
@@ -62,7 +66,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attachments: null,
       });
 
-      // Get conversation history
+      // Get conversation history (last 10 messages for context)
       const history = await storage.getChatMessagesByUser(userId, 10);
       const messages = history.reverse().map(msg => ({
         role: msg.role,
@@ -84,6 +88,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error sending message:", error);
       res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Transcribe audio from chat voice input
+  app.post('/api/chat/transcribe-voice', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { audioDataUrl } = req.body;
+      
+      if (!audioDataUrl) {
+        return res.status(400).json({ message: "Audio data is required" });
+      }
+
+      // Convert data URL to Buffer
+      const base64Data = audioDataUrl.split(',')[1];
+      if (!base64Data) {
+        return res.status(400).json({ message: "Invalid audio data format" });
+      }
+
+      const audioBuffer = Buffer.from(base64Data, 'base64');
+      const tempDir = os.tmpdir();
+      const tempFile = path.join(tempDir, `chat_audio_${Date.now()}.webm`);
+      
+      fs.writeFileSync(tempFile, audioBuffer);
+      
+      try {
+        const transcription = await transcribeAudio(tempFile);
+        fs.unlinkSync(tempFile);
+        
+        res.json({ text: transcription.text });
+      } catch (transcriptionError) {
+        console.error("Transcription error:", transcriptionError);
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+        res.status(500).json({ message: "Transcription failed. Please try again." });
+      }
+    } catch (error) {
+      console.error("Error transcribing voice:", error);
+      res.status(500).json({ message: "Failed to process voice input" });
     }
   });
 

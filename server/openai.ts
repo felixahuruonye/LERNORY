@@ -52,17 +52,37 @@ async function tryWithFallback<T>(
 }
 
 export async function chatWithAI(messages: Array<{role: string; content: string}>): Promise<string> {
+  // Add system prompt at the beginning if not present
+  const messagesWithSystem = messages[0]?.role !== "system" 
+    ? [
+        {
+          role: "system",
+          content: `You are an expert AI tutor with deep knowledge across all subjects. Your responses should be:
+- Clear, concise, and educational
+- Encouraging and supportive
+- Practical with real-world examples when relevant
+- Well-structured with bullet points or numbered lists when appropriate
+- Honest about limitations and when to seek human help
+
+Adapt your explanation level based on the user's apparent knowledge. Be conversational and helpful, like the best teacher they've ever had.`
+        },
+        ...messages
+      ]
+    : messages;
+
   return tryWithFallback(
     () => openai.chat.completions.create({
       model: "gpt-3.5-turbo",
-      messages: messages as any,
-      max_tokens: 1000,
+      messages: messagesWithSystem as any,
+      max_tokens: 1200,
+      temperature: 0.7,
     }).then(response => response.choices[0].message.content || ""),
     
     () => openrouter.chat.completions.create({
       model: "meta-llama/llama-3-8b-instruct",
-      messages: messages as any,
-      max_tokens: 800, // Very low for OpenRouter to work within credits
+      messages: messagesWithSystem as any,
+      max_tokens: 1000, // Increased for better responses
+      temperature: 0.7,
     }).then(response => response.choices[0].message.content || "")
   );
 }

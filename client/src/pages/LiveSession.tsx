@@ -502,11 +502,7 @@ export default function LiveSession() {
         return;
       }
 
-      const response = await apiRequest("/api/generate-lesson", {
-        method: "POST",
-        body: JSON.stringify({ text: transcriptText }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await apiRequest("POST", "/api/generate-lesson", { text: transcriptText });
 
       if (response.ok) {
         const lesson = await response.json() as GeneratedLesson;

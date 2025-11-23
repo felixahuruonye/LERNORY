@@ -28,8 +28,11 @@ export default function Chat() {
   const [message, setMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<ChatMessage[]>({
     queryKey: ["/api/chat/messages"],
@@ -108,11 +111,86 @@ export default function Chat() {
     }
   };
 
-  const toggleVoice = () => {
-    setIsRecording(!isRecording);
-    toast({
-      title: isRecording ? "Recording stopped" : "Recording started",
-      description: isRecording ? "Processing your voice input..." : "Speak now",
+  const toggleVoice = async () => {
+    if (!isRecording) {
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event: BlobEvent) => {
+          audioChunksRef.current.push(event.data);
+        };
+
+        mediaRecorder.onstart = () => {
+          setIsRecording(true);
+          toast({
+            title: "Recording...",
+            description: "Speak now. Click the mic again to stop.",
+          });
+        };
+
+        mediaRecorder.onstop = async () => {
+          setIsRecording(false);
+          setIsTranscribing(true);
+          
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const audioDataUrl = await blobToDataUrl(audioBlob);
+
+          try {
+            const response = await apiRequest("POST", "/api/chat/transcribe-voice", { audioDataUrl });
+
+            if (response.ok) {
+              const { text } = await response.json() as { text: string };
+              setMessage((prev) => (prev ? prev + " " + text : text));
+              toast({
+                title: "Transcribed",
+                description: `"${text.slice(0, 50)}${text.length > 50 ? "..." : ""}"`,
+              });
+            } else {
+              toast({
+                title: "Transcription failed",
+                description: "Could not transcribe your voice. Please try again.",
+                variant: "destructive",
+              });
+            }
+          } catch (error) {
+            console.error("Transcription error:", error);
+            toast({
+              title: "Error",
+              description: "Failed to transcribe voice input",
+              variant: "destructive",
+            });
+          } finally {
+            setIsTranscribing(false);
+          }
+
+          // Stop all audio tracks
+          stream.getTracks().forEach((track) => track.stop());
+        };
+
+        mediaRecorderRef.current = mediaRecorder;
+        mediaRecorder.start();
+      } catch (error) {
+        console.error("Microphone error:", error);
+        toast({
+          title: "Microphone error",
+          description: "Could not access your microphone. Please check permissions.",
+          variant: "destructive",
+        });
+      }
+    } else if (mediaRecorderRef.current && isRecording) {
+      // Stop recording
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const blobToDataUrl = (blob: Blob): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(blob);
     });
   };
 
@@ -321,12 +399,17 @@ export default function Chat() {
                 variant="ghost"
                 size="icon"
                 className={`absolute bottom-2 right-2 hover-elevate active-elevate-2 ${
-                  isRecording ? "text-red-500" : ""
+                  isRecording || isTranscribing ? "text-red-500" : ""
                 }`}
                 onClick={toggleVoice}
+                disabled={isTranscribing}
                 data-testid="button-voice"
               >
-                <Mic className={`h-5 w-5 ${isRecording ? "animate-pulse" : ""}`} />
+                {isTranscribing ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Mic className={`h-5 w-5 ${isRecording ? "animate-pulse" : ""}`} />
+                )}
               </Button>
             </div>
             <Button

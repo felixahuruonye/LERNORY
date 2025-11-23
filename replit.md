@@ -10,6 +10,25 @@ The application is built as a full-stack TypeScript application using React for 
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Updates (November 23, 2025)
+
+### AI Tutor Improvements
+- **ChatGPT-like Responses**: Implemented expert system prompt with educational best practices
+- **Voice-to-Text Chat Input**: Users can record voice, auto-transcribe to chat input, and send
+- **OpenRouter Fallback**: AI Tutor uses OpenRouter as backup when OpenAI quota exceeded (only for chat, not Whisper)
+- **Conversation Context**: AI Tutor maintains last 10 messages for better context-aware responses
+
+### Live Session Features
+- **Session Settings**: Configurable difficulty, language (English, Pidgin, Yoruba, Igbo, Hausa), AI model, recording timeout
+- **Lesson Generation**: Auto-generate lessons from transcripts with objectives, key points, summary
+- **Play/Pause Toggle**: Click recording's Play button to toggle playback
+- **AI Fix Button**: Corrects text, provides summary, and extracts keywords
+
+### API Endpoints Added
+- `POST /api/chat/transcribe-voice` - Transcribe voice input to text in chat
+- `POST /api/generate-lesson` - Generate structured lesson from transcript
+- Enhanced `POST /api/chat/send` - Better system prompting for ChatGPT-like responses
+
 ## System Architecture
 
 ### Frontend Architecture
