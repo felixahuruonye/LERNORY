@@ -543,6 +543,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate lesson from transcript
+  app.post('/api/generate-lesson', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { text } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Transcript text is required" });
+      }
+
+      const lesson = await generateLesson(text);
+      res.json(lesson);
+    } catch (error) {
+      console.error("Error generating lesson:", error);
+      res.status(500).json({ message: "Failed to generate lesson" });
+    }
+  });
+
   // Summarize and correct text using OpenAI
   app.post('/api/summarize-and-correct', isAuthenticated, async (req: any, res: Response) => {
     try {

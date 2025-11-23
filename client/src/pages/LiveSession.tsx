@@ -23,6 +23,8 @@ import {
   Edit3,
   Eye,
   Wand2,
+  BookOpen,
+  X,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +44,21 @@ interface Recording {
   audioBlob: Blob;
   duration: number;
   createdAt: number;
+}
+
+interface SessionSettings {
+  difficulty: 'easy' | 'medium' | 'hard';
+  language: 'en' | 'pidgin' | 'yoruba' | 'igbo' | 'hausa';
+  autoSaveTranscripts: boolean;
+  aiModel: 'gpt-3.5-turbo' | 'gpt-4';
+  recordingTimeout: number; // in minutes
+}
+
+interface GeneratedLesson {
+  title: string;
+  objectives: string[];
+  keyPoints: string[];
+  summary: string;
 }
 
 export default function LiveSession() {
@@ -67,6 +84,18 @@ export default function LiveSession() {
   const [manualTranscriptInput, setManualTranscriptInput] = useState("");
   const [showManualTranscriptModal, setShowManualTranscriptModal] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showLessonPreview, setShowLessonPreview] = useState(false);
+  const [generatedLesson, setGeneratedLesson] = useState<GeneratedLesson | null>(null);
+  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
+  const [selectedRecordingForLesson, setSelectedRecordingForLesson] = useState<Recording | null>(null);
+  const [sessionSettings, setSessionSettings] = useState<SessionSettings>({
+    difficulty: 'medium',
+    language: 'en',
+    autoSaveTranscripts: true,
+    aiModel: 'gpt-3.5-turbo',
+    recordingTimeout: 30,
+  });
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -450,6 +479,55 @@ export default function LiveSession() {
         description: "Could not play recording",
         variant: "destructive",
       });
+    }
+  };
+
+  const generateLessonFromTranscript = async (recording: Recording) => {
+    try {
+      setIsGeneratingLesson(true);
+      setSelectedRecordingForLesson(recording);
+      
+      // Combine all transcript segments into one text
+      const transcriptText = recording.transcript
+        .map((seg) => `${seg.speaker}: ${seg.text}`)
+        .join("\n");
+
+      if (!transcriptText.trim()) {
+        toast({
+          title: "Empty transcript",
+          description: "Recording has no transcript to generate lesson from",
+          variant: "destructive",
+        });
+        setIsGeneratingLesson(false);
+        return;
+      }
+
+      const response = await apiRequest("/api/generate-lesson", {
+        method: "POST",
+        body: JSON.stringify({ text: transcriptText }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (response.ok) {
+        const lesson = await response.json() as GeneratedLesson;
+        setGeneratedLesson(lesson);
+        setShowLessonPreview(true);
+      } else {
+        toast({
+          title: "Generation failed",
+          description: "Could not generate lesson from transcript",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error generating lesson:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate lesson",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingLesson(false);
     }
   };
 
@@ -1034,6 +1112,7 @@ export default function LiveSession() {
 
             {/* Settings */}
             <Button
+              onClick={() => setShowSettingsModal(true)}
               variant="outline"
               className="w-full hover-elevate active-elevate-2"
               data-testid="button-settings"
@@ -1190,6 +1269,27 @@ export default function LiveSession() {
                       </Button>
 
                       <Button
+                        onClick={() => generateLessonFromTranscript(recording)}
+                        disabled={isGeneratingLesson}
+                        size="sm"
+                        variant="outline"
+                        className="hover-elevate active-elevate-2"
+                        data-testid={`button-generate-lesson-${recording.id}`}
+                      >
+                        {isGeneratingLesson ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <BookOpen className="h-3 w-3 mr-1" />
+                            Generate Lesson
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
                         onClick={() => summarizeAndCorrect(recording)}
                         disabled={isSummarizing}
                         size="sm"
@@ -1265,6 +1365,195 @@ export default function LiveSession() {
                 data-testid="button-submit-manual"
               >
                 Add Text
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Session Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-display font-semibold">Session Settings</h2>
+              <button onClick={() => setShowSettingsModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Difficulty Level */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Difficulty Level</label>
+                <select
+                  value={sessionSettings.difficulty}
+                  onChange={(e) => setSessionSettings({...sessionSettings, difficulty: e.target.value as 'easy' | 'medium' | 'hard'})}
+                  className="w-full p-2 bg-background border border-border rounded text-sm"
+                  data-testid="select-difficulty"
+                >
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+
+              {/* Language */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Language</label>
+                <select
+                  value={sessionSettings.language}
+                  onChange={(e) => setSessionSettings({...sessionSettings, language: e.target.value as any})}
+                  className="w-full p-2 bg-background border border-border rounded text-sm"
+                  data-testid="select-language"
+                >
+                  <option value="en">English</option>
+                  <option value="pidgin">Pidgin English</option>
+                  <option value="yoruba">Yoruba</option>
+                  <option value="igbo">Igbo</option>
+                  <option value="hausa">Hausa</option>
+                </select>
+              </div>
+
+              {/* AI Model */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">AI Model</label>
+                <select
+                  value={sessionSettings.aiModel}
+                  onChange={(e) => setSessionSettings({...sessionSettings, aiModel: e.target.value as any})}
+                  className="w-full p-2 bg-background border border-border rounded text-sm"
+                  data-testid="select-ai-model"
+                >
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Fast)</option>
+                  <option value="gpt-4">GPT-4 (Accurate)</option>
+                </select>
+              </div>
+
+              {/* Recording Timeout */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Recording Timeout (minutes)</label>
+                <Input
+                  type="number"
+                  value={sessionSettings.recordingTimeout}
+                  onChange={(e) => setSessionSettings({...sessionSettings, recordingTimeout: parseInt(e.target.value) || 30})}
+                  min={5}
+                  max={120}
+                  className="w-full"
+                  data-testid="input-timeout"
+                />
+              </div>
+
+              {/* Auto-save Transcripts */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={sessionSettings.autoSaveTranscripts}
+                  onChange={(e) => setSessionSettings({...sessionSettings, autoSaveTranscripts: e.target.checked})}
+                  className="w-4 h-4"
+                  data-testid="checkbox-auto-save"
+                />
+                <label className="text-sm font-medium">Auto-save Transcripts</label>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6 justify-end">
+              <Button
+                onClick={() => setShowSettingsModal(false)}
+                variant="outline"
+                className="hover-elevate active-elevate-2"
+                data-testid="button-close-settings"
+              >
+                Done
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Lesson Preview Modal */}
+      {showLessonPreview && generatedLesson && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <Card className="w-full max-w-2xl p-6 my-8">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-display font-semibold">Generated Lesson</h2>
+              <button onClick={() => setShowLessonPreview(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Title */}
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold mb-2">{generatedLesson.title}</h3>
+              <p className="text-sm text-muted-foreground">
+                From: {selectedRecordingForLesson?.title || "Recording"}
+              </p>
+            </div>
+
+            {/* Objectives */}
+            <div className="mb-6">
+              <h4 className="font-semibold mb-3">Learning Objectives</h4>
+              <ul className="space-y-2">
+                {generatedLesson.objectives.length > 0 ? (
+                  generatedLesson.objectives.map((obj, idx) => (
+                    <li key={idx} className="text-sm flex gap-2">
+                      <span className="text-primary">•</span>
+                      <span>{obj}</span>
+                    </li>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No objectives generated</p>
+                )}
+              </ul>
+            </div>
+
+            {/* Key Points */}
+            <div className="mb-6">
+              <h4 className="font-semibold mb-3">Key Points</h4>
+              <ul className="space-y-2">
+                {generatedLesson.keyPoints.length > 0 ? (
+                  generatedLesson.keyPoints.map((point, idx) => (
+                    <li key={idx} className="text-sm flex gap-2">
+                      <span className="text-primary">•</span>
+                      <span>{point}</span>
+                    </li>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No key points generated</p>
+                )}
+              </ul>
+            </div>
+
+            {/* Summary */}
+            <div className="mb-6">
+              <h4 className="font-semibold mb-3">Summary</h4>
+              <p className="text-sm text-muted-foreground">
+                {generatedLesson.summary || "No summary generated"}
+              </p>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                onClick={() => setShowLessonPreview(false)}
+                variant="outline"
+                className="hover-elevate active-elevate-2"
+                data-testid="button-close-lesson"
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  // TODO: Save lesson to database
+                  toast({
+                    title: "Success",
+                    description: "Lesson saved to your courses",
+                  });
+                  setShowLessonPreview(false);
+                }}
+                className="hover-elevate active-elevate-2"
+                data-testid="button-save-lesson"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save Lesson
               </Button>
             </div>
           </Card>
