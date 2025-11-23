@@ -14,6 +14,8 @@ import {
   User,
   ArrowLeft,
   RotateCcw,
+  Image,
+  BookOpen,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +34,11 @@ export default function Chat() {
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [showTopicExplainer, setShowTopicExplainer] = useState(false);
+  const [showImageGenerator, setShowImageGenerator] = useState(false);
+  const [topicSubject, setTopicSubject] = useState("");
+  const [topicName, setTopicName] = useState("");
+  const [imagePrompt, setImagePrompt] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -73,6 +80,38 @@ export default function Chat() {
         description: error.message || "Failed to send message. Please try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  const explainTopicMutation = useMutation({
+    mutationFn: async (data: { subject: string; topic: string }) => {
+      const response = await apiRequest("POST", "/api/explain-topic", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Topic explained!", description: "Check the explanation above." });
+      setShowTopicExplainer(false);
+      setTopicSubject("");
+      setTopicName("");
+      queryClient.invalidateQueries({ queryKey: ["/api/learning-history"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to explain topic", variant: "destructive" });
+    },
+  });
+
+  const generateImageMutation = useMutation({
+    mutationFn: async (prompt: string) => {
+      const response = await apiRequest("POST", "/api/generate-image", { prompt });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Image generated!", description: "Your image is ready." });
+      setShowImageGenerator(false);
+      setImagePrompt("");
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to generate image", variant: "destructive" });
     },
   });
 
@@ -523,6 +562,97 @@ export default function Chat() {
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Feature Buttons - Explain Topic & Generate Image */}
+      <div className="border-t border-border/50 bg-muted/30 px-4 sm:px-6 lg:px-8 py-3">
+        <div className="max-w-5xl mx-auto flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTopicExplainer(!showTopicExplainer)}
+            className="hover-elevate active-elevate-2"
+            data-testid="button-explain-topic"
+          >
+            <BookOpen className="h-4 w-4 mr-2" />
+            Explain Topic
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowImageGenerator(!showImageGenerator)}
+            className="hover-elevate active-elevate-2"
+            data-testid="button-generate-image"
+          >
+            <Image className="h-4 w-4 mr-2" />
+            Create Image
+          </Button>
+        </div>
+
+        {/* Topic Explainer Panel */}
+        {showTopicExplainer && (
+          <Card className="mt-3 p-4 max-w-5xl mx-auto border-primary/30">
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Subject (e.g., Physics, Biology, Math)"
+                value={topicSubject}
+                onChange={(e) => setTopicSubject(e.target.value)}
+                className="w-full px-3 py-2 border border-border rounded-md text-sm"
+                data-testid="input-topic-subject"
+              />
+              <input
+                type="text"
+                placeholder="Topic name (e.g., Photosynthesis, Quadratic Equations)"
+                value={topicName}
+                onChange={(e) => setTopicName(e.target.value)}
+                className="w-full px-3 py-2 border border-border rounded-md text-sm"
+                data-testid="input-topic-name"
+              />
+              <Button
+                size="sm"
+                onClick={() => explainTopicMutation.mutate({ subject: topicSubject, topic: topicName })}
+                disabled={!topicSubject.trim() || !topicName.trim() || explainTopicMutation.isPending}
+                className="w-full hover-elevate active-elevate-2"
+                data-testid="button-submit-topic"
+              >
+                {explainTopicMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+                ) : (
+                  "Get Explanation"
+                )}
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Image Generator Panel */}
+        {showImageGenerator && (
+          <Card className="mt-3 p-4 max-w-5xl mx-auto border-primary/30">
+            <div className="space-y-3">
+              <textarea
+                placeholder="Describe the image you want to create..."
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                className="w-full px-3 py-2 border border-border rounded-md text-sm resize-none min-h-[60px]"
+                data-testid="input-image-prompt"
+              />
+              <Button
+                size="sm"
+                onClick={() => generateImageMutation.mutate(imagePrompt)}
+                disabled={!imagePrompt.trim() || generateImageMutation.isPending}
+                className="w-full hover-elevate active-elevate-2"
+                data-testid="button-submit-image"
+              >
+                {generateImageMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+                ) : (
+                  "Generate Image"
+                )}
+              </Button>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Input Area */}

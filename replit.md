@@ -12,7 +12,28 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Updates (November 23, 2025)
 
-### Website Generator (NEW)
+### Comprehensive Educational Features (NEW)
+- **Topic Explanation System**: Explains any topic with simple explanations, detailed breakdowns, examples, formulas, real-life applications, common mistakes, and practice questions
+- **Image Generation**: Auto-generates educational images when explaining topics + "Create Image" button for custom image generation
+- **Learning History Tracking**: Records all topics studied (subject, difficulty, completion status)
+- **Focus Areas Analysis**: AI analyzes user's learning patterns to identify strength areas and weak topics
+- **Data Export**: Export learning history and study materials as JSON (PDF-ready format)
+- **Database Tables**:
+  - `learningHistory` - Tracks all topics studied
+  - `generatedImages` - Stores AI-generated images with context
+  - `topicExplanations` - Caches detailed explanations for reuse
+- **API Endpoints**:
+  - `POST /api/explain-topic` - Generate comprehensive topic explanation with auto-generated image
+  - `POST /api/generate-image` - Generate custom educational images
+  - `GET /api/learning-history` - Fetch user's complete learning history
+  - `GET /api/focus-areas` - Analyze user's strength areas and weak topics
+  - `POST /api/export-data` - Export learning data as JSON/PDF
+- **Chat UI Features**:
+  - "Explain Topic" button - Opens form to select subject/topic
+  - "Create Image" button - Opens panel for custom image generation
+  - Both features integrated directly into Chat interface
+
+### Website Generator (Previous)
 - **Lovable AI-style Interface**: Split-view editor with live HTML/CSS/JS preview powered by Gemini API
 - **Gemini Integration**: Uses gemini-2.5-flash model for intelligent website generation
 - **Database Storage**: All generated websites stored in `generatedWebsites` table with metadata
