@@ -13,6 +13,7 @@ import {
   Bot,
   User,
   ArrowLeft,
+  RotateCcw,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -139,6 +140,32 @@ export default function Chat() {
     sendMessageMutation.mutate(message);
   };
 
+  const clearChat = async () => {
+    if (!window.confirm("Are you sure you want to clear all chat messages?")) {
+      return;
+    }
+
+    try {
+      // Clear local cache
+      queryClient.setQueryData(["/api/chat/messages"], []);
+      
+      // Optional: You can also call an API endpoint to clear messages from backend
+      // await apiRequest("POST", "/api/chat/clear");
+      
+      toast({
+        title: "Chat cleared",
+        description: "All messages have been deleted.",
+      });
+    } catch (error) {
+      console.error("Clear chat error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to clear chat",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -256,6 +283,16 @@ export default function Chat() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={clearChat}
+                className="hover-elevate active-elevate-2"
+                data-testid="button-clear-chat"
+                title="Clear all chat messages"
+              >
+                <RotateCcw className="h-5 w-5" />
+              </Button>
               <ThemeToggle />
             </div>
           </div>
@@ -339,7 +376,7 @@ export default function Chat() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 w-full flex flex-col">
+          <div className="space-y-4 w-full flex flex-col-reverse">
             {messages.map((msg) => (
               <div
                 key={msg.id}
