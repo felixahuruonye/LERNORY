@@ -357,6 +357,63 @@ export const insertGeneratedWebsiteSchema = createInsertSchema(generatedWebsites
 export type InsertGeneratedWebsite = z.infer<typeof insertGeneratedWebsiteSchema>;
 export type GeneratedWebsite = typeof generatedWebsites.$inferSelect;
 
+// Learning History - Track user's learning activities
+export const learningHistory = pgTable("learning_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  subject: varchar("subject", { length: 100 }).notNull(),
+  topic: varchar("topic", { length: 255 }).notNull(),
+  difficulty: varchar("difficulty", { length: 50 }),
+  duration: integer("duration"), // in minutes
+  completed: boolean("completed").default(false),
+  notes: text("notes"),
+  rating: integer("rating"), // 1-5 user satisfaction rating
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertLearningHistorySchema = createInsertSchema(learningHistory).omit({ id: true, createdAt: true });
+export type InsertLearningHistory = z.infer<typeof insertLearningHistorySchema>;
+export type LearningHistory = typeof learningHistory.$inferSelect;
+
+// Generated Images - Store AI-generated images with metadata
+export const generatedImages = pgTable("generated_images", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  prompt: text("prompt").notNull(),
+  imageUrl: text("image_url").notNull(),
+  context: varchar("context", { length: 100 }), // 'explain', 'course', 'custom'
+  relatedTopic: varchar("related_topic", { length: 255 }),
+  imageData: jsonb("image_data"), // base64 or image metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertGeneratedImageSchema = createInsertSchema(generatedImages).omit({ id: true, createdAt: true });
+export type InsertGeneratedImage = z.infer<typeof insertGeneratedImageSchema>;
+export type GeneratedImage = typeof generatedImages.$inferSelect;
+
+// Topic Explanations - Store detailed topic explanations for reference
+export const topicExplanations = pgTable("topic_explanations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  subject: varchar("subject", { length: 100 }).notNull(),
+  topic: varchar("topic", { length: 255 }).notNull(),
+  simpleExplanation: text("simple_explanation"),
+  detailedBreakdown: text("detailed_breakdown"),
+  examples: jsonb("examples"), // Array of examples
+  formulas: jsonb("formulas"), // Array of formulas
+  realLifeApplications: jsonb("real_life_applications"), // Array of applications
+  commonMistakes: jsonb("common_mistakes"), // Array of mistakes
+  practiceQuestions: jsonb("practice_questions"), // Array of questions
+  imageUrl: text("image_url"),
+  difficulty: varchar("difficulty", { length: 50 }),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+});
+
+export const insertTopicExplanationSchema = createInsertSchema(topicExplanations).omit({ id: true, generatedAt: true });
+export type InsertTopicExplanation = z.infer<typeof insertTopicExplanationSchema>;
+export type TopicExplanation = typeof topicExplanations.$inferSelect;
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   school: one(schools, {

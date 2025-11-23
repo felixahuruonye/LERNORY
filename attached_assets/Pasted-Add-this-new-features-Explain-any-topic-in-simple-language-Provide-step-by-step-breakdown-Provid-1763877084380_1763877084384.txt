@@ -1,0 +1,173 @@
+Add this new features:
+
+Explain any topic in simple language
+
+Provide step-by-step breakdown
+
+Provide examples
+
+Provide formulas (if needed)
+
+Provide real-life applications
+
+Provide common mistakes
+
+Automatically generate courses (full curriculum)
+
+Write lessons, summaries, revision notes
+
+Create assignments & quizzes
+
+Create video scripts (if asked)
+
+Always show step-by-step solutions
+
+Give alternative methods
+
+Generate extra practice questions automatically
+
+Provide course recommendations
+
+Provide Nigerian university info
+
+Provide JAMB/NECO/WAEC and all extaner exams in the world guidance 
+
+Provide job prospects and skills needed
+
+ Memory Tracking:
+
+System must remember:
+
+User level
+
+Subjects studied
+
+Weak topics
+
+Performance
+
+Favorites
+
+Recently viewed / discussed topics
+
+
+Export Options:
+
+User can export:
+
+Notes 
+
+Summaries
+
+Study plan
+
+Exam questions
+
+Courses
+
+As PDF or Word to download to their device.
+
+WORKFLOW LOGIC (VERY IMPORTANT)
+
+User Asks a Question → System Must:
+
+1. Detect the subject
+
+
+2. Identify difficulty level
+
+
+3. Check user’s history
+
+
+4. Provide the best explanation or solution
+
+
+5. Suggest practice questions
+
+
+6. Offer extra help
+When the user asks about any topic (math, physics, chemistry, biology, IT, programming, business, economics, exams…), explain it:
+
+In simple language
+
+With examples
+
+With analogies
+
+With real-life application
+
+And offer extra help automatically
+
+
+Example format:
+
+Simple Explanation
+
+Detailed Breakdown
+
+Examples
+
+Formula (if needed)
+
+Common Mistakes Students Make
+
+ Solve Problems Step-by-Step:
+
+For any question, show:
+
+Step-by-step working
+
+Final answer
+
+Explanation of each step
+
+A shortcut method (if available)
+
+A similar practice question
+
+
+Generate Courses & Lessons:
+
+LERNORY can create full learning materials:
+
+Courses
+
+Detailed lessons
+
+Weekly schedules
+
+Study guides
+
+Revision notes
+
+Video script explanations
+
+Assignments
+
+Quizzes
+
+ Make Personalized Study Plans:
+
+Ask the user for:
+
+Their exam
+
+Subjects
+
+Time available
+
+Weak topics
+
+Strengths
+
+Deadline
+Then generate a complete daily or weekly plan.
+
+Update the information on the dashboard, under learning process, with history of what user has learned and sloved by them themselves.
+
+Also update focus area, the ai should be able to analyze user from the chat to point out when they ready need help, and help the accomplish it.
+
+On the chat it should also generate pictures using Gemini API, when explain a topic, talk or course, or anything, it should instantly generate an image immediately on the chat and explain the image correctly, when the user doesn't understand the text.
+Also add create images button under the chat for user who wants to create an image or multiple images, brand the image with LEARNORY, let user discribe the image you create reliltic image of the discribion. You only auto generate images without permission when explaining or teaching.
+

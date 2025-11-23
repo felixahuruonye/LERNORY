@@ -20,6 +20,9 @@ import {
   codeSnippets,
   examResults,
   generatedWebsites,
+  learningHistory,
+  generatedImages,
+  topicExplanations,
   type User,
   type UpsertUser,
   type Course,
@@ -58,6 +61,12 @@ import {
   type InsertExamResult,
   type GeneratedWebsite,
   type InsertGeneratedWebsite,
+  type LearningHistory,
+  type InsertLearningHistory,
+  type GeneratedImage,
+  type InsertGeneratedImage,
+  type TopicExplanation,
+  type InsertTopicExplanation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -155,6 +164,21 @@ export interface IStorage {
   deleteGeneratedWebsite(id: string): Promise<void>;
   toggleFavoriteWebsite(id: string, isFavorite: boolean): Promise<GeneratedWebsite | undefined>;
   incrementViewCount(id: string): Promise<GeneratedWebsite | undefined>;
+
+  // Learning history operations
+  createLearningHistory(history: InsertLearningHistory): Promise<LearningHistory>;
+  getLearningHistoryByUser(userId: string, limit?: number): Promise<LearningHistory[]>;
+  getLearningHistoryBySubject(userId: string, subject: string): Promise<LearningHistory[]>;
+
+  // Generated image operations
+  createGeneratedImage(image: InsertGeneratedImage): Promise<GeneratedImage>;
+  getGeneratedImagesByUser(userId: string): Promise<GeneratedImage[]>;
+  getGeneratedImagesByTopic(userId: string, topic: string): Promise<GeneratedImage[]>;
+
+  // Topic explanation operations
+  createTopicExplanation(explanation: InsertTopicExplanation): Promise<TopicExplanation>;
+  getTopicExplanation(userId: string, subject: string, topic: string): Promise<TopicExplanation | undefined>;
+  getTopicExplanationsByUser(userId: string): Promise<TopicExplanation[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -487,6 +511,51 @@ export class DatabaseStorage implements IStorage {
     if (!website) return undefined;
     const [updated] = await db.update(generatedWebsites).set({ viewCount: (website.viewCount || 0) + 1, updatedAt: new Date() }).where(eq(generatedWebsites.id, id)).returning();
     return updated;
+  }
+
+  // Learning history operations
+  async createLearningHistory(history: InsertLearningHistory): Promise<LearningHistory> {
+    const [newHistory] = await db.insert(learningHistory).values(history).returning();
+    return newHistory;
+  }
+
+  async getLearningHistoryByUser(userId: string, limit?: number): Promise<LearningHistory[]> {
+    const query = db.select().from(learningHistory).where(eq(learningHistory.userId, userId)).orderBy(desc(learningHistory.createdAt));
+    if (limit) return await query.limit(limit);
+    return await query;
+  }
+
+  async getLearningHistoryBySubject(userId: string, subject: string): Promise<LearningHistory[]> {
+    return await db.select().from(learningHistory).where(and(eq(learningHistory.userId, userId), eq(learningHistory.subject, subject))).orderBy(desc(learningHistory.createdAt));
+  }
+
+  // Generated image operations
+  async createGeneratedImage(image: InsertGeneratedImage): Promise<GeneratedImage> {
+    const [newImage] = await db.insert(generatedImages).values(image).returning();
+    return newImage;
+  }
+
+  async getGeneratedImagesByUser(userId: string): Promise<GeneratedImage[]> {
+    return await db.select().from(generatedImages).where(eq(generatedImages.userId, userId)).orderBy(desc(generatedImages.createdAt));
+  }
+
+  async getGeneratedImagesByTopic(userId: string, topic: string): Promise<GeneratedImage[]> {
+    return await db.select().from(generatedImages).where(and(eq(generatedImages.userId, userId), eq(generatedImages.relatedTopic, topic))).orderBy(desc(generatedImages.createdAt));
+  }
+
+  // Topic explanation operations
+  async createTopicExplanation(explanation: InsertTopicExplanation): Promise<TopicExplanation> {
+    const [newExplanation] = await db.insert(topicExplanations).values(explanation).returning();
+    return newExplanation;
+  }
+
+  async getTopicExplanation(userId: string, subject: string, topic: string): Promise<TopicExplanation | undefined> {
+    const [explanation] = await db.select().from(topicExplanations).where(and(eq(topicExplanations.userId, userId), eq(topicExplanations.subject, subject), eq(topicExplanations.topic, topic)));
+    return explanation;
+  }
+
+  async getTopicExplanationsByUser(userId: string): Promise<TopicExplanation[]> {
+    return await db.select().from(topicExplanations).where(eq(topicExplanations.userId, userId)).orderBy(desc(topicExplanations.generatedAt));
   }
 }
 

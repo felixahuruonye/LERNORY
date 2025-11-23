@@ -174,3 +174,105 @@ Make the requested changes to the code. The "steps" array should describe what y
     throw error;
   }
 }
+
+interface TopicExplanationResult {
+  simpleExplanation: string;
+  detailedBreakdown: string;
+  examples: string[];
+  formulas: string[];
+  realLifeApplications: string[];
+  commonMistakes: string[];
+  practiceQuestions: string[];
+  imagePrompt: string;
+}
+
+export async function explainTopicWithLEARNORY(subject: string, topic: string, difficulty: string = "medium"): Promise<TopicExplanationResult> {
+  const prompt = `You are an expert educator. Explain the following topic in a ${difficulty} level way:
+
+Subject: ${subject}
+Topic: ${topic}
+
+IMPORTANT: Return ONLY valid JSON (no other text) with this structure:
+{
+  "simpleExplanation": "A simple explanation that anyone can understand",
+  "detailedBreakdown": "A more detailed breakdown with key concepts",
+  "examples": ["Example 1", "Example 2", "Example 3"],
+  "formulas": ["Formula 1 with LaTeX", "Formula 2"],
+  "realLifeApplications": ["Real-life application 1", "Real-life application 2"],
+  "commonMistakes": ["Mistake 1 that students make", "Mistake 2"],
+  "practiceQuestions": ["Question 1?", "Question 2?"],
+  "imagePrompt": "A detailed prompt for generating an illustrative image of this topic"
+}
+
+Ensure explanations are clear, with examples and practical applications.`;
+
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("LEARNORY AI: Explaining topic -", subject, topic);
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error("Empty response from LEARNORY AI");
+    }
+
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Failed to extract JSON from response");
+    }
+
+    const result = JSON.parse(jsonMatch[0]) as TopicExplanationResult;
+    return result;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error explaining topic with LEARNORY AI:", errorMsg);
+    throw error;
+  }
+}
+
+interface ImageGenerationResult {
+  imageUrl: string;
+  description: string;
+}
+
+export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
+  // Note: Gemini 2.5 Flash supports image generation via Files API or we use a placeholder approach
+  // For now, return a structured response indicating image generation request
+  // In production, you would integrate with Gemini's image generation capabilities or external service
+  const imagePrompt = `Create a realistic, educational image based on this description: ${prompt}`;
+  
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("LEARNORY AI: Generating image with prompt length:", prompt.length);
+    
+    // For educational purposes, generate a description of what the image would look like
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Describe in detail what an ideal educational image would look like to illustrate this concept: ${prompt}
+
+Response should include visual details, colors, layout, and elements that would make it clear and helpful for learning.`
+    });
+
+    const description = response.text || "Educational illustration";
+    
+    // Return a placeholder image URL (in production, integrate with actual image generation)
+    return {
+      imageUrl: `https://via.placeholder.com/600x400?text=${encodeURIComponent(prompt.substring(0, 30))}`,
+      description
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error generating image with LEARNORY AI:", errorMsg);
+    throw error;
+  }
+}

@@ -20,7 +20,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -882,6 +882,177 @@ KEY_WORDS: [keywords separated by commas]`,
       console.log('WebSocket connection closed');
       audioBuffer.length = 0;
     });
+  });
+
+  // Topic explanation endpoint
+  app.post('/api/explain-topic', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { subject, topic, difficulty = 'medium' } = req.body;
+
+      if (!subject?.trim() || !topic?.trim()) {
+        return res.status(400).json({ message: "Subject and topic are required" });
+      }
+
+      // Check if already explained
+      const existing = await storage.getTopicExplanation(userId, subject, topic);
+      if (existing) {
+        return res.json(existing);
+      }
+
+      // Generate explanation
+      const explanation = await explainTopicWithLEARNORY(subject, topic, difficulty);
+      
+      // Generate image
+      const image = await generateImageWithLEARNORY(explanation.imagePrompt);
+
+      // Store explanation
+      const stored = await storage.createTopicExplanation({
+        userId,
+        subject,
+        topic,
+        simpleExplanation: explanation.simpleExplanation,
+        detailedBreakdown: explanation.detailedBreakdown,
+        examples: explanation.examples,
+        formulas: explanation.formulas,
+        realLifeApplications: explanation.realLifeApplications,
+        commonMistakes: explanation.commonMistakes,
+        practiceQuestions: explanation.practiceQuestions,
+        imageUrl: image.imageUrl,
+        difficulty
+      });
+
+      // Store image record
+      await storage.createGeneratedImage({
+        userId,
+        prompt: explanation.imagePrompt,
+        imageUrl: image.imageUrl,
+        context: 'explain',
+        relatedTopic: topic
+      });
+
+      // Log learning history
+      await storage.createLearningHistory({
+        userId,
+        subject,
+        topic,
+        difficulty,
+        completed: true
+      });
+
+      res.json(stored);
+    } catch (error) {
+      console.error("Error explaining topic:", error);
+      res.status(500).json({ message: "Failed to explain topic" });
+    }
+  });
+
+  // Generate custom image endpoint
+  app.post('/api/generate-image', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { prompt, relatedTopic } = req.body;
+
+      if (!prompt?.trim()) {
+        return res.status(400).json({ message: "Prompt is required" });
+      }
+
+      const image = await generateImageWithLEARNORY(prompt);
+      
+      const stored = await storage.createGeneratedImage({
+        userId,
+        prompt,
+        imageUrl: image.imageUrl,
+        context: 'custom',
+        relatedTopic
+      });
+
+      res.json(stored);
+    } catch (error) {
+      console.error("Error generating image:", error);
+      res.status(500).json({ message: "Failed to generate image" });
+    }
+  });
+
+  // Learning history endpoint
+  app.get('/api/learning-history', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = req.query.limit ? parseInt(req.query.limit) : 50;
+      const history = await storage.getLearningHistoryByUser(userId, limit);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching learning history:", error);
+      res.status(500).json({ message: "Failed to fetch learning history" });
+    }
+  });
+
+  // Focus areas analysis endpoint
+  app.get('/api/focus-areas', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const history = await storage.getLearningHistoryByUser(userId, 100);
+      
+      // Analyze subjects and topics
+      const subjectMap = new Map<string, { count: number; topics: string[] }>();
+      
+      history.forEach((entry: any) => {
+        if (!subjectMap.has(entry.subject)) {
+          subjectMap.set(entry.subject, { count: 0, topics: [] });
+        }
+        const data = subjectMap.get(entry.subject)!;
+        data.count++;
+        if (!data.topics.includes(entry.topic)) {
+          data.topics.push(entry.topic);
+        }
+      });
+
+      const focusAreas = Array.from(subjectMap.entries()).map(([subject, data]) => ({
+        subject,
+        topicsLearned: data.count,
+        recentTopics: data.topics.slice(-5),
+        strength: data.count > 5 ? 'strong' : data.count > 2 ? 'developing' : 'beginner'
+      }));
+
+      res.json(focusAreas);
+    } catch (error) {
+      console.error("Error analyzing focus areas:", error);
+      res.status(500).json({ message: "Failed to analyze focus areas" });
+    }
+  });
+
+  // Export user data endpoint (PDF/JSON)
+  app.post('/api/export-data', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { format = 'json', dataType = 'all' } = req.body;
+
+      const history = await storage.getLearningHistoryByUser(userId, 100);
+      const explanations = await storage.getTopicExplanationsByUser(userId);
+      const user = await storage.getUser(userId);
+
+      const exportData = {
+        user: user?.firstName + ' ' + user?.lastName,
+        exportedAt: new Date().toISOString(),
+        learningHistory: history,
+        topicExplanations: explanations.map(e => ({
+          subject: e.subject,
+          topic: e.topic,
+          explanation: e.simpleExplanation,
+          generatedAt: e.generatedAt
+        }))
+      };
+
+      if (format === 'json') {
+        res.json(exportData);
+      } else {
+        // For PDF, return JSON with base64 encoded PDF (can be generated client-side)
+        res.json({ ...exportData, format: 'json', note: 'Use client-side PDF generation library' });
+      }
+    } catch (error) {
+      console.error("Error exporting data:", error);
+      res.status(500).json({ message: "Failed to export data" });
+    }
   });
 
   return httpServer;
