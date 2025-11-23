@@ -64,6 +64,8 @@ export default function LiveSession() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [manualTranscriptInput, setManualTranscriptInput] = useState("");
+  const [showManualTranscriptModal, setShowManualTranscriptModal] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -375,6 +377,49 @@ export default function LiveSession() {
     toast({
       title: "Text updated",
       description: "Your edits have been saved",
+    });
+  };
+
+  const addManualTranscript = () => {
+    if (!manualTranscriptInput.trim()) {
+      toast({
+        title: "Empty text",
+        description: "Please enter some text to transcribe",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Update the last recording with manual transcript
+    setRecordings((prev) => {
+      if (prev.length === 0) return prev;
+      
+      const updated = [...prev];
+      updated[0] = {
+        ...updated[0],
+        transcript: [
+          ...updated[0].transcript,
+          {
+            speaker: "Manual Entry",
+            text: manualTranscriptInput,
+            timestamp: Date.now(),
+          },
+        ],
+      };
+      return updated;
+    });
+
+    setManualTranscriptInput("");
+    setShowManualTranscriptModal(false);
+    setTranscript((prev) => [...prev, {
+      speaker: "Manual Entry",
+      text: manualTranscriptInput,
+      timestamp: Date.now(),
+    }]);
+
+    toast({
+      title: "Text added",
+      description: "Manual transcript has been added to your recording",
     });
   };
 
@@ -887,6 +932,19 @@ export default function LiveSession() {
               )}
             </div>
 
+            {/* Manual Transcript Input - If no transcription */}
+            {!isRecording && transcript.length === 0 && recordings.length > 0 && (
+              <Button
+                onClick={() => setShowManualTranscriptModal(true)}
+                className="w-full hover-elevate active-elevate-2"
+                variant="outline"
+                data-testid="button-add-manual-transcript"
+              >
+                <Edit3 className="h-4 w-4 mr-2" />
+                Add Text Manually
+              </Button>
+            )}
+
             {/* Session Info */}
             <Card className="p-4 bg-background">
               <div className="space-y-3 text-sm">
@@ -1159,6 +1217,47 @@ export default function LiveSession() {
           </div>
         )}
       </div>
+
+      {/* Manual Transcript Modal */}
+      {showManualTranscriptModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl p-6">
+            <h2 className="text-2xl font-display font-semibold mb-4">Add Transcribed Text</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Paste or type the text from your recording. This will be added to your transcript.
+            </p>
+            
+            <textarea
+              value={manualTranscriptInput}
+              onChange={(e) => setManualTranscriptInput(e.target.value)}
+              placeholder="Enter the transcribed text here..."
+              className="w-full p-3 bg-background border border-border rounded-md text-sm min-h-40 focus:outline-none focus:ring-2 focus:ring-primary"
+              data-testid="textarea-manual-transcript"
+            />
+
+            <div className="flex gap-2 mt-4 justify-end">
+              <Button
+                onClick={() => {
+                  setShowManualTranscriptModal(false);
+                  setManualTranscriptInput("");
+                }}
+                variant="outline"
+                className="hover-elevate active-elevate-2"
+                data-testid="button-cancel-manual"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={addManualTranscript}
+                className="hover-elevate active-elevate-2"
+                data-testid="button-submit-manual"
+              >
+                Add Text
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Hidden audio player */}
       <audio
