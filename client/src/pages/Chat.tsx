@@ -104,7 +104,7 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const speakMessage = (content: string, messageId: string) => {
+  const speakMessage = (content: string, messageId: string, lang: string = "en-US") => {
     // If already speaking this message, pause/resume
     if (speakingMessageId === messageId) {
       if (window.speechSynthesis.paused) {
@@ -123,6 +123,7 @@ export default function Chat() {
     setIsPaused(false);
 
     const utterance = new SpeechSynthesisUtterance(content);
+    utterance.lang = lang; // Set language for TTS
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -377,58 +378,72 @@ export default function Chat() {
           </div>
         ) : (
           <div className="space-y-4 w-full flex flex-col">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-3 ${
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                }`}
-                data-testid={`message-${msg.role}`}
-              >
-                {msg.role === "assistant" && (
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-5 w-5 text-primary" />
-                  </div>
-                )}
-                <Card
-                  className={`max-w-[80%] p-4 cursor-pointer transition-opacity ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card hover:opacity-80"
-                  } ${speakingMessageId === msg.id ? "ring-2 ring-primary" : ""}`}
-                  onClick={() => {
-                    if (msg.role === "assistant") {
-                      speakMessage(msg.content, msg.id);
-                    }
-                  }}
-                  data-testid={`card-message-${msg.id}`}
+            {messages.map((msg) => {
+              // Parse sticker from start of message if present
+              const stickerMatch = msg.role === "assistant" ? msg.content.match(/^([🎓🧮🔬📚💡🎯🎉😊🧠💻🌍🎨❓✅\s]+)\n/) : null;
+              const sticker = stickerMatch ? stickerMatch[1].trim() : null;
+              const messageContent = stickerMatch ? msg.content.replace(/^[🎓🧮🔬📚💡🎯🎉😊🧠💻🌍🎨❓✅\s]+\n/, "") : msg.content;
+
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex gap-3 ${
+                    msg.role === "user" ? "justify-end" : "justify-start"
+                  }`}
+                  data-testid={`message-${msg.role}`}
                 >
-                  <div className="text-sm whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </div>
                   {msg.role === "assistant" && (
-                    <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                      {speakingMessageId === msg.id ? (
-                        <>
-                          <Volume2 className="h-3 w-3 animate-pulse" />
-                          <span>{isPaused ? "Paused - Tap to resume" : "Speaking... - Tap to pause"}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Volume2 className="h-3 w-3" />
-                          <span>Tap to listen</span>
-                        </>
-                      )}
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Bot className="h-5 w-5 text-primary" />
                     </div>
                   )}
-                </Card>
-                {msg.role === "user" && (
-                  <div className="h-8 w-8 rounded-full bg-chart-2/10 flex items-center justify-center flex-shrink-0">
-                    <User className="h-5 w-5 text-chart-2" />
+                  <div className="max-w-[80%]">
+                    {sticker && (
+                      <div className="text-3xl mb-2">
+                        {sticker}
+                      </div>
+                    )}
+                    <Card
+                      className={`p-4 cursor-pointer transition-opacity ${
+                        msg.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-card hover:opacity-80"
+                      } ${speakingMessageId === msg.id ? "ring-2 ring-primary" : ""}`}
+                      onClick={() => {
+                        if (msg.role === "assistant") {
+                          speakMessage(messageContent, msg.id, "en-US");
+                        }
+                      }}
+                      data-testid={`card-message-${msg.id}`}
+                    >
+                      <div className="text-sm whitespace-pre-wrap break-words">
+                        {messageContent}
+                      </div>
+                      {msg.role === "assistant" && (
+                        <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                          {speakingMessageId === msg.id ? (
+                            <>
+                              <Volume2 className="h-3 w-3 animate-pulse" />
+                              <span>{isPaused ? "Paused - Tap to resume" : "Speaking... - Tap to pause"}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="h-3 w-3" />
+                              <span>Tap to listen</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </Card>
                   </div>
-                )}
-              </div>
-            ))}
+                  {msg.role === "user" && (
+                    <div className="h-8 w-8 rounded-full bg-chart-2/10 flex items-center justify-center flex-shrink-0">
+                      <User className="h-5 w-5 text-chart-2" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {sendMessageMutation.isPending && (
               <div className="flex gap-3 justify-start">
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
