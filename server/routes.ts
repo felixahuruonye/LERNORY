@@ -230,14 +230,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Website not found" });
       }
 
-      const suggestion = await debugCodeWithLEARNORY(
+      // Get updated code from LEARNORY AI
+      const debugResult = await debugCodeWithLEARNORY(
         website.htmlCode,
         website.cssCode,
         website.jsCode || "",
         debugPrompt
       );
 
-      res.json({ suggestion });
+      // Save updated code to database
+      const updated = await storage.updateGeneratedWebsite(req.params.id, {
+        htmlCode: debugResult.htmlCode,
+        cssCode: debugResult.cssCode,
+        jsCode: debugResult.jsCode,
+      });
+
+      res.json({ 
+        htmlCode: debugResult.htmlCode,
+        cssCode: debugResult.cssCode,
+        jsCode: debugResult.jsCode,
+        steps: debugResult.steps
+      });
     } catch (error) {
       console.error("Error debugging code:", error);
       res.status(500).json({ message: `Failed to debug code: ${error instanceof Error ? error.message : "Unknown error"}` });

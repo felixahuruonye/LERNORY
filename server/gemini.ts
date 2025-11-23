@@ -107,7 +107,14 @@ Explain it like you're teaching someone who has never written code before. Be de
   }
 }
 
-export async function debugCodeWithLEARNORY(html: string, css: string, js: string, debugPrompt: string): Promise<string> {
+interface DebugResult {
+  htmlCode: string;
+  cssCode: string;
+  jsCode: string;
+  steps: string[];
+}
+
+export async function debugCodeWithLEARNORY(html: string, css: string, js: string, debugPrompt: string): Promise<DebugResult> {
   const codeSnippet = `HTML:\n${html}\n\nCSS:\n${css}\n\nJavaScript:\n${js}`;
   
   const prompt = `You are an expert web developer helping someone debug and improve their code. The user wants to: ${debugPrompt}
@@ -115,7 +122,15 @@ export async function debugCodeWithLEARNORY(html: string, css: string, js: strin
 Current code:
 ${codeSnippet}
 
-Provide specific code suggestions or explanations on how to achieve what they're asking for. Be practical and direct.`;
+IMPORTANT: Return ONLY valid JSON (no other text) with this structure:
+{
+  "htmlCode": "updated HTML code here",
+  "cssCode": "updated CSS code here",
+  "jsCode": "updated JavaScript code here",
+  "steps": ["Step 1: description", "Step 2: description", ...]
+}
+
+Make the requested changes to the code. The "steps" array should describe what you changed in 2-3 steps.`;
 
   try {
     if (!process.env.GEMINI_API_KEY) {
@@ -131,13 +146,28 @@ Provide specific code suggestions or explanations on how to achieve what they're
 
     console.log("LEARNORY AI debug response received");
     
-    const suggestion = response.text;
+    const responseText = response.text;
     
-    if (!suggestion) {
+    if (!responseText) {
       throw new Error("Empty response from LEARNORY AI");
     }
 
-    return suggestion;
+    // Extract JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("Could not extract JSON from debug response:", responseText.substring(0, 500));
+      throw new Error("Failed to extract JSON from LEARNORY AI response");
+    }
+
+    const result = JSON.parse(jsonMatch[0]) as DebugResult;
+    
+    // Validate structure
+    if (!result.htmlCode || !result.cssCode || !Array.isArray(result.steps)) {
+      throw new Error("Invalid response structure from LEARNORY AI");
+    }
+
+    result.jsCode = result.jsCode || "";
+    return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("Error debugging code with LEARNORY AI:", errorMsg);
