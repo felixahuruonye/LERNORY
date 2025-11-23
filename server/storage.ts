@@ -15,6 +15,10 @@ import {
   fileUploads,
   studentProfiles,
   schools,
+  studyPlans,
+  userProgress,
+  codeSnippets,
+  examResults,
   type User,
   type UpsertUser,
   type Course,
@@ -43,6 +47,14 @@ import {
   type InsertStudentProfile,
   type School,
   type InsertSchool,
+  type StudyPlan,
+  type InsertStudyPlan,
+  type UserProgress,
+  type InsertUserProgress,
+  type CodeSnippet,
+  type InsertCodeSnippet,
+  type ExamResult,
+  type InsertExamResult,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -108,6 +120,29 @@ export interface IStorage {
   getFileUploadsByUser(userId: string): Promise<FileUpload[]>;
   createFileUpload(upload: InsertFileUpload): Promise<FileUpload>;
   updateFileUploadStatus(id: string, status: string, extractedText?: string): Promise<FileUpload | undefined>;
+
+  // Study plan operations
+  getStudyPlan(id: string): Promise<StudyPlan | undefined>;
+  getStudyPlansByUser(userId: string): Promise<StudyPlan[]>;
+  createStudyPlan(plan: InsertStudyPlan): Promise<StudyPlan>;
+  updateStudyPlan(id: string, updates: Partial<InsertStudyPlan>): Promise<StudyPlan | undefined>;
+
+  // User progress operations
+  getUserProgress(userId: string, subject: string): Promise<UserProgress | undefined>;
+  getUserProgressByUser(userId: string): Promise<UserProgress[]>;
+  createUserProgress(progress: InsertUserProgress): Promise<UserProgress>;
+  updateUserProgress(id: string, updates: Partial<InsertUserProgress>): Promise<UserProgress | undefined>;
+
+  // Code snippet operations
+  getCodeSnippet(id: string): Promise<CodeSnippet | undefined>;
+  getCodeSnippetsByUser(userId: string): Promise<CodeSnippet[]>;
+  createCodeSnippet(snippet: InsertCodeSnippet): Promise<CodeSnippet>;
+  updateCodeSnippet(id: string, updates: Partial<InsertCodeSnippet>): Promise<CodeSnippet | undefined>;
+
+  // Exam result operations
+  getExamResult(id: string): Promise<ExamResult | undefined>;
+  getExamResultsByUser(userId: string): Promise<ExamResult[]>;
+  createExamResult(result: InsertExamResult): Promise<ExamResult>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -329,6 +364,81 @@ export class DatabaseStorage implements IStorage {
       .where(eq(fileUploads.id, id))
       .returning();
     return updated;
+  }
+
+  // Study plan operations
+  async getStudyPlan(id: string): Promise<StudyPlan | undefined> {
+    const [plan] = await db.select().from(studyPlans).where(eq(studyPlans.id, id));
+    return plan;
+  }
+
+  async getStudyPlansByUser(userId: string): Promise<StudyPlan[]> {
+    return await db.select().from(studyPlans).where(eq(studyPlans.userId, userId));
+  }
+
+  async createStudyPlan(plan: InsertStudyPlan): Promise<StudyPlan> {
+    const [newPlan] = await db.insert(studyPlans).values(plan).returning();
+    return newPlan;
+  }
+
+  async updateStudyPlan(id: string, updates: Partial<InsertStudyPlan>): Promise<StudyPlan | undefined> {
+    const [updated] = await db.update(studyPlans).set({ ...updates, updatedAt: new Date() }).where(eq(studyPlans.id, id)).returning();
+    return updated;
+  }
+
+  // User progress operations
+  async getUserProgress(userId: string, subject: string): Promise<UserProgress | undefined> {
+    const [progress] = await db.select().from(userProgress).where(and(eq(userProgress.userId, userId), eq(userProgress.subject, subject)));
+    return progress;
+  }
+
+  async getUserProgressByUser(userId: string): Promise<UserProgress[]> {
+    return await db.select().from(userProgress).where(eq(userProgress.userId, userId));
+  }
+
+  async createUserProgress(progress: InsertUserProgress): Promise<UserProgress> {
+    const [newProgress] = await db.insert(userProgress).values(progress).returning();
+    return newProgress;
+  }
+
+  async updateUserProgress(id: string, updates: Partial<InsertUserProgress>): Promise<UserProgress | undefined> {
+    const [updated] = await db.update(userProgress).set({ ...updates, updatedAt: new Date() }).where(eq(userProgress.id, id)).returning();
+    return updated;
+  }
+
+  // Code snippet operations
+  async getCodeSnippet(id: string): Promise<CodeSnippet | undefined> {
+    const [snippet] = await db.select().from(codeSnippets).where(eq(codeSnippets.id, id));
+    return snippet;
+  }
+
+  async getCodeSnippetsByUser(userId: string): Promise<CodeSnippet[]> {
+    return await db.select().from(codeSnippets).where(eq(codeSnippets.userId, userId));
+  }
+
+  async createCodeSnippet(snippet: InsertCodeSnippet): Promise<CodeSnippet> {
+    const [newSnippet] = await db.insert(codeSnippets).values(snippet).returning();
+    return newSnippet;
+  }
+
+  async updateCodeSnippet(id: string, updates: Partial<InsertCodeSnippet>): Promise<CodeSnippet | undefined> {
+    const [updated] = await db.update(codeSnippets).set({ ...updates, updatedAt: new Date() }).where(eq(codeSnippets.id, id)).returning();
+    return updated;
+  }
+
+  // Exam result operations
+  async getExamResult(id: string): Promise<ExamResult | undefined> {
+    const [result] = await db.select().from(examResults).where(eq(examResults.id, id));
+    return result;
+  }
+
+  async getExamResultsByUser(userId: string): Promise<ExamResult[]> {
+    return await db.select().from(examResults).where(eq(examResults.userId, userId)).orderBy(desc(examResults.createdAt));
+  }
+
+  async createExamResult(result: InsertExamResult): Promise<ExamResult> {
+    const [newResult] = await db.insert(examResults).values(result).returning();
+    return newResult;
   }
 }
 

@@ -1,0 +1,300 @@
+Make the ai to be a 
+Digital tutor
+
+Exam prep system
+
+Course generator
+
+Study planner
+
+Question solver
+
+Career advisor
+
+Summarizer
+
+Code debugger
+
+Memory-based learning assistant
+The system must operate like a full AI learning platform, not just a chat system.
+LERNORY must be able to:
+
+Explain topics in simple and advanced detail
+
+Use analogies, examples, and real-life relevance
+
+Break down concepts step-by-step
+
+Provide formulas and diagrams (text format)
+
+Highlight common mistakes
+
+Provide shortcuts
+
+
+Add this more Subjects:
+Biology, English, Literature, Computer Science, Programming, Economics, Government, History, Business, Accounting, Commerce, Civic, Data Science, AI, Web Dev, Cloud, Networking, and any other school/tech subject.
+
+The AI must:
+
+Solve equations, word problems, programming tasks
+
+Show full working
+
+Show reasoning
+
+Provide alternative methods
+
+Generate similar practice questions
+
+User can enter a topic → LERNORY generates:
+
+Full course outline
+
+Topic-by-topic breakdown
+
+Lesson notes
+
+Practice questions
+
+Detailed explanations
+
+Real-life application
+
+Assignments
+
+Weekly learning schedule
+
+Courses should be savable to user account.
+
+User can select this buttons under the chat bar
+
+Lesson & Notes Generator button
+
+LERNORY must generate:
+
+Notes (short, medium, long)
+
+Bullet points
+
+Highlight key terms
+
+Provide examples
+
+Provide exam-ready summary
+
+Provide flashcards (in text form)
+
+Study Plan & TimeTable Builder button
+
+The AI must:
+
+Ask user their exam, subjects, deadline
+
+Ask for weak areas
+
+Ask how many hours per day
+
+Generate complete study plan
+
+Auto-update based on progress
+
+Send reminders (if integrated)
+
+Track completion
+
+Exam & Quiz Generator button
+
+User can choose exam type:
+
+WAEC
+
+NECO
+
+JAMB
+
+University exams
+
+Custom tests
+
+AI should generate:
+
+MCQs
+
+True/false
+
+Short answer
+
+Essay questions
+
+Calculation problems
+
+AI must also:
+
+Mark answers
+
+Score user
+
+Explain every mistake
+
+Track user performance
+
+Log topics user is weak in
+
+Summarization Engine Button
+
+User can paste text (notes, documents, long explanations).
+AI must:
+
+Summarize in different lengths (short, medium, long)
+
+Generate outlines
+
+Extract key topics
+
+Convert to revision notes
+
+Convert to flashcards
+
+Generate mind-map style text
+
+ Code Debugging & Programming Assistant button
+
+LERNORY must:
+
+Debug code
+
+Fix errors
+
+Rewrite code
+
+Add missing features
+
+Explain what was wrong
+
+Convert code between languages
+
+Generate documentation
+
+Generate API routes
+
+Generate UI components
+
+Show preview window page of the generated webapp or app
+
+Handle any programming language
+
+Career Guidance & University Counseling
+
+System should offer:
+
+Course advising (what to study)
+
+Nigerian university info
+
+Cutoff marks
+
+Admission guidance
+
+Job opportunities
+
+Skills needed for any career
+
+Salary expectations
+
+Career roadmap
+
+Internship guidance
+
+Memory Feature (Very Important)
+
+System must remember:
+
+User subjects
+
+Past solved questions
+
+Weak topics
+
+Level of knowledge
+
+Preferred learning style
+
+Saved courses
+
+Saved notes
+
+Study plans
+
+Past exam performance
+
+Memory must update automatically.
+
+Learning Modes
+
+System must include selectable modes:
+
+A. Learning Mode — long explanation
+
+B. Exam Mode — strict, no hints
+
+C. Revision Mode — concise summaries
+
+D. Quick Answer Mode — short answers
+
+E. “Explain Like I’m 5” Mode — very simple
+
+F. Advanced Mode — full technical depth
+
+G. Practice Mode — generate endless questions
+
+
+🧠 AI PERSONALITY (IMPORTANT)
+
+Friendly, supportive tutor, interactive, smart, funny
+
+slang something, not when user is very serious
+
+Clear, structured explanations
+
+Motivational
+
+Should adapt to user's pace
+
+Should ask if user wants more practice
+
+Should detect user weaknesses automatically
+
+AI Chat Interface
+
+Send messages
+
+Attach files
+
+Math rendering (KaTeX/MathJax)
+
+Code formatting
+
+Two-column layout (response + outline)
+
+Ability to favorite/save messages
+
+History search
+
+Saved chats
+
+Continue learning feature
+
+Notifications
+
+Custom avatars
+
+API rate limiter
+
+Multi-language support (optional)
+
+In-app feedback system
+
+Push Notifications
+
+

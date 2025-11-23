@@ -462,6 +462,68 @@ export default function Chat() {
         )}
       </div>
 
+      {/* Feature Buttons */}
+      <div className="border-t border-border/50 bg-background/50 backdrop-blur-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-elevate active-elevate-2 text-xs"
+              onClick={() => setMessage("Generate course on ")}
+              data-testid="button-course-generator"
+            >
+              📚 Course
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-elevate active-elevate-2 text-xs"
+              onClick={() => setMessage("Create study plan: exam=, subjects=, deadline=, hours_per_day=")}
+              data-testid="button-study-planner"
+            >
+              📅 Study Plan
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-elevate active-elevate-2 text-xs"
+              onClick={() => setMessage("Generate exam: type=custom, subject=, difficulty=medium")}
+              data-testid="button-exam-generator"
+            >
+              ✏️ Exam
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-elevate active-elevate-2 text-xs"
+              onClick={() => setMessage("Summarize: [paste text] - format=short")}
+              data-testid="button-summarizer"
+            >
+              📝 Summarize
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-elevate active-elevate-2 text-xs"
+              onClick={() => setMessage("Debug code: language=\n[paste code]")}
+              data-testid="button-code-debugger"
+            >
+              💻 Code
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-elevate active-elevate-2 text-xs"
+              onClick={() => setMessage("Career advice: I want to study/work in ")}
+              data-testid="button-career-advisor"
+            >
+              🎯 Career
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {/* Input Area */}
       <div className="sticky bottom-0 border-t border-border/50 backdrop-blur-lg bg-background/80">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

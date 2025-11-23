@@ -20,6 +20,8 @@ export const userRoleEnum = pgEnum('user_role', ['student', 'teacher', 'admin', 
 export const sessionStatusEnum = pgEnum('session_status', ['active', 'paused', 'ended']);
 export const quizDifficultyEnum = pgEnum('quiz_difficulty', ['easy', 'medium', 'hard']);
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'completed', 'failed']);
+export const learningModeEnum = pgEnum('learning_mode', ['learning', 'exam', 'revision', 'quick', 'eli5', 'advanced', 'practice']);
+export const examTypeEnum = pgEnum('exam_type', ['waec', 'neco', 'jamb', 'university', 'custom']);
 
 // Session storage table (required for Replit Auth)
 export const sessions = pgTable(
@@ -251,6 +253,87 @@ export const fileUploads = pgTable("file_uploads", {
 export const insertFileUploadSchema = createInsertSchema(fileUploads).omit({ id: true, createdAt: true });
 export type InsertFileUpload = z.infer<typeof insertFileUploadSchema>;
 export type FileUpload = typeof fileUploads.$inferSelect;
+
+// Study Plans
+export const studyPlans = pgTable("study_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar("title", { length: 255 }).notNull(),
+  subjects: text("subjects").array().notNull(),
+  examType: examTypeEnum("exam_type"),
+  deadline: timestamp("deadline"),
+  hoursPerDay: integer("hours_per_day"),
+  weakAreas: text("weak_areas").array(),
+  schedule: jsonb("schedule"), // Daily breakdown
+  progress: jsonb("progress"), // Tracking completion
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertStudyPlanSchema = createInsertSchema(studyPlans).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertStudyPlan = z.infer<typeof insertStudyPlanSchema>;
+export type StudyPlan = typeof studyPlans.$inferSelect;
+
+// User Progress & Learning History
+export const userProgress = pgTable("user_progress", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  subject: varchar("subject", { length: 100 }).notNull(),
+  topicsStudied: text("topics_studied").array(),
+  weakTopics: text("weak_topics").array(),
+  strongTopics: text("strong_topics").array(),
+  questionsAttempted: integer("questions_attempted").default(0),
+  averageScore: decimal("average_score", { precision: 5, scale: 2 }).default('0'),
+  learningMode: learningModeEnum("learning_mode").default('learning'),
+  preferredLanguage: varchar("preferred_language", { length: 50 }).default('English'),
+  lastStudiedAt: timestamp("last_studied_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertUserProgressSchema = createInsertSchema(userProgress).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertUserProgress = z.infer<typeof insertUserProgressSchema>;
+export type UserProgress = typeof userProgress.$inferSelect;
+
+// Code Snippets & Debugging
+export const codeSnippets = pgTable("code_snippets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar("title", { length: 255 }),
+  language: varchar("language", { length: 50 }).notNull(),
+  code: text("code").notNull(),
+  debugged: boolean("debugged").default(false),
+  explanation: text("explanation"),
+  fixedCode: text("fixed_code"),
+  issues: jsonb("issues"), // Array of issues found
+  learnings: text("learnings"), // Key points from debugging
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertCodeSnippetSchema = createInsertSchema(codeSnippets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCodeSnippet = z.infer<typeof insertCodeSnippetSchema>;
+export type CodeSnippet = typeof codeSnippets.$inferSelect;
+
+// Exam Results & Performance Tracking
+export const examResults = pgTable("exam_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  examName: varchar("exam_name", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 100 }),
+  totalQuestions: integer("total_questions"),
+  correctAnswers: integer("correct_answers"),
+  score: decimal("score", { precision: 5, scale: 2 }),
+  timeSpent: integer("time_spent"), // in minutes
+  answers: jsonb("answers"), // User's answers with explanations
+  topicsStrong: text("topics_strong").array(),
+  topicsWeak: text("topics_weak").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertExamResultSchema = createInsertSchema(examResults).omit({ id: true, createdAt: true });
+export type InsertExamResult = z.infer<typeof insertExamResultSchema>;
+export type ExamResult = typeof examResults.$inferSelect;
 
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
