@@ -1,18 +1,36 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ArrowLeft, Download, Trash2, Loader2, Image as ImageIcon } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { GeneratedImage } from "@shared/schema";
 
 export default function ImageGallery() {
   const [, setLocation] = useLocation();
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
+  const { toast } = useToast();
 
   const { data: images = [], isLoading } = useQuery<GeneratedImage[]>({
     queryKey: ["/api/generated-images"],
+  });
+
+  const deleteImageMutation = useMutation({
+    mutationFn: async (imageId: string) => {
+      const response = await apiRequest("DELETE", `/api/generated-images/${imageId}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
+      setSelectedImage(null);
+      toast({ title: "Image deleted", description: "Image removed from gallery" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete image", variant: "destructive" });
+    },
   });
 
   const downloadImage = async (imageUrl: string, prompt: string) => {
@@ -79,7 +97,11 @@ export default function ImageGallery() {
                 Go to Chat
               </Button>
             </div>
-          ) : selectedImage ? (
+          ) : images.length > 0 && (
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold">All Generated Images</h2>
+            </div>
+          ), selectedImage ? (
             // Image Detail View
             <div className="max-w-3xl mx-auto">
               <Button
@@ -132,35 +154,76 @@ export default function ImageGallery() {
                     <Download className="h-4 w-4 mr-2" />
                     Download
                   </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => deleteImageMutation.mutate(selectedImage.id)}
+                    disabled={deleteImageMutation.isPending}
+                    className="hover-elevate active-elevate-2"
+                    data-testid="button-delete-image"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
                 </div>
               </Card>
             </div>
           ) : (
             // Gallery Grid
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {images.map((image) => (
-                <Card
-                  key={image.id}
-                  className="overflow-hidden cursor-pointer hover-elevate active-elevate-2 transition-opacity"
-                  onClick={() => setSelectedImage(image)}
-                  data-testid={`card-image-${image.id}`}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {images.map((image) => (
+                  <Card
+                    key={image.id}
+                    className="overflow-hidden cursor-pointer hover-elevate active-elevate-2 transition-opacity group"
+                    onClick={() => setSelectedImage(image)}
+                    data-testid={`card-image-${image.id}`}
+                  >
+                    <div className="aspect-video overflow-hidden bg-muted relative">
+                      <img
+                        src={image.imageUrl}
+                        alt={image.prompt}
+                        className="w-full h-full object-cover hover:opacity-80 transition-opacity"
+                        data-testid={`img-gallery-${image.id}`}
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteImageMutation.mutate(image.id);
+                        }}
+                        disabled={deleteImageMutation.isPending}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity hover-elevate"
+                        data-testid={`button-delete-${image.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="p-3 space-y-2">
+                      <p className="text-sm font-medium line-clamp-2">{image.prompt}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(image.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+              
+              <div className="flex justify-center mt-6">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (confirm("Are you sure you want to delete all images?")) {
+                      images.forEach(img => deleteImageMutation.mutate(img.id));
+                    }
+                  }}
+                  className="hover-elevate active-elevate-2"
+                  data-testid="button-clear-all-images"
                 >
-                  <div className="aspect-video overflow-hidden bg-muted">
-                    <img
-                      src={image.imageUrl}
-                      alt={image.prompt}
-                      className="w-full h-full object-cover hover:opacity-80 transition-opacity"
-                      data-testid={`img-gallery-${image.id}`}
-                    />
-                  </div>
-                  <div className="p-3 space-y-2">
-                    <p className="text-sm font-medium line-clamp-2">{image.prompt}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(image.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </Card>
-              ))}
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear All Images
+                </Button>
+              </div>
             </div>
           )}
         </div>

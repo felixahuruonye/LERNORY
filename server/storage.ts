@@ -174,6 +174,7 @@ export interface IStorage {
   createGeneratedImage(image: InsertGeneratedImage): Promise<GeneratedImage>;
   getGeneratedImagesByUser(userId: string): Promise<GeneratedImage[]>;
   getGeneratedImagesByTopic(userId: string, topic: string): Promise<GeneratedImage[]>;
+  deleteGeneratedImage(userId: string, imageId: string): Promise<void>;
 
   // Topic explanation operations
   createTopicExplanation(explanation: InsertTopicExplanation): Promise<TopicExplanation>;
@@ -541,6 +542,10 @@ export class DatabaseStorage implements IStorage {
 
   async getGeneratedImagesByTopic(userId: string, topic: string): Promise<GeneratedImage[]> {
     return await db.select().from(generatedImages).where(and(eq(generatedImages.userId, userId), eq(generatedImages.relatedTopic, topic))).orderBy(desc(generatedImages.createdAt));
+  }
+
+  async deleteGeneratedImage(userId: string, imageId: string): Promise<void> {
+    await db.delete(generatedImages).where(and(eq(generatedImages.userId, userId), eq(generatedImages.id, imageId)));
   }
 
   // Topic explanation operations

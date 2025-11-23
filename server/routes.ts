@@ -986,6 +986,24 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Delete a generated image
+  app.delete('/api/generated-images/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const imageId = req.params.id;
+
+      if (!imageId) {
+        return res.status(400).json({ message: "Image ID is required" });
+      }
+
+      await storage.deleteGeneratedImage(userId, imageId);
+      res.json({ message: "Image deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting image:", error);
+      res.status(500).json({ message: "Failed to delete image" });
+    }
+  });
+
   // Learning history endpoint
   app.get('/api/learning-history', isAuthenticated, async (req: any, res: Response) => {
     try {
