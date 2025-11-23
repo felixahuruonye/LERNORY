@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Link } from "wouter";
 import {
   Mic,
   Brain,
@@ -19,7 +20,6 @@ import {
   DollarSign,
   Users,
 } from "lucide-react";
-import { Link } from "wouter";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -64,32 +64,22 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-6">
-              <Link href="/">
-                <a className="text-xl font-display font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
-                  LERNORY
-                </a>
-              </Link>
+              <a href="/" className="text-xl font-display font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
+                LERNORY
+              </a>
               <nav className="hidden md:flex items-center gap-4">
                 <Button variant="ghost" asChild className="hover-elevate active-elevate-2">
-                  <Link href="/live-session">
-                    <a data-testid="link-live-session">Live Sessions</a>
-                  </Link>
+                  <a href="/live-session" data-testid="link-live-session">Live Sessions</a>
                 </Button>
                 <Button variant="ghost" asChild className="hover-elevate active-elevate-2">
-                  <Link href="/chat">
-                    <a data-testid="link-chat">AI Tutor</a>
-                  </Link>
+                  <a href="/chat" data-testid="link-chat">AI Tutor</a>
                 </Button>
                 <Button variant="ghost" asChild className="hover-elevate active-elevate-2">
-                  <Link href="/courses">
-                    <a data-testid="link-courses">Courses</a>
-                  </Link>
+                  <a href="/courses" data-testid="link-courses">Courses</a>
                 </Button>
                 {isTeacher && (
                   <Button variant="ghost" asChild className="hover-elevate active-elevate-2">
-                    <Link href="/marketplace">
-                      <a data-testid="link-marketplace">Marketplace</a>
-                    </Link>
+                    <a href="/marketplace" data-testid="link-marketplace">Marketplace</a>
                   </Button>
                 )}
               </nav>
@@ -129,9 +119,9 @@ export default function Dashboard() {
             {/* Quick Actions */}
             <ScrollReveal delay={100}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-start-session">
-                  <Link href="/live-session/new">
-                    <a className="block p-6">
+                <a href="/live-session/new">
+                  <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-start-session">
+                    <div className="block p-6">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
                           <Mic className="h-6 w-6 text-primary" />
@@ -141,13 +131,13 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground">Record a lecture</p>
                         </div>
                       </div>
-                    </a>
-                  </Link>
-                </Card>
+                    </div>
+                  </Card>
+                </a>
 
-                <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-create-course">
-                  <Link href="/courses/new">
-                    <a className="block p-6">
+                <a href="/courses/new">
+                  <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-create-course">
+                    <div className="block p-6">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg bg-chart-2/10 flex items-center justify-center">
                           <BookOpen className="h-6 w-6 text-chart-2" />
@@ -157,13 +147,13 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground">Build new content</p>
                         </div>
                       </div>
-                    </a>
-                  </Link>
-                </Card>
+                    </div>
+                  </Card>
+                </a>
 
-                <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-create-exam">
-                  <Link href="/exams/new">
-                    <a className="block p-6">
+                <a href="/exams/new">
+                  <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-create-exam">
+                    <div className="block p-6">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg bg-chart-3/10 flex items-center justify-center">
                           <GraduationCap className="h-6 w-6 text-chart-3" />
@@ -173,9 +163,9 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground">Design a test</p>
                         </div>
                       </div>
-                    </a>
-                  </Link>
-                </Card>
+                    </div>
+                  </Card>
+                </a>
               </div>
             </ScrollReveal>
 
@@ -256,9 +246,9 @@ export default function Dashboard() {
             {/* Quick Start */}
             <ScrollReveal delay={100}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-join-session">
-                  <Link href="/live-session">
-                    <a className="block p-6">
+                <a href="/live-session">
+                  <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-join-session">
+                    <div className="block p-6">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
                           <Mic className="h-6 w-6 text-primary" />
@@ -268,13 +258,13 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground">Attend a lecture</p>
                         </div>
                       </div>
-                    </a>
-                  </Link>
-                </Card>
+                    </div>
+                  </Card>
+                </a>
 
-                <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-ask-tutor">
-                  <Link href="/chat">
-                    <a className="block p-6">
+                <a href="/chat">
+                  <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-ask-tutor">
+                    <div className="block p-6">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg bg-chart-2/10 flex items-center justify-center">
                           <Brain className="h-6 w-6 text-chart-2" />
@@ -284,13 +274,13 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground">Get instant help</p>
                         </div>
                       </div>
-                    </a>
-                  </Link>
-                </Card>
+                    </div>
+                  </Card>
+                </a>
 
-                <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-upload-notes">
-                  <Link href="/upload">
-                    <a className="block p-6">
+                <a href="/upload">
+                  <Card className="hover-elevate active-elevate-2 cursor-pointer" data-testid="card-upload-notes">
+                    <div className="block p-6">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-lg bg-chart-3/10 flex items-center justify-center">
                           <Upload className="h-6 w-6 text-chart-3" />
@@ -300,9 +290,9 @@ export default function Dashboard() {
                           <p className="text-sm text-muted-foreground">Process files</p>
                         </div>
                       </div>
-                    </a>
-                  </Link>
-                </Card>
+                    </div>
+                  </Card>
+                </a>
               </div>
             </ScrollReveal>
 
@@ -367,9 +357,7 @@ export default function Dashboard() {
                     <p>No lessons scheduled</p>
                     <p className="text-sm mt-2">Explore courses to get started</p>
                     <Button className="mt-4 hover-elevate active-elevate-2" asChild>
-                      <Link href="/courses">
-                        <a>Browse Courses</a>
-                      </Link>
+                      <a href="/courses">Browse Courses</a>
                     </Button>
                   </div>
                 </CardContent>

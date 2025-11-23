@@ -20,7 +20,6 @@ import {
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { useMutation, queryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 interface TranscriptSegment {
@@ -99,11 +98,9 @@ export default function LiveSession() {
 
     try {
       // Create live session via API
-      const response = await apiRequest("/api/live-sessions", {
-        method: "POST",
-        body: JSON.stringify({ title: sessionTitle }),
-      });
-      setSessionId(response.id);
+      const res = await apiRequest("POST", "/api/live-sessions", { title: sessionTitle });
+      const sessionData = await res.json();
+      setSessionId(sessionData.id);
 
       // Initialize WebSocket connection
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -116,16 +113,20 @@ export default function LiveSession() {
       };
 
       ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'transcript_segment') {
-          setTranscript((prev) => [
-            ...prev,
-            {
-              speaker: data.data.speaker || user?.firstName || "Speaker",
-              text: data.data.text,
-              timestamp: data.data.timestamp,
-            },
-          ]);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'transcript_segment') {
+            setTranscript((prev) => [
+              ...prev,
+              {
+                speaker: data.data.speaker || user?.firstName || "Speaker",
+                text: data.data.text,
+                timestamp: data.data.timestamp,
+              },
+            ]);
+          }
+        } catch (e) {
+          console.error("Error parsing WebSocket message:", e);
         }
       };
 
@@ -141,18 +142,24 @@ export default function LiveSession() {
       // Get user media
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm',
+        mimeType: 'audio/webm;codecs=opus',
       });
       mediaRecorderRef.current = mediaRecorder;
 
-      mediaRecorder.ondataavailable = (event) => {
+      mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
-          // Send audio chunk to WebSocket for transcription
-          ws.send(JSON.stringify({
-            type: 'audio_chunk',
-            data: event.data,
-          }));
+          // Convert blob to base64 and send via WebSocket
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'audio_chunk',
+                data: reader.result, // Base64 encoded
+              }));
+            }
+          };
+          reader.readAsDataURL(event.data);
         }
       };
 
@@ -196,20 +203,14 @@ export default function LiveSession() {
     // Save transcript to backend
     if (sessionId && transcript.length > 0) {
       try {
-        await apiRequest("/api/transcripts", {
-          method: "POST",
-          body: JSON.stringify({
-            sessionId,
-            segments: transcript,
-            audioUrl: null, // Would be uploaded audio URL in real implementation
-          }),
+        await apiRequest("POST", "/api/transcripts", {
+          sessionId,
+          segments: transcript,
+          audioUrl: null, // Would be uploaded audio URL in real implementation
         });
 
         // Update session status
-        await apiRequest(`/api/live-sessions/${sessionId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: 'completed' }),
-        });
+        await apiRequest("PATCH", `/api/live-sessions/${sessionId}`, { status: 'completed' });
       } catch (error) {
         console.error("Error saving transcript:", error);
       }
@@ -232,12 +233,9 @@ export default function LiveSession() {
 
     try {
       const transcriptText = transcript.map(seg => `${seg.speaker}: ${seg.text}`).join('\n');
-      await apiRequest("/api/lessons/generate", {
-        method: "POST",
-        body: JSON.stringify({
-          transcriptText,
-          courseId: null, // Could be linked to a course
-        }),
+      await apiRequest("POST", "/api/lessons/generate", {
+        transcriptText,
+        courseId: null, // Could be linked to a course
       });
 
       setIsProcessing(false);
