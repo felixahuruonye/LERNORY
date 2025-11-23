@@ -12,6 +12,19 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Updates (November 23, 2025)
 
+### Website Generator (NEW)
+- **Lovable AI-style Interface**: Split-view editor with live HTML/CSS/JS preview powered by Gemini API
+- **Gemini Integration**: Uses gemini-2.5-flash model for intelligent website generation
+- **Database Storage**: All generated websites stored in `generatedWebsites` table with metadata
+- **Features**: Create from prompt, edit code, view live preview, favorite/delete websites, copy code
+- **Route**: `/website-generator` page accessible via "Website" button in chat
+- **API Endpoints**: 
+  - `GET /api/websites` - List user's generated websites
+  - `GET /api/websites/:id` - Get specific website with view count increment
+  - `POST /api/websites/generate` - Generate new website from prompt
+  - `PATCH /api/websites/:id` - Update website metadata or code
+  - `DELETE /api/websites/:id` - Delete generated website
+
 ### AI Tutor Improvements
 - **ChatGPT-like Responses**: Implemented expert system prompt with educational best practices
 - **Voice-to-Text Chat Input**: Users can record voice, auto-transcribe to chat input, and send
@@ -124,6 +137,10 @@ Preferred communication style: Simple, everyday language.
 - **OpenRouter**: Fallback for chat completions
   - API Key: `OPENROUTER_API_KEY`
   - Note: Only used for text-based chat, not audio
+- **Google Gemini**: Website generation
+  - API Key: `GEMINI_API_KEY`
+  - Model: gemini-2.5-flash for fast website generation
+  - Used for: Website Generator feature with code generation
 
 ### Payment Processing
 - **Paystack**: Nigerian payment gateway
