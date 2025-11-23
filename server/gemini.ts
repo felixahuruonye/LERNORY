@@ -1,5 +1,6 @@
 // Gemini AI integration blueprint reference: javascript_gemini
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -253,7 +254,6 @@ export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGe
 
     console.log("LEARNORY AI: Generating educational image with DALL-E 3");
     
-    const OpenAI = require("openai").default;
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY
     });
