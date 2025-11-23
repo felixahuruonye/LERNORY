@@ -9,6 +9,7 @@ import {
   quizzes,
   quizAttempts,
   chatMessages,
+  chatSessions,
   memoryEntries,
   purchases,
   analyticsEvents,
@@ -39,6 +40,8 @@ import {
   type InsertQuizAttempt,
   type ChatMessage,
   type InsertChatMessage,
+  type ChatSession,
+  type InsertChatSession,
   type MemoryEntry,
   type InsertMemoryEntry,
   type Purchase,
@@ -113,6 +116,13 @@ export interface IStorage {
   getChatMessagesByUser(userId: string, limit?: number): Promise<ChatMessage[]>;
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
   deleteChatMessagesByUser(userId: string): Promise<void>;
+
+  // Chat session operations
+  getChatSession(id: string): Promise<ChatSession | undefined>;
+  getChatSessionsByUser(userId: string): Promise<ChatSession[]>;
+  createChatSession(session: InsertChatSession): Promise<ChatSession>;
+  updateChatSession(id: string, updates: Partial<InsertChatSession>): Promise<ChatSession | undefined>;
+  deleteChatSession(id: string): Promise<void>;
   
   // Memory entry operations
   getMemoryEntriesByUser(userId: string): Promise<MemoryEntry[]>;
@@ -333,6 +343,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteChatMessagesByUser(userId: string): Promise<void> {
     await db.delete(chatMessages).where(eq(chatMessages.userId, userId));
+  }
+
+  // Chat session operations
+  async getChatSession(id: string): Promise<ChatSession | undefined> {
+    const [session] = await db.select().from(chatSessions).where(eq(chatSessions.id, id));
+    return session;
+  }
+
+  async getChatSessionsByUser(userId: string): Promise<ChatSession[]> {
+    return await db.select().from(chatSessions).where(eq(chatSessions.userId, userId)).orderBy(desc(chatSessions.updatedAt));
+  }
+
+  async createChatSession(session: InsertChatSession): Promise<ChatSession> {
+    const [newSession] = await db.insert(chatSessions).values(session).returning();
+    return newSession;
+  }
+
+  async updateChatSession(id: string, updates: Partial<InsertChatSession>): Promise<ChatSession | undefined> {
+    const [updated] = await db.update(chatSessions).set({ ...updates, updatedAt: new Date() }).where(eq(chatSessions.id, id)).returning();
+    return updated;
+  }
+
+  async deleteChatSession(id: string): Promise<void> {
+    await db.delete(chatSessions).where(eq(chatSessions.id, id));
   }
 
   // Memory entry operations

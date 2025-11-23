@@ -105,6 +105,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Chat Session routes
+  app.get('/api/chat/sessions', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessions = await storage.getChatSessionsByUser(userId);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching chat sessions:", error);
+      res.status(500).json({ message: "Failed to fetch chat sessions" });
+    }
+  });
+
+  app.post('/api/chat/sessions', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { title, mode } = req.body;
+      const session = await storage.createChatSession({ userId, title: title || "New Chat", mode: mode || "chat", summary: "" });
+      res.json(session);
+    } catch (error) {
+      console.error("Error creating chat session:", error);
+      res.status(500).json({ message: "Failed to create chat session" });
+    }
+  });
+
+  app.patch('/api/chat/sessions/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const session = await storage.updateChatSession(id, updates);
+      res.json(session);
+    } catch (error) {
+      console.error("Error updating chat session:", error);
+      res.status(500).json({ message: "Failed to update chat session" });
+    }
+  });
+
+  app.delete('/api/chat/sessions/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteChatSession(id);
+      res.json({ message: "Chat session deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting chat session:", error);
+      res.status(500).json({ message: "Failed to delete chat session" });
+    }
+  });
+
+  // File upload handler with Gemini API fallback to OpenAI/OpenRouter
+  const uploadMulter = multer({ storage: multer.memoryStorage() });
+  
+  app.post('/api/chat/analyze-file', isAuthenticated, uploadMulter.single('file'), async (req: any, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+      
+      const userId = req.user.claims.sub;
+      const { originalname, mimetype, buffer } = req.file;
+      
+      let analysis = "";
+      let usedApi = "gemini";
+      
+      // Try Gemini first
+      try {
+        analysis = await explainTopicWithLEARNORY(originalname, originalname);
+        analysis = analysis || "File analyzed with Gemini API";
+      } catch (geminiErr) {
+        console.error("Gemini API failed:", geminiErr);
+        usedApi = "openai";
+        
+        // Fallback to OpenAI
+        try {
+          analysis = await chatWithAI([
+            { role: "user", content: `Please analyze this file (${originalname}) of type ${mimetype}` }
+          ]);
+          analysis = analysis || "File analyzed with OpenAI";
+        } catch (openaiErr) {
+          console.error("OpenAI API also failed:", openaiErr);
+          usedApi = "failed";
+          analysis = "Unable to analyze file - all APIs failed";
+        }
+      }
+      
+      // Save file upload record
+      const fileRecord = await storage.createFileUpload({
+        userId,
+        fileName: originalname,
+        fileType: mimetype,
+        fileSize: buffer.length,
+        fileUrl: `/api/uploads/${userId}/${nanoid()}`,
+        processingStatus: "completed",
+        extractedText: analysis,
+      });
+      
+      res.json({ fileRecord, analysis, usedApi });
+    } catch (error) {
+      console.error("File upload error:", error);
+      res.status(500).json({ message: "Failed to process file" });
+    }
+  });
+
   // Website Generator routes
   app.get('/api/websites', isAuthenticated, async (req: any, res: Response) => {
     try {

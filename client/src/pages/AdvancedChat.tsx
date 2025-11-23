@@ -13,45 +13,89 @@ import {
   Loader2,
   Bot,
   User,
-  ArrowLeft,
+  Plus,
+  MoreVertical,
+  Trash2,
+  BookmarkIcon,
+  Settings,
+  Heart,
   RotateCcw,
-  Image,
+  ChevronDown,
+  Highlighter,
+  MessageSquare,
+  Zap,
+  Download,
+  Copy,
+  Flag,
   BookOpen,
+  Code,
+  Wand2,
+  MessageCircle,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { ChatMessage } from "@shared/schema";
+import type { ChatMessage, ChatSession } from "@shared/schema";
 import { useDropzone } from "react-dropzone";
+
+interface Message extends ChatMessage {
+  rating?: number;
+  isBookmarked?: boolean;
+}
+
+interface FloatingButton {
+  label: string;
+  icon: any;
+  action: () => void;
+}
 
 export default function AdvancedChat() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [message, setMessage] = useState("");
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [showTopicExplainer, setShowTopicExplainer] = useState(false);
-  const [showImageGenerator, setShowImageGenerator] = useState(false);
-  const [topicSubject, setTopicSubject] = useState("");
-  const [topicName, setTopicName] = useState("");
-  const [imagePrompt, setImagePrompt] = useState("");
-  const [explainedTopic, setExplainedTopic] = useState<any>(null);
-  const [generatedImagesList, setGeneratedImagesList] = useState<any[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [expandedMenuId, setExpandedMenuId] = useState<string | null>(null);
+  const [showSideNotes, setShowSideNotes] = useState(false);
+  const [sideNotes, setSideNotes] = useState("");
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
+  const [highlightedText, setHighlightedText] = useState<string>("");
+  const [aiMode, setAiMode] = useState<"chat" | "writing" | "coding" | "image">("chat");
+  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; analysis: string }[]>([]);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  const { data: messages = [], isLoading: messagesLoading } = useQuery<ChatMessage[]>({
-    queryKey: ["/api/chat/messages"],
+  // Load chat sessions
+  const { data: sessions = [] } = useQuery({
+    queryKey: ["/api/chat/sessions"],
     enabled: !!user,
   });
 
+  // Load current session messages
+  const { data: sessionMessages = [] } = useQuery({
+    queryKey: ["/api/chat/messages", currentSessionId],
+    enabled: !!currentSessionId && !!user,
+  });
+
+  useEffect(() => {
+    setMessages(sessionMessages as Message[]);
+  }, [sessionMessages]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       const response = await apiRequest("POST", "/api/chat/send", { content });
@@ -60,240 +104,175 @@ export default function AdvancedChat() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/messages"] });
       setMessage("");
-      toast({
-        title: "Message sent",
-        description: "Your message was sent successfully.",
-      });
+      toast({ title: "Message sent" });
     },
     onError: (error: Error) => {
-      console.error("Send message error:", error);
       if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
+        setLocation("/");
       }
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send message. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
-  const explainTopicMutation = useMutation({
-    mutationFn: async (data: { subject: string; topic: string }) => {
-      const response = await apiRequest("POST", "/api/explain-topic", data);
+  // Create session mutation
+  const createSessionMutation = useMutation({
+    mutationFn: async (title: string) => {
+      const response = await apiRequest("POST", "/api/chat/sessions", { title, mode: aiMode });
       return response.json();
     },
-    onSuccess: (data) => {
-      setExplainedTopic(data);
-      toast({ title: "Topic explained!", description: "See the explanation below." });
-      setShowTopicExplainer(false);
-      setTopicSubject("");
-      setTopicName("");
-      queryClient.invalidateQueries({ queryKey: ["/api/learning-history"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to explain topic", variant: "destructive" });
+    onSuccess: (session: ChatSession) => {
+      setCurrentSessionId(session.id);
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      toast({ title: "New chat created" });
     },
   });
 
-  const generateImageMutation = useMutation({
-    mutationFn: async (prompt: string) => {
-      const response = await apiRequest("POST", "/api/generate-image", { prompt });
+  // Update session mutation
+  const updateSessionMutation = useMutation({
+    mutationFn: async (updates: any) => {
+      const response = await apiRequest("PATCH", `/api/chat/sessions/${currentSessionId}`, updates);
       return response.json();
     },
-    onSuccess: (data) => {
-      setGeneratedImagesList(prev => [...prev, data]);
-      toast({ title: "Image generated!", description: "See the image below." });
-      setShowImageGenerator(false);
-      setImagePrompt("");
-      queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to generate image", variant: "destructive" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
     },
   });
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: (acceptedFiles) => {
-      toast({
-        title: "Files received",
-        description: `${acceptedFiles.length} file(s) will be processed`,
-      });
+  // Delete session mutation
+  const deleteSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const response = await apiRequest("DELETE", `/api/chat/sessions/${sessionId}`, {});
+      return response.json();
     },
-    noClick: true,
-    noKeyboard: true,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      setCurrentSessionId(null);
+      toast({ title: "Chat deleted" });
+    },
   });
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-    }
-  }, [user, authLoading, toast]);
+  // File upload handler
+  const onDrop = async (acceptedFiles: File[]) => {
+    for (const file of acceptedFiles) {
+      const formData = new FormData();
+      formData.append("file", file);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const speakMessage = (content: string, messageId: string, lang: string = "en-US") => {
-    if (speakingMessageId === messageId) {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        setIsPaused(false);
-      } else {
-        window.speechSynthesis.pause();
-        setIsPaused(true);
-      }
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    setSpeakingMessageId(messageId);
-    setIsPaused(false);
-
-    const utterance = new SpeechSynthesisUtterance(content);
-    utterance.lang = lang;
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-
-    utterance.onend = () => {
-      setSpeakingMessageId(null);
-      setIsPaused(false);
-    };
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const handleSend = () => {
-    if (!message.trim() || sendMessageMutation.isPending) return;
-    sendMessageMutation.mutate(message);
-  };
-
-  const clearChat = async () => {
-    if (!window.confirm("Are you sure you want to clear all chat messages? This cannot be undone.")) {
-      return;
-    }
-
-    try {
-      await apiRequest("POST", "/api/chat/clear", {});
-      queryClient.setQueryData(["/api/chat/messages"], []);
-      
-      toast({
-        title: "Chat cleared",
-        description: "All messages have been permanently deleted.",
-      });
-    } catch (error) {
-      console.error("Clear chat error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to clear chat",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const toggleVoice = async () => {
-    if (!isRecording) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        audioChunksRef.current = [];
-
-        mediaRecorder.ondataavailable = (event: BlobEvent) => {
-          audioChunksRef.current.push(event.data);
-        };
-
-        mediaRecorder.onstart = () => {
-          setIsRecording(true);
-          toast({
-            title: "Recording...",
-            description: "Speak now. Click the mic again to stop.",
-          });
-        };
-
-        mediaRecorder.onstop = async () => {
-          setIsRecording(false);
-          setIsTranscribing(true);
-          
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const audioDataUrl = await blobToDataUrl(audioBlob);
-
-          try {
-            const response = await apiRequest("POST", "/api/chat/transcribe-voice", { audioDataUrl });
-
-            if (response.ok) {
-              const { text } = await response.json() as { text: string };
-              setMessage((prev) => (prev ? prev + " " + text : text));
-              toast({
-                title: "Transcribed",
-                description: `"${text.slice(0, 50)}${text.length > 50 ? "..." : ""}"`,
-              });
-            } else {
-              toast({
-                title: "Transcription failed",
-                description: "Could not transcribe your voice. Please try again.",
-                variant: "destructive",
-              });
-            }
-          } catch (error) {
-            console.error("Transcription error:", error);
-            toast({
-              title: "Error",
-              description: "Failed to transcribe voice input",
-              variant: "destructive",
-            });
-          } finally {
-            setIsTranscribing(false);
-          }
-
-          stream.getTracks().forEach((track) => track.stop());
-        };
-
-        mediaRecorderRef.current = mediaRecorder;
-        mediaRecorder.start();
-      } catch (error) {
-        console.error("Microphone error:", error);
-        toast({
-          title: "Microphone error",
-          description: "Could not access your microphone. Please check permissions.",
-          variant: "destructive",
+        const response = await fetch("/api/chat/analyze-file", {
+          method: "POST",
+          body: formData,
         });
+        const data = await response.json();
+        setUploadedFiles((prev) => [...prev, { name: file.name, analysis: data.analysis }]);
+        toast({ title: "File analyzed", description: file.name });
+      } catch (error) {
+        toast({ title: "Upload failed", variant: "destructive" });
       }
-    } else if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
     }
   };
 
-  const blobToDataUrl = (blob: Blob): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(blob);
-    });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+
+  // Send message handler
+  const handleSendMessage = async () => {
+    if (!message.trim()) return;
+    
+    if (!currentSessionId) {
+      await createSessionMutation.mutateAsync("New Chat");
+    }
+
+    const newMsg: Message = {
+      id: `msg-${Date.now()}`,
+      userId: user?.id || "",
+      role: "user",
+      content: message,
+      createdAt: new Date(),
+      attachments: null,
+    };
+    setMessages((prev) => [...prev, newMsg]);
+
+    await sendMessageMutation.mutateAsync(message);
   };
+
+  // Voice recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("file", audioBlob, "voice.webm");
+
+        try {
+          const response = await fetch("/api/transcribe", { method: "POST", body: formData });
+          const data = await response.json();
+          setMessage(data.text);
+        } catch (error) {
+          toast({ title: "Transcription failed", variant: "destructive" });
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      toast({ title: "Recording started" });
+    } catch (error) {
+      toast({ title: "Microphone access denied", variant: "destructive" });
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+    setIsRecording(false);
+  };
+
+  // TTS
+  const speakMessage = (text: string, id: string) => {
+    if (speakingMessageId === id) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+    } else {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      setSpeakingMessageId(id);
+    }
+  };
+
+  // Floating suggestion buttons
+  const floatingActions: FloatingButton[] = [
+    {
+      label: "Summarize",
+      icon: BookOpen,
+      action: () => setMessage((prev) => prev + "\n\n[Request: Summarize this]"),
+    },
+    {
+      label: "Make shorter",
+      icon: Zap,
+      action: () => setMessage((prev) => prev + "\n\n[Request: Make this shorter]"),
+    },
+    {
+      label: "Make actionable",
+      icon: MessageSquare,
+      action: () => setMessage((prev) => prev + "\n\n[Request: Make this actionable]"),
+    },
+    {
+      label: "Explain like I'm 10",
+      icon: MessageCircle,
+      action: () => setMessage((prev) => prev + "\n\n[Request: Explain like I'm 10]"),
+    },
+    {
+      label: "Create tasks",
+      icon: Flag,
+      action: () => setMessage((prev) => prev + "\n\n[Request: Create tasks from this]"),
+    },
+  ];
 
   if (authLoading || !user) {
     return (
@@ -304,372 +283,294 @@ export default function AdvancedChat() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
-      {/* Header with Glassmorphism */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-primary/10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard">
-                <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="link-back">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              </Link>
-              <div>
-                <h1 className="font-display font-semibold text-lg bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">Advanced AI Tutor</h1>
-                <p className="text-xs text-muted-foreground">Powered by GPT-3.5 + OpenRouter</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={clearChat}
-                className="hover-elevate active-elevate-2"
-                data-testid="button-clear-chat"
-                title="Clear all chat messages"
-              >
-                <RotateCcw className="h-5 w-5" />
-              </Button>
-              <ThemeToggle />
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background flex">
+      {/* Sidebar */}
+      <div className={`${isSidebarOpen ? "w-64" : "w-0"} transition-all duration-300 border-r border-border bg-muted/30 flex flex-col overflow-hidden`}>
+        {isSidebarOpen && (
+          <>
+            {/* New Chat Button */}
+            <Button
+              onClick={() => createSessionMutation.mutate("New Chat")}
+              className="m-4 hover-elevate"
+              data-testid="button-new-chat"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Chat
+            </Button>
 
-      {/* Messages Area with Glassmorphism */}
-      <div
-        {...getRootProps()}
-        className="flex-1 overflow-y-auto max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6"
-      >
-        <input {...getInputProps()} />
-        {isDragActive && (
-          <div className="fixed inset-0 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center z-50">
-            <div className="bg-background rounded-lg p-8 text-center neon-glow-primary">
-              <Paperclip className="h-12 w-12 mx-auto mb-4 text-primary" />
-              <p className="text-lg font-semibold">Drop files here to upload</p>
-            </div>
-          </div>
-        )}
-
-        {messagesLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="text-center py-12">
-            <Bot className="h-16 w-16 mx-auto mb-4 text-primary" />
-            <h2 className="text-2xl font-display font-semibold mb-2">
-              Hello, I'm your AI Tutor!
-            </h2>
-            <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-              Ask me anything about your studies. I can help with explanations,
-              problem-solving, and answering questions across all subjects.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto">
-              <Button
-                variant="outline"
-                className="justify-start hover-elevate active-elevate-2 h-auto py-4 px-4"
-                onClick={() => setMessage("Explain photosynthesis in simple terms")}
-                data-testid="button-suggestion-1"
-              >
-                <div className="text-left">
-                  <div className="font-semibold text-sm mb-1">Explain photosynthesis</div>
-                  <div className="text-xs text-muted-foreground">In simple terms</div>
-                </div>
-              </Button>
-              <Button
-                variant="outline"
-                className="justify-start hover-elevate active-elevate-2 h-auto py-4 px-4"
-                onClick={() => setMessage("Help me solve: 2x + 5 = 15")}
-                data-testid="button-suggestion-2"
-              >
-                <div className="text-left">
-                  <div className="font-semibold text-sm mb-1">Solve an equation</div>
-                  <div className="text-xs text-muted-foreground">Step by step</div>
-                </div>
-              </Button>
-              <Button
-                variant="outline"
-                className="justify-start hover-elevate active-elevate-2 h-auto py-4 px-4"
-                onClick={() => setMessage("What are the causes of the First World War?")}
-                data-testid="button-suggestion-3"
-              >
-                <div className="text-left">
-                  <div className="font-semibold text-sm mb-1">History question</div>
-                  <div className="text-xs text-muted-foreground">WWI causes</div>
-                </div>
-              </Button>
-              <Button
-                variant="outline"
-                className="justify-start hover-elevate active-elevate-2 h-auto py-4 px-4"
-                onClick={() => setMessage("Teach me about Newton's laws of motion")}
-                data-testid="button-suggestion-4"
-              >
-                <div className="text-left">
-                  <div className="font-semibold text-sm mb-1">Physics concepts</div>
-                  <div className="text-xs text-muted-foreground">Newton's laws</div>
-                </div>
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4 w-full flex flex-col">
-            {/* Explained Topic Display */}
-            {explainedTopic && (
-              <Card className="p-6 border-primary/30 bg-primary/5 neon-glow-primary">
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-xl font-bold mb-2">
-                      {explainedTopic.subject} - {explainedTopic.topic}
-                    </h2>
-                    
-                    {explainedTopic.imageUrl && (
-                      <div className="mb-4 rounded-lg overflow-hidden border border-border/50">
-                        <img 
-                          src={explainedTopic.imageUrl} 
-                          alt={explainedTopic.topic}
-                          className="w-full h-auto max-h-[300px] object-cover"
-                          data-testid="img-topic-explanation"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <h3 className="font-semibold text-sm mb-1">Simple Explanation</h3>
-                      <p className="text-sm text-muted-foreground">{explainedTopic.simpleExplanation}</p>
-                    </div>
-
-                    {explainedTopic.examples && explainedTopic.examples.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-sm mb-1">Examples</h3>
-                        <ul className="text-sm text-muted-foreground space-y-1">
-                          {explainedTopic.examples.map((ex: string, i: number) => (
-                            <li key={i}>• {ex}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {explainedTopic.formulas && explainedTopic.formulas.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-sm mb-1">Formulas</h3>
-                        <div className="text-sm text-muted-foreground space-y-1 bg-muted/30 p-2 rounded">
-                          {explainedTopic.formulas.map((formula: string, i: number) => (
-                            <div key={i}>{formula}</div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {explainedTopic.realLifeApplications && explainedTopic.realLifeApplications.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-sm mb-1">Real-Life Applications</h3>
-                        <ul className="text-sm text-muted-foreground space-y-1">
-                          {explainedTopic.realLifeApplications.map((app: string, i: number) => (
-                            <li key={i}>• {app}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {explainedTopic.commonMistakes && explainedTopic.commonMistakes.length > 0 && (
-                      <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2">
-                        <h3 className="font-semibold text-sm mb-1 text-amber-700">Common Mistakes</h3>
-                        <ul className="text-sm text-amber-600 space-y-1">
-                          {explainedTopic.commonMistakes.map((mistake: string, i: number) => (
-                            <li key={i}>• {mistake}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {explainedTopic.practiceQuestions && explainedTopic.practiceQuestions.length > 0 && (
-                      <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
-                        <h3 className="font-semibold text-sm mb-1 text-blue-700">Practice Questions</h3>
-                        <ul className="text-sm text-blue-600 space-y-1">
-                          {explainedTopic.practiceQuestions.map((q: string, i: number) => (
-                            <li key={i}>• {q}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setExplainedTopic(null)}
-                    className="w-full hover-elevate active-elevate-2"
-                  >
-                    Clear Explanation
-                  </Button>
-                </div>
-              </Card>
-            )}
-
-            {/* Generated Images Display */}
-            {generatedImagesList.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="font-semibold text-sm">Generated Images ({generatedImagesList.length})</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {generatedImagesList.map((img, idx) => (
-                    <Card key={idx} className="p-3 overflow-hidden hover-elevate">
-                      <img 
-                        src={img.imageUrl} 
-                        alt={img.prompt}
-                        className="w-full h-auto rounded mb-2"
-                        data-testid={`img-generated-${idx}`}
-                      />
-                      <p className="text-xs text-muted-foreground truncate" title={img.prompt}>
-                        {img.prompt}
-                      </p>
-                    </Card>
-                  ))}
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setGeneratedImagesList([])}
-                  className="w-full hover-elevate active-elevate-2"
-                >
-                  Clear Images
-                </Button>
-              </div>
-            )}
-
-            {messages.map((msg) => {
-              const stickerMatch = msg.role === "assistant" ? msg.content.match(/^([🎓🧮🔬📚💡🎯🎉😊🧠💻🌍🎨❓✅\s]+)\n/) : null;
-              const sticker = stickerMatch ? stickerMatch[1].trim() : null;
-              const messageContent = stickerMatch ? msg.content.replace(/^[🎓🧮🔬📚💡🎯🎉😊🧠💻🌍🎨❓✅\s]+\n/, "") : msg.content;
-
-              return (
+            {/* Chat History */}
+            <div className="flex-1 overflow-y-auto px-4 space-y-2">
+              <h3 className="text-xs font-semibold text-muted-foreground mb-3">CHAT HISTORY</h3>
+              {(sessions as ChatSession[]).map((session: ChatSession) => (
                 <div
-                  key={msg.id}
-                  className={`flex gap-3 ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
+                  key={session.id}
+                  className={`p-2 rounded-lg cursor-pointer hover-elevate transition-all group ${
+                    currentSessionId === session.id ? "bg-primary/10 border border-primary" : "border border-transparent"
                   }`}
-                  data-testid={`message-${msg.role}`}
+                  onClick={() => setCurrentSessionId(session.id)}
+                  data-testid={`button-session-${session.id}`}
                 >
-                  {msg.role === "assistant" && (
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Bot className="h-5 w-5 text-primary" />
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{session.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{session.summary || "No summary"}</p>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedMenuId(expandedMenuId === session.id ? null : session.id);
+                      }}
+                      data-testid={`button-menu-${session.id}`}
+                    >
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  {/* Dropdown Menu */}
+                  {expandedMenuId === session.id && (
+                    <div className="mt-2 space-y-1 border-t border-border pt-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full justify-start text-xs hover-elevate"
+                        onClick={() => {
+                          const newTitle = prompt("Rename chat:", session.title);
+                          if (newTitle) updateSessionMutation.mutate({ title: newTitle });
+                        }}
+                        data-testid={`button-rename-${session.id}`}
+                      >
+                        Rename
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full justify-start text-xs hover-elevate"
+                        onClick={() => updateSessionMutation.mutate({ isBookmarked: !session.isBookmarked })}
+                        data-testid={`button-bookmark-${session.id}`}
+                      >
+                        {session.isBookmarked ? "Unbookmark" : "Bookmark"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full justify-start text-xs text-destructive hover-elevate"
+                        onClick={() => deleteSessionMutation.mutate(session.id)}
+                        data-testid={`button-delete-${session.id}`}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   )}
-                  <div className="max-w-[80%]">
-                    {sticker && (
-                      <div className="text-3xl mb-2">
-                        {sticker}
-                      </div>
-                    )}
-                    <Card
-                      className={`p-4 cursor-pointer transition-opacity ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card hover:opacity-80"
-                      } ${speakingMessageId === msg.id ? "ring-2 ring-primary" : ""}`}
-                      onClick={() => {
-                        if (msg.role === "assistant") {
-                          speakMessage(messageContent, msg.id, "en-US");
-                        }
-                      }}
-                    >
-                      <p className="text-sm leading-relaxed">{messageContent}</p>
-                      {msg.role === "assistant" && (
-                        <div className="flex gap-2 mt-2 pt-2 border-t border-border/20">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 px-2 text-xs hover-elevate"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              speakMessage(messageContent, msg.id, "en-US");
-                            }}
-                          >
-                            <Volume2 className="h-3 w-3 mr-1" />
-                            {speakingMessageId === msg.id && !isPaused ? "Pause" : "Speak"}
-                          </Button>
-                        </div>
-                      )}
-                    </Card>
-                  </div>
                 </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
+              ))}
+            </div>
+
+            {/* User Profile */}
+            <Button
+              asChild
+              variant="ghost"
+              className="m-4 w-auto justify-start hover-elevate"
+              data-testid="button-user-profile"
+            >
+              <Link href="/settings">
+                <User className="h-4 w-4 mr-2" />
+                {user.firstName || "Profile"}
+              </Link>
+            </Button>
+          </>
         )}
       </div>
 
-      {/* Input Area with Glassmorphism */}
-      <div className="sticky bottom-0 bg-gradient-to-t from-background via-background to-background/50 backdrop-blur-xl border-t border-primary/10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="space-y-3">
-            <Textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask your AI Tutor anything..."
-              className="resize-none border-primary/20 focus:border-primary/50"
-              rows={3}
-              data-testid="textarea-message-input"
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="hover-elevate"
-                onClick={toggleVoice}
-                disabled={isTranscribing}
-                data-testid="button-voice-input"
-              >
-                <Mic className={`h-4 w-4 ${isRecording ? "animate-pulse text-red-500" : ""}`} />
-                {isRecording ? "Stop Recording" : "Voice Input"}
-              </Button>
-              
-              <Button
-                size="sm"
-                variant="outline"
-                className="hover-elevate"
-                onClick={() => setShowTopicExplainer(!showTopicExplainer)}
-                data-testid="button-explain-topic"
-              >
-                <BookOpen className="h-4 w-4 mr-1" />
-                Explain Topic
-              </Button>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <header className="border-b border-border/50 backdrop-blur-lg bg-background/80 p-4 flex items-center justify-between sticky top-0 z-40">
+          <div className="flex items-center gap-4">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              data-testid="button-toggle-sidebar"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+            <h1 className="font-display font-semibold text-lg">
+              {currentSessionId ? (sessions as ChatSession[]).find((s: ChatSession) => s.id === currentSessionId)?.title : "New Chat"}
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="ghost" onClick={() => setShowSideNotes(!showSideNotes)} data-testid="button-side-notes">
+              <MessageSquare className="h-4 w-4" />
+            </Button>
+            <ThemeToggle />
+          </div>
+        </header>
 
-              <Button
-                size="sm"
-                variant="outline"
-                className="hover-elevate"
-                onClick={() => setShowImageGenerator(!showImageGenerator)}
-                data-testid="button-generate-image"
-              >
-                <Image className="h-4 w-4 mr-1" />
-                Generate Image
-              </Button>
+        <div className="flex flex-1 overflow-hidden">
+          {/* Chat Messages */}
+          <div className="flex-1 flex flex-col">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {messages.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center max-w-md">
+                    <Bot className="h-16 w-16 mx-auto mb-4 text-primary opacity-50" />
+                    <h2 className="text-2xl font-display font-semibold mb-2">Start a Conversation</h2>
+                    <p className="text-muted-foreground">Ask me anything. I can teach, write, code, and more.</p>
+                  </div>
+                </div>
+              ) : (
+                messages.map((msg, idx) => (
+                  <Card
+                    key={msg.id || idx}
+                    className={`p-4 hover-elevate ${msg.role === "user" ? "ml-12" : "mr-12"} cursor-pointer`}
+                    onClick={() => {
+                      setSelectedMessages((prev) => {
+                        const newSet = new Set(prev);
+                        newSet.has(msg.id) ? newSet.delete(msg.id) : newSet.add(msg.id);
+                        return newSet;
+                      });
+                    }}
+                    data-testid={`message-${msg.id || idx}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`h-8 w-8 rounded-full flex items-center justify-center ${msg.role === "user" ? "bg-primary/20" : "bg-secondary/20"}`}>
+                        {msg.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm">{msg.content}</p>
+                        {msg.role === "assistant" && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => speakMessage(msg.content, msg.id)} data-testid={`button-speak-${msg.id}`}>
+                              <Volume2 className="h-3 w-3 mr-1" />
+                              {speakingMessageId === msg.id ? "Stop" : "Speak"}
+                            </Button>
+                            <Button size="sm" variant="outline" data-testid={`button-copy-${msg.id}`}>
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy
+                            </Button>
+                            <Button size="sm" variant="outline" data-testid={`button-regenerate-${msg.id}`}>
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Regenerate
+                            </Button>
+                            <Button size="sm" variant="outline" data-testid={`button-continue-${msg.id}`}>
+                              <ChevronDown className="h-3 w-3 mr-1" />
+                              Continue
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
 
-              <Button
-                size="lg"
-                className="ml-auto hover-elevate"
-                onClick={handleSend}
-                disabled={!message.trim() || sendMessageMutation.isPending}
-                data-testid="button-send-message"
-              >
-                {sendMessageMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Send
-                  </>
-                )}
-              </Button>
+            {/* Floating suggestion buttons - after last message */}
+            {messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
+              <div className="px-6 pb-4 flex flex-wrap gap-2">
+                {floatingActions.map((action, idx) => (
+                  <Button
+                    key={idx}
+                    size="sm"
+                    variant="outline"
+                    onClick={action.action}
+                    className="hover-elevate"
+                    data-testid={`button-action-${action.label}`}
+                  >
+                    <action.icon className="h-3 w-3 mr-1" />
+                    {action.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {/* AI Mode Selector */}
+            <div className="px-6 pb-4 flex gap-2">
+              {(["chat", "writing", "coding", "image"] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  size="sm"
+                  variant={aiMode === mode ? "default" : "outline"}
+                  onClick={() => setAiMode(mode)}
+                  className="hover-elevate capitalize"
+                  data-testid={`button-mode-${mode}`}
+                >
+                  {mode}
+                </Button>
+              ))}
+            </div>
+
+            {/* Input Area */}
+            <div className={`border-t border-border p-4 space-y-3 ${isDragActive ? "bg-primary/5" : ""}`} {...getRootProps()}>
+              <input {...getInputProps()} />
+
+              {uploadedFiles.length > 0 && (
+                <div className="space-y-2">
+                  {uploadedFiles.map((file, idx) => (
+                    <Card key={idx} className="p-2 text-xs">
+                      <p className="font-semibold">{file.name}</p>
+                      <p className="text-muted-foreground">{file.analysis.slice(0, 100)}...</p>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Textarea
+                  ref={textareaRef}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Type your message... or upload files"
+                  className="resize-none flex-1"
+                  data-testid="input-message"
+                />
+                <div className="flex flex-col gap-2">
+                  <Button
+                    size="icon"
+                    onClick={() => {
+                      if (isRecording) stopRecording();
+                      else startRecording();
+                    }}
+                    variant={isRecording ? "destructive" : "default"}
+                    className="hover-elevate"
+                    data-testid="button-record"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="outline" className="hover-elevate" data-testid="button-upload">
+                    <Paperclip className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    onClick={handleSendMessage}
+                    disabled={sendMessageMutation.isPending}
+                    className="hover-elevate"
+                    data-testid="button-send"
+                  >
+                    {sendMessageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Side Notes Panel */}
+          {showSideNotes && (
+            <div className="w-64 border-l border-border p-4 flex flex-col bg-muted/20">
+              <h3 className="font-semibold mb-3">Side Notes</h3>
+              <Textarea value={sideNotes} onChange={(e) => setSideNotes(e.target.value)} placeholder="Add notes..." className="flex-1 resize-none" data-testid="textarea-notes" />
+            </div>
+          )}
         </div>
       </div>
     </div>

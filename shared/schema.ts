@@ -195,6 +195,23 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ i
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 
+// Chat Sessions (for organizing conversations into chat history)
+export const chatSessions = pgTable("chat_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar("title", { length: 255 }).notNull(),
+  summary: text("summary"),
+  mode: varchar("mode", { length: 50 }).default('chat'), // chat, writing, coding, image
+  isBookmarked: boolean("is_bookmarked").default(false),
+  messageCount: integer("message_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertChatSessionSchema = createInsertSchema(chatSessions).omit({ id: true, createdAt: true, updatedAt: true, messageCount: true });
+export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
+export type ChatSession = typeof chatSessions.$inferSelect;
+
 // Memory entries (student performance tracking)
 export const memoryEntries = pgTable("memory_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -415,6 +432,13 @@ export type InsertTopicExplanation = z.infer<typeof insertTopicExplanationSchema
 export type TopicExplanation = typeof topicExplanations.$inferSelect;
 
 // Relations
+export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => ({
+  user: one(users, {
+    fields: [chatSessions.userId],
+    references: [users.id],
+  }),
+}));
+
 export const usersRelations = relations(users, ({ one, many }) => ({
   school: one(schools, {
     fields: [users.schoolId],
@@ -426,6 +450,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   courses: many(courses),
   chatMessages: many(chatMessages),
+  chatSessions: many(chatSessions),
   memoryEntries: many(memoryEntries),
   purchases: many(purchases),
 }));
