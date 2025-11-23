@@ -102,6 +102,28 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Text-to-speech for AI responses
+  useEffect(() => {
+    if (!isSpeaking) return;
+    
+    // Find the last AI message
+    const lastAIMessage = [...messages].reverse().find(msg => msg.role === "assistant");
+    if (!lastAIMessage) return;
+
+    // Use Web Speech API to speak the response
+    const utterance = new SpeechSynthesisUtterance(lastAIMessage.content);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    
+    // Stop any ongoing speech
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+    }
+    
+    window.speechSynthesis.speak(utterance);
+  }, [messages, isSpeaking]);
+
   const handleSend = () => {
     if (!message.trim() || sendMessageMutation.isPending) return;
     sendMessageMutation.mutate(message);
@@ -248,7 +270,7 @@ export default function Chat() {
       {/* Messages */}
       <div
         {...getRootProps()}
-        className="flex-1 overflow-y-auto max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6"
+        className="flex-1 overflow-y-auto max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col justify-end"
       >
         <input {...getInputProps()} />
         {isDragActive && (
@@ -322,7 +344,7 @@ export default function Chat() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 mt-auto w-full">
             {messages.map((msg) => (
               <div
                 key={msg.id}
