@@ -185,6 +185,7 @@ export type QuizAttempt = typeof quizAttempts.$inferSelect;
 export const chatMessages = pgTable("chat_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
+  sessionId: varchar("session_id").references(() => chatSessions.id, { onDelete: 'cascade' }),
   role: varchar("role", { length: 50 }).notNull(),
   content: text("content").notNull(),
   attachments: jsonb("attachments"),

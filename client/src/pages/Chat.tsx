@@ -67,10 +67,10 @@ export default function Chat() {
     }
   }, [sessions, currentSessionId]);
 
-  // Load messages
+  // Load messages for current session
   const { data: messages = [], isLoading: messagesLoading } = useQuery<ChatMessage[]>({
-    queryKey: ["/api/chat/messages"],
-    enabled: !!user,
+    queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId],
+    enabled: !!user && !!currentSessionId,
   });
 
   // Create new session
@@ -111,11 +111,11 @@ export default function Chat() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      const response = await apiRequest("POST", "/api/chat/send", { content });
+      const response = await apiRequest("POST", "/api/chat/send", { content, sessionId: currentSessionId });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/messages"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId] });
       setMessage("");
       toast({
         title: "Message sent",

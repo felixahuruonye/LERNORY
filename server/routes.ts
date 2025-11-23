@@ -43,7 +43,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/chat/messages', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
-      const messages = await storage.getChatMessagesByUser(userId);
+      const sessionId = req.query.sessionId as string;
+      
+      const messages = sessionId 
+        ? await storage.getChatMessagesBySession(sessionId)
+        : await storage.getChatMessagesByUser(userId);
       res.json(messages);
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -54,7 +58,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/chat/send', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
-      const { content } = req.body;
+      const { content, sessionId } = req.body;
 
       if (!content?.trim()) {
         return res.status(400).json({ message: "Message content is required" });
@@ -63,13 +67,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save user message
       await storage.createChatMessage({
         userId,
+        sessionId: sessionId || null,
         role: "user",
         content,
         attachments: null,
       });
 
       // Get conversation history (last 20 messages for context - includes user's new message)
-      const history = await storage.getChatMessagesByUser(userId, 20);
+      const history = sessionId 
+        ? await storage.getChatMessagesBySession(sessionId)
+        : await storage.getChatMessagesByUser(userId, 20);
       const messages = history.map(msg => ({
         role: msg.role,
         content: msg.content
@@ -81,6 +88,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save AI response
       await storage.createChatMessage({
         userId,
+        sessionId: sessionId || null,
         role: "assistant",
         content: aiResponse,
         attachments: null,

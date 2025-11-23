@@ -114,6 +114,7 @@ export interface IStorage {
   
   // Chat message operations
   getChatMessagesByUser(userId: string, limit?: number): Promise<ChatMessage[]>;
+  getChatMessagesBySession(sessionId: string): Promise<ChatMessage[]>;
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
   deleteChatMessagesByUser(userId: string): Promise<void>;
 
@@ -334,6 +335,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(chatMessages.userId, userId))
       .orderBy(chatMessages.createdAt)
       .limit(limit);
+  }
+
+  async getChatMessagesBySession(sessionId: string): Promise<ChatMessage[]> {
+    return await db
+      .select()
+      .from(chatMessages)
+      .where(eq(chatMessages.sessionId, sessionId))
+      .orderBy(desc(chatMessages.createdAt));
   }
 
   async createChatMessage(message: InsertChatMessage): Promise<ChatMessage> {
