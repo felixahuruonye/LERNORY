@@ -37,11 +37,11 @@ function Router() {
         <Route path="/" component={Landing} />
       ) : (
         <>
-          <Route path="/" component={Dashboard} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/advanced-dashboard" component={AdvancedDashboard} />
-          <Route path="/chat" component={Chat} />
-          <Route path="/advanced-chat" component={AdvancedChat} />
+          <Route path="/" component={AdvancedDashboard} />
+          <Route path="/dashboard" component={AdvancedDashboard} />
+          <Route path="/old-dashboard" component={Dashboard} />
+          <Route path="/chat" component={AdvancedChat} />
+          <Route path="/old-chat" component={Chat} />
           <Route path="/image-gallery" component={ImageGallery} />
           <Route path="/image-gen" component={ImageGenAdvanced} />
           <Route path="/workspace" component={ProjectWorkspace} />
