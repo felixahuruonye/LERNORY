@@ -5,7 +5,7 @@ import fs from "fs";
 // Initialize OpenAI client (primary)
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Initialize OpenRouter client (fallback)
+// Initialize OpenRouter client (fallback) - NOT used for audio/whisper
 const openrouter = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: "https://openrouter.ai/api/v1",
@@ -22,15 +22,21 @@ function isQuotaError(error: any): boolean {
   );
 }
 
-// Helper function to try OpenAI first, fallback to OpenRouter
+// Helper function to try OpenAI first, fallback to OpenRouter for chat only
 async function tryWithFallback<T>(
   primaryFn: () => Promise<T>,
-  fallbackFn?: () => Promise<T>
+  fallbackFn?: () => Promise<T>,
+  isAudioFunction?: boolean
 ): Promise<T> {
   try {
     return await primaryFn();
   } catch (primaryError) {
     console.log("Primary API (OpenAI) failed:", primaryError);
+    
+    // For audio functions (Whisper), don't try OpenRouter since it doesn't support audio
+    if (isAudioFunction) {
+      throw primaryError;
+    }
     
     if (isQuotaError(primaryError) && fallbackFn) {
       try {
@@ -56,7 +62,7 @@ export async function chatWithAI(messages: Array<{role: string; content: string}
     () => openrouter.chat.completions.create({
       model: "openai/gpt-4-turbo",
       messages: messages as any,
-      max_tokens: 4096,
+      max_tokens: 2000, // Reduced for OpenRouter credit limits
     }).then(response => response.choices[0].message.content || "")
   );
 }
@@ -161,31 +167,31 @@ export async function gradeQuiz(answers: any, rubric: any): Promise<any> {
 }
 
 export async function transcribeAudio(audioFilePath: string): Promise<{ text: string, duration: number }> {
-  return tryWithFallback(
-    async () => {
-      const audioReadStream = fs.createReadStream(audioFilePath);
-      const transcription = await openai.audio.transcriptions.create({
-        file: audioReadStream,
-        model: "whisper-1",
-      });
-      return {
-        text: transcription.text,
-        duration: 0,
-      };
-    },
+  try {
+    // OpenAI Whisper only - no fallback for audio
+    const audioReadStream = fs.createReadStream(audioFilePath);
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioReadStream,
+      model: "whisper-1",
+    });
     
-    async () => {
-      const audioReadStream = fs.createReadStream(audioFilePath);
-      const transcription = await openrouter.audio.transcriptions.create({
-        file: audioReadStream,
-        model: "openai/whisper-1",
-      });
+    return {
+      text: transcription.text,
+      duration: 0,
+    };
+  } catch (error: any) {
+    console.error("Transcription error with OpenAI:", error);
+    
+    // If OpenAI quota is exceeded, return a helpful message
+    if (isQuotaError(error)) {
       return {
-        text: transcription.text,
+        text: "[Transcription unavailable - OpenAI quota exceeded. Please recharge your OpenAI account at https://platform.openai.com/account/billing/overview]",
         duration: 0,
       };
     }
-  );
+    
+    throw error;
+  }
 }
 
 export async function generateSpeech(text: string): Promise<Buffer> {
@@ -196,11 +202,9 @@ export async function generateSpeech(text: string): Promise<Buffer> {
       input: text,
     }).then(response => Buffer.from(response as any)),
     
-    () => openrouter.audio.speech.create({
-      model: "openai/tts-1",
-      voice: "alloy",
-      input: text,
-    }).then(response => Buffer.from(response as any))
+    // No OpenRouter speech support
+    undefined,
+    false
   );
 }
 
@@ -222,6 +226,7 @@ export async function summarizeText(text: string, length: 'short' | 'medium' | '
     () => openrouter.chat.completions.create({
       model: "openai/gpt-4-turbo",
       messages: [{ role: "user", content: prompt }],
+      max_tokens: 2000,
     }).then(response => response.choices[0].message.content || "")
   );
 }
@@ -255,6 +260,7 @@ export async function generateFlashcards(text: string): Promise<any> {
           content: `Generate flashcards from this text:\n\n${text}`,
         },
       ],
+      max_tokens: 2000,
     }).then(response => JSON.parse(response.choices[0].message.content || "{}"))
   );
 }
