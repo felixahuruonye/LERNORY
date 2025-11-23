@@ -335,6 +335,28 @@ export const insertExamResultSchema = createInsertSchema(examResults).omit({ id:
 export type InsertExamResult = z.infer<typeof insertExamResultSchema>;
 export type ExamResult = typeof examResults.$inferSelect;
 
+// Generated Websites
+export const generatedWebsites = pgTable("generated_websites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  prompt: text("prompt").notNull(),
+  htmlCode: text("html_code").notNull(),
+  cssCode: text("css_code").notNull(),
+  jsCode: text("js_code"),
+  previewUrl: text("preview_url"),
+  tags: text("tags").array(),
+  isFavorite: boolean("is_favorite").default(false),
+  viewCount: integer("view_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertGeneratedWebsiteSchema = createInsertSchema(generatedWebsites).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true });
+export type InsertGeneratedWebsite = z.infer<typeof insertGeneratedWebsiteSchema>;
+export type GeneratedWebsite = typeof generatedWebsites.$inferSelect;
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   school: one(schools, {

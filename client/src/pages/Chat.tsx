@@ -15,7 +15,7 @@ import {
   ArrowLeft,
   RotateCcw,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -26,6 +26,7 @@ import { useDropzone } from "react-dropzone";
 export default function Chat() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [message, setMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
@@ -506,10 +507,10 @@ export default function Chat() {
               variant="outline"
               size="sm"
               className="hover-elevate active-elevate-2 text-xs"
-              onClick={() => setMessage("Debug code: language=\n[paste code]")}
+              onClick={() => setLocation("/website-generator")}
               data-testid="button-code-debugger"
             >
-              💻 Code
+              💻 Website
             </Button>
             <Button
               variant="outline"

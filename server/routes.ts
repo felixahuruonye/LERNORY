@@ -1,5 +1,6 @@
 // Replit Auth integration blueprint reference: javascript_log_in_with_replit
 // WebSocket integration blueprint reference: javascript_websocket
+// Gemini integration blueprint reference: javascript_gemini
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -19,6 +20,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
+import { generateWebsiteWithGemini } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -100,6 +102,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error clearing chat:", error);
       res.status(500).json({ message: "Failed to clear chat" });
+    }
+  });
+
+  // Website Generator routes
+  app.get('/api/websites', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const websites = await storage.getGeneratedWebsitesByUser(userId);
+      res.json(websites);
+    } catch (error) {
+      console.error("Error fetching websites:", error);
+      res.status(500).json({ message: "Failed to fetch websites" });
+    }
+  });
+
+  app.get('/api/websites/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const website = await storage.getGeneratedWebsite(req.params.id);
+      if (!website) {
+        return res.status(404).json({ message: "Website not found" });
+      }
+      await storage.incrementViewCount(req.params.id);
+      res.json(website);
+    } catch (error) {
+      console.error("Error fetching website:", error);
+      res.status(500).json({ message: "Failed to fetch website" });
+    }
+  });
+
+  app.post('/api/websites/generate', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { prompt } = req.body;
+
+      if (!prompt?.trim()) {
+        return res.status(400).json({ message: "Prompt is required" });
+      }
+
+      // Generate website using Gemini
+      const generated = await generateWebsiteWithGemini(prompt);
+
+      // Save to database
+      const website = await storage.createGeneratedWebsite({
+        userId,
+        title: generated.title,
+        description: `Generated from: ${prompt.substring(0, 100)}...`,
+        prompt,
+        htmlCode: generated.html,
+        cssCode: generated.css,
+        jsCode: generated.js || "",
+        tags: [],
+        isFavorite: false,
+      });
+
+      res.json(website);
+    } catch (error) {
+      console.error("Error generating website:", error);
+      res.status(500).json({ message: `Failed to generate website: ${error instanceof Error ? error.message : "Unknown error"}` });
+    }
+  });
+
+  app.patch('/api/websites/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { title, description, htmlCode, cssCode, jsCode, isFavorite } = req.body;
+      
+      const updated = await storage.updateGeneratedWebsite(req.params.id, {
+        ...(title && { title }),
+        ...(description && { description }),
+        ...(htmlCode && { htmlCode }),
+        ...(cssCode && { cssCode }),
+        ...(jsCode && { jsCode }),
+        ...(isFavorite !== undefined && { isFavorite }),
+      });
+
+      if (!updated) {
+        return res.status(404).json({ message: "Website not found" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating website:", error);
+      res.status(500).json({ message: "Failed to update website" });
+    }
+  });
+
+  app.delete('/api/websites/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      await storage.deleteGeneratedWebsite(req.params.id);
+      res.json({ message: "Website deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting website:", error);
+      res.status(500).json({ message: "Failed to delete website" });
     }
   });
 

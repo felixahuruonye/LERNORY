@@ -19,6 +19,7 @@ import {
   userProgress,
   codeSnippets,
   examResults,
+  generatedWebsites,
   type User,
   type UpsertUser,
   type Course,
@@ -55,6 +56,8 @@ import {
   type InsertCodeSnippet,
   type ExamResult,
   type InsertExamResult,
+  type GeneratedWebsite,
+  type InsertGeneratedWebsite,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -143,6 +146,15 @@ export interface IStorage {
   getExamResult(id: string): Promise<ExamResult | undefined>;
   getExamResultsByUser(userId: string): Promise<ExamResult[]>;
   createExamResult(result: InsertExamResult): Promise<ExamResult>;
+
+  // Generated website operations
+  getGeneratedWebsite(id: string): Promise<GeneratedWebsite | undefined>;
+  getGeneratedWebsitesByUser(userId: string): Promise<GeneratedWebsite[]>;
+  createGeneratedWebsite(website: InsertGeneratedWebsite): Promise<GeneratedWebsite>;
+  updateGeneratedWebsite(id: string, updates: Partial<InsertGeneratedWebsite>): Promise<GeneratedWebsite | undefined>;
+  deleteGeneratedWebsite(id: string): Promise<void>;
+  toggleFavoriteWebsite(id: string, isFavorite: boolean): Promise<GeneratedWebsite | undefined>;
+  incrementViewCount(id: string): Promise<GeneratedWebsite | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -439,6 +451,42 @@ export class DatabaseStorage implements IStorage {
   async createExamResult(result: InsertExamResult): Promise<ExamResult> {
     const [newResult] = await db.insert(examResults).values(result).returning();
     return newResult;
+  }
+
+  // Generated website operations
+  async getGeneratedWebsite(id: string): Promise<GeneratedWebsite | undefined> {
+    const [website] = await db.select().from(generatedWebsites).where(eq(generatedWebsites.id, id));
+    return website;
+  }
+
+  async getGeneratedWebsitesByUser(userId: string): Promise<GeneratedWebsite[]> {
+    return await db.select().from(generatedWebsites).where(eq(generatedWebsites.userId, userId)).orderBy(desc(generatedWebsites.createdAt));
+  }
+
+  async createGeneratedWebsite(website: InsertGeneratedWebsite): Promise<GeneratedWebsite> {
+    const [newWebsite] = await db.insert(generatedWebsites).values(website).returning();
+    return newWebsite;
+  }
+
+  async updateGeneratedWebsite(id: string, updates: Partial<InsertGeneratedWebsite>): Promise<GeneratedWebsite | undefined> {
+    const [updated] = await db.update(generatedWebsites).set({ ...updates, updatedAt: new Date() }).where(eq(generatedWebsites.id, id)).returning();
+    return updated;
+  }
+
+  async deleteGeneratedWebsite(id: string): Promise<void> {
+    await db.delete(generatedWebsites).where(eq(generatedWebsites.id, id));
+  }
+
+  async toggleFavoriteWebsite(id: string, isFavorite: boolean): Promise<GeneratedWebsite | undefined> {
+    const [updated] = await db.update(generatedWebsites).set({ isFavorite, updatedAt: new Date() }).where(eq(generatedWebsites.id, id)).returning();
+    return updated;
+  }
+
+  async incrementViewCount(id: string): Promise<GeneratedWebsite | undefined> {
+    const website = await this.getGeneratedWebsite(id);
+    if (!website) return undefined;
+    const [updated] = await db.update(generatedWebsites).set({ viewCount: (website.viewCount || 0) + 1, updatedAt: new Date() }).where(eq(generatedWebsites.id, id)).returning();
+    return updated;
   }
 }
 
