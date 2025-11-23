@@ -8,12 +8,15 @@ import { useAuth } from "@/hooks/useAuth";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import AdvancedDashboard from "@/pages/AdvancedDashboard";
+import AdvancedChat from "@/pages/AdvancedChat";
 import Chat from "@/pages/Chat";
 import ImageGallery from "@/pages/ImageGallery";
 import ImageGenAdvanced from "@/pages/ImageGenAdvanced";
 import ProjectWorkspace from "@/pages/ProjectWorkspace";
 import MemoryPanel from "@/pages/MemoryPanel";
 import SettingsPanel from "@/pages/SettingsPanel";
+import AudioSystem from "@/pages/AudioSystem";
+import AgentsPanel from "@/pages/AgentsPanel";
 import LiveSession from "@/pages/LiveSession";
 import Courses from "@/pages/Courses";
 import Marketplace from "@/pages/Marketplace";
@@ -36,12 +39,15 @@ function Router() {
         <>
           <Route path="/" component={AdvancedDashboard} />
           <Route path="/dashboard" component={AdvancedDashboard} />
-          <Route path="/chat" component={Chat} />
+          <Route path="/chat" component={AdvancedChat} />
+          <Route path="/advanced-chat" component={AdvancedChat} />
           <Route path="/image-gallery" component={ImageGallery} />
           <Route path="/image-gen" component={ImageGenAdvanced} />
           <Route path="/workspace" component={ProjectWorkspace} />
           <Route path="/memory" component={MemoryPanel} />
           <Route path="/settings" component={SettingsPanel} />
+          <Route path="/audio" component={AudioSystem} />
+          <Route path="/agents" component={AgentsPanel} />
           <Route path="/website-generator" component={WebsiteGenerator} />
           <Route path="/website-menu" component={WebsiteMenu} />
           <Route path="/website-learn/:id" component={WebsiteLearn} />
