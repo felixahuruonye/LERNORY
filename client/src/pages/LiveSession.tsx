@@ -18,6 +18,8 @@ import {
   Loader2,
   Download,
   Volume2,
+  Trash2,
+  History,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +30,15 @@ interface TranscriptSegment {
   speaker: string;
   text: string;
   timestamp: number;
+}
+
+interface Recording {
+  id: string;
+  title: string;
+  transcript: TranscriptSegment[];
+  audioBlob: Blob;
+  duration: number;
+  createdAt: number;
 }
 
 export default function LiveSession() {
@@ -42,6 +53,9 @@ export default function LiveSession() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [activeTab, setActiveTab] = useState<'record' | 'history'>('record');
+  const [livePreviewText, setLivePreviewText] = useState("");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -121,14 +135,14 @@ export default function LiveSession() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'transcript_segment') {
-            setTranscript((prev) => [
-              ...prev,
-              {
-                speaker: data.data.speaker || user?.firstName || "Speaker",
-                text: data.data.text,
-                timestamp: data.data.timestamp,
-              },
-            ]);
+            const segment = {
+              speaker: data.data.speaker || user?.firstName || "Speaker",
+              text: data.data.text,
+              timestamp: data.data.timestamp,
+            };
+            setTranscript((prev) => [...prev, segment]);
+            // Update live preview text
+            setLivePreviewText((prev) => prev + (prev ? "\n" : "") + `${segment.speaker}: ${segment.text}`);
           }
         } catch (e) {
           console.error("Error parsing WebSocket message:", e);
@@ -205,13 +219,27 @@ export default function LiveSession() {
       wsRef.current.close();
     }
 
+    // Save to history
+    if (transcript.length > 0 || audioChunksRef.current.length > 0) {
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const newRecording: Recording = {
+        id: sessionId || `recording-${Date.now()}`,
+        title: sessionTitle || "Untitled Recording",
+        transcript,
+        audioBlob,
+        duration,
+        createdAt: Date.now(),
+      };
+      setRecordings((prev) => [newRecording, ...prev]);
+    }
+
     // Save transcript to backend
     if (sessionId && transcript.length > 0) {
       try {
         await apiRequest("POST", "/api/transcripts", {
           sessionId,
           segments: transcript,
-          audioUrl: null, // Would be uploaded audio URL in real implementation
+          audioUrl: null,
         });
 
         // Update session status
@@ -223,10 +251,85 @@ export default function LiveSession() {
 
     setIsRecording(false);
     setIsPaused(false);
+    setLivePreviewText("");
     toast({
       title: "Recording stopped",
-      description: "Your session has been saved",
+      description: "Your session has been saved to history",
     });
+  };
+
+  const deleteRecording = (id: string) => {
+    setRecordings((prev) => prev.filter((rec) => rec.id !== id));
+    toast({
+      title: "Recording deleted",
+      description: "The recording has been removed from history",
+    });
+  };
+
+  const playHistoryRecording = (recording: Recording) => {
+    try {
+      const audioUrl = URL.createObjectURL(recording.audioBlob);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.src = audioUrl;
+        audioPlayerRef.current.play();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error("Error playing recording:", error);
+      toast({
+        title: "Playback error",
+        description: "Could not play recording",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const downloadHistoryAsPDF = async (recording: Recording) => {
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.text(`Session: ${recording.title}`, 10, 15);
+
+      doc.setFontSize(10);
+      doc.setTextColor(128, 128, 128);
+      doc.text(`Generated: ${new Date(recording.createdAt).toLocaleString()}`, 10, 25);
+      doc.setTextColor(0, 0, 0);
+
+      let yPosition = 35;
+      doc.setFontSize(11);
+
+      recording.transcript.forEach((segment) => {
+        const timestamp = new Date(segment.timestamp).toLocaleTimeString();
+        const text = `[${timestamp}] ${segment.speaker}: ${segment.text}`;
+        const lines = doc.splitTextToSize(text, 190);
+
+        lines.forEach((line) => {
+          if (yPosition > 280) {
+            doc.addPage();
+            yPosition = 10;
+          }
+          doc.text(line, 10, yPosition);
+          yPosition += 5;
+        });
+        yPosition += 2;
+      });
+
+      doc.save(`${recording.title}-transcript.pdf`);
+
+      toast({
+        title: "PDF downloaded",
+        description: "Your transcript has been saved",
+      });
+    } catch (error) {
+      console.error("PDF download error:", error);
+      toast({
+        title: "Download failed",
+        description: "Could not save PDF",
+        variant: "destructive",
+      });
+    }
   };
 
   const saveAsLesson = async () => {
@@ -450,7 +553,32 @@ export default function LiveSession() {
         </div>
       </header>
 
+      {/* Tab Buttons */}
+      <div className="flex gap-2 border-b border-border px-4 sm:px-6 pt-4 mb-4 max-w-7xl mx-auto w-full">
+        <Button
+          onClick={() => setActiveTab('record')}
+          variant={activeTab === 'record' ? 'default' : 'ghost'}
+          className={`hover-elevate active-elevate-2 ${activeTab === 'record' ? '' : 'opacity-50'}`}
+          data-testid="tab-record"
+        >
+          <Mic className="h-4 w-4 mr-2" />
+          Recording
+        </Button>
+        <Button
+          onClick={() => setActiveTab('history')}
+          variant={activeTab === 'history' ? 'default' : 'ghost'}
+          className={`hover-elevate active-elevate-2 ${activeTab === 'history' ? '' : 'opacity-50'}`}
+          data-testid="tab-history"
+        >
+          <History className="h-4 w-4 mr-2" />
+          History ({recordings.length})
+        </Button>
+      </div>
+
       <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full">
+        {/* Record Tab */}
+        {activeTab === 'record' && (
+        <>
         {/* Transcript Pane (70%) */}
         <div className="flex-1 lg:w-[70%] overflow-y-auto p-4 sm:p-6">
           {transcript.length === 0 ? (
@@ -517,6 +645,23 @@ export default function LiveSession() {
               ))}
               <div ref={transcriptEndRef} />
             </div>
+          )}
+
+          {/* Live Preview Window - Only show when recording */}
+          {isRecording && (
+            <Card className="mt-6 p-4 bg-background border-2 border-primary/30">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Mic className="h-4 w-4 text-primary" />
+                Live Transcription Preview
+              </h3>
+              <div className="max-h-48 overflow-y-auto bg-muted/50 p-3 rounded-md">
+                {livePreviewText ? (
+                  <p className="text-sm whitespace-pre-wrap text-foreground">{livePreviewText}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Waiting for audio input...</p>
+                )}
+              </div>
+            </Card>
           )}
         </div>
 
@@ -699,6 +844,87 @@ export default function LiveSession() {
             </Button>
           </div>
         </div>
+        </>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            {recordings.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center max-w-md">
+                  <History className="h-16 w-16 mx-auto mb-4 text-primary opacity-50" />
+                  <h2 className="text-2xl font-display font-semibold mb-2">
+                    No Recordings Yet
+                  </h2>
+                  <p className="text-muted-foreground">
+                    Your recorded sessions will appear here. Start recording to build your history.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {recordings.map((recording) => (
+                  <Card key={recording.id} className="p-4 hover-elevate" data-testid={`history-recording-${recording.id}`}>
+                    <div className="mb-3">
+                      <h3 className="font-semibold text-lg">{recording.title}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(recording.createdAt).toLocaleString()} • {formatDuration(recording.duration)}
+                      </p>
+                    </div>
+
+                    {/* Transcript Preview */}
+                    {recording.transcript.length > 0 && (
+                      <div className="mb-4 max-h-32 overflow-y-auto bg-muted/50 p-2 rounded text-sm">
+                        {recording.transcript.map((seg, idx) => (
+                          <p key={idx} className="text-xs mb-1">
+                            <span className="font-semibold">{seg.speaker}:</span> {seg.text.slice(0, 100)}{seg.text.length > 100 ? '...' : ''}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <Button
+                        onClick={() => playHistoryRecording(recording)}
+                        size="sm"
+                        variant="outline"
+                        className="hover-elevate active-elevate-2"
+                        data-testid={`button-play-${recording.id}`}
+                      >
+                        <Volume2 className="h-3 w-3 mr-1" />
+                        Play
+                      </Button>
+
+                      <Button
+                        onClick={() => downloadHistoryAsPDF(recording)}
+                        size="sm"
+                        variant="outline"
+                        className="hover-elevate active-elevate-2"
+                        data-testid={`button-download-${recording.id}`}
+                      >
+                        <Download className="h-3 w-3 mr-1" />
+                        PDF
+                      </Button>
+
+                      <Button
+                        onClick={() => deleteRecording(recording.id)}
+                        size="sm"
+                        variant="outline"
+                        className="hover-elevate active-elevate-2 text-destructive"
+                        data-testid={`button-delete-${recording.id}`}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Hidden audio player */}
