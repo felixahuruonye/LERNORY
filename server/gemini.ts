@@ -244,83 +244,48 @@ interface ImageGenerationResult {
 }
 
 export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
-  // Generate SVG educational visualization directly from the prompt
-  console.log("LEARNORY AI: Creating educational visualization for:", prompt);
+  // Use OpenAI DALL-E 3 to generate real educational images
+  console.log("LERNORY AI: Generating real image with DALL-E for:", prompt);
   
   try {
-    // Create a gradient color based on prompt
-    const hash = prompt.split('').reduce((h, c) => h + c.charCodeAt(0), 0);
-    const hue = hash % 360;
-    const colors = [
-      `hsl(${hue}, 70%, 50%)`,
-      `hsl(${(hue + 60) % 360}, 70%, 60%)`,
-      `hsl(${(hue + 120) % 360}, 70%, 70%)`
-    ];
+    // Enhance the prompt to be more educational
+    const educationalPrompt = `Create an educational illustration for: ${prompt}. Style: clear, colorful, suitable for learning, professional quality. No text in the image.`;
     
-    // Create SVG visualization with the prompt text prominently displayed
-    const svg = `
-      <svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:${colors[0]};stop-opacity:1" />
-            <stop offset="50%" style="stop-color:${colors[1]};stop-opacity:1" />
-            <stop offset="100%" style="stop-color:${colors[2]};stop-opacity:1" />
-          </linearGradient>
-        </defs>
-        
-        <!-- Background -->
-        <rect width="1024" height="1024" fill="url(#grad)"/>
-        
-        <!-- Decorative circles -->
-        <circle cx="200" cy="200" r="150" fill="white" opacity="0.1"/>
-        <circle cx="824" cy="824" r="200" fill="white" opacity="0.1"/>
-        <circle cx="512" cy="512" r="300" fill="white" opacity="0.05"/>
-        
-        <!-- Main content box -->
-        <rect x="50" y="400" width="924" height="224" rx="20" fill="white" opacity="0.95"/>
-        
-        <!-- Title -->
-        <text x="512" y="480" font-size="48" font-weight="bold" text-anchor="middle" fill="${colors[0]}" font-family="Arial, sans-serif">
-          ${prompt.substring(0, 40)}
-        </text>
-        
-        <!-- Subtitle -->
-        <text x="512" y="550" font-size="24" text-anchor="middle" fill="#666" font-family="Arial, sans-serif">
-          ${prompt.substring(40, 80)}
-        </text>
-        
-        <!-- Icon decoration -->
-        <circle cx="150" cy="150" r="60" fill="white" opacity="0.2"/>
-        <text x="150" y="165" font-size="60" text-anchor="middle" text-anchor="middle">📚</text>
-        
-        <circle cx="874" cy="874" r="60" fill="white" opacity="0.2"/>
-        <text x="874" y="889" font-size="60" text-anchor="middle">🎓</text>
-      </svg>
-    `;
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: educationalPrompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`DALL-E error: ${JSON.stringify(error)}`);
+    }
+
+    const data = await response.json() as { data: Array<{ url: string }> };
+    const imageUrl = data.data[0].url;
     
-    // Convert SVG to data URL
-    const imageUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
-    
-    console.log("Educational visualization created for:", prompt);
+    console.log("Real image generated successfully from DALL-E");
     return {
       imageUrl: imageUrl,
       description: prompt
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error generating image:", errorMsg);
+    console.error("Error generating image with DALL-E:", errorMsg);
     
-    // Fallback: Simple SVG
-    const fallbackSvg = `
-      <svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-        <rect width="1024" height="1024" fill="#3b82f6"/>
-        <text x="512" y="512" font-size="48" text-anchor="middle" fill="white" font-family="Arial">
-          ${prompt}
-        </text>
-      </svg>
-    `;
+    // Fallback to a reliable placeholder image
     return {
-      imageUrl: `data:image/svg+xml;base64,${Buffer.from(fallbackSvg).toString('base64')}`,
+      imageUrl: `https://via.placeholder.com/1024x1024/3b82f6/ffffff?text=${encodeURIComponent(prompt.substring(0, 30))}`,
       description: prompt
     };
   }
