@@ -16,6 +16,8 @@ import {
   Clock,
   ArrowLeft,
   Loader2,
+  Download,
+  Volume2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -38,11 +40,14 @@ export default function LiveSession() {
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const audioPlayerRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -259,6 +264,153 @@ export default function LiveSession() {
       title: "Timestamp",
       description: new Date(timestamp).toLocaleTimeString(),
     });
+  };
+
+  const playRecording = async () => {
+    if (audioChunksRef.current.length === 0) {
+      toast({
+        title: "No recording",
+        description: "Start a recording first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.src = audioUrl;
+        audioPlayerRef.current.play();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error("Error playing recording:", error);
+      toast({
+        title: "Playback error",
+        description: "Could not play recording",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const transcribeManually = async () => {
+    if (audioChunksRef.current.length === 0) {
+      toast({
+        title: "No recording",
+        description: "Record audio first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsTranscribing(true);
+    toast({
+      title: "Transcribing",
+      description: "Processing your recording with Whisper...",
+    });
+
+    try {
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const formData = new FormData();
+      formData.append("file", audioBlob, "recording.webm");
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Transcription failed");
+      }
+
+      const data = await response.json();
+      setTranscript([
+        ...transcript,
+        {
+          speaker: "Full Recording",
+          text: data.text,
+          timestamp: Date.now(),
+        },
+      ]);
+
+      toast({
+        title: "Transcription complete",
+        description: "Your recording has been transcribed",
+      });
+    } catch (error) {
+      console.error("Transcription error:", error);
+      toast({
+        title: "Transcription failed",
+        description: "Could not transcribe audio",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const downloadAsPDF = async () => {
+    if (transcript.length === 0) {
+      toast({
+        title: "No transcript",
+        description: "Generate a transcript first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Dynamically import jsPDF
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF();
+
+      // Add title
+      doc.setFontSize(16);
+      doc.text(`Session: ${sessionTitle}`, 10, 15);
+
+      // Add metadata
+      doc.setFontSize(10);
+      doc.setTextColor(128, 128, 128);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 10, 25);
+      doc.setTextColor(0, 0, 0);
+
+      // Add transcript
+      let yPosition = 35;
+      doc.setFontSize(11);
+
+      transcript.forEach((segment) => {
+        const timestamp = new Date(segment.timestamp).toLocaleTimeString();
+        const text = `[${timestamp}] ${segment.speaker}: ${segment.text}`;
+        const lines = doc.splitTextToSize(text, 190);
+
+        lines.forEach((line) => {
+          if (yPosition > 280) {
+            doc.addPage();
+            yPosition = 10;
+          }
+          doc.text(line, 10, yPosition);
+          yPosition += 5;
+        });
+        yPosition += 2;
+      });
+
+      // Save PDF
+      doc.save(`${sessionTitle || "session"}-transcript.pdf`);
+      
+      toast({
+        title: "PDF downloaded",
+        description: "Your transcript has been saved",
+      });
+    } catch (error) {
+      console.error("PDF download error:", error);
+      toast({
+        title: "Download failed",
+        description: "Could not save PDF",
+        variant: "destructive",
+      });
+    }
   };
 
   if (authLoading || !user) {
@@ -482,6 +634,60 @@ export default function LiveSession() {
               </div>
             </Card>
 
+            {/* Audio Controls - Show after recording stopped */}
+            {!isRecording && transcript.length > 0 && (
+              <div className="space-y-3">
+                <Button
+                  onClick={playRecording}
+                  variant="outline"
+                  className="w-full hover-elevate active-elevate-2"
+                  data-testid="button-play"
+                >
+                  {isPlaying ? (
+                    <>
+                      <Pause className="h-4 w-4 mr-2" />
+                      Stop Playback
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="h-4 w-4 mr-2" />
+                      Play Recording
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  onClick={transcribeManually}
+                  disabled={isTranscribing}
+                  variant="outline"
+                  className="w-full hover-elevate active-elevate-2"
+                  data-testid="button-transcribe"
+                >
+                  {isTranscribing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Transcribing...
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-4 w-4 mr-2" />
+                      Transcribe with Whisper
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  onClick={downloadAsPDF}
+                  variant="outline"
+                  className="w-full hover-elevate active-elevate-2"
+                  data-testid="button-download-pdf"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download as PDF
+                </Button>
+              </div>
+            )}
+
             {/* Settings */}
             <Button
               variant="outline"
@@ -494,6 +700,13 @@ export default function LiveSession() {
           </div>
         </div>
       </div>
+
+      {/* Hidden audio player */}
+      <audio
+        ref={audioPlayerRef}
+        onEnded={() => setIsPlaying(false)}
+        style={{ display: "none" }}
+      />
     </div>
   );
 }

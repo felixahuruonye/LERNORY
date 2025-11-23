@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import multer from "multer";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import {
@@ -131,6 +132,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Setup multer for file uploads
+  const upload = multer({ storage: multer.memoryStorage() });
+
   // Transcript routes
   app.post('/api/transcripts', isAuthenticated, async (req: any, res: Response) => {
     try {
@@ -148,6 +152,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating transcript:", error);
       res.status(500).json({ message: "Failed to create transcript" });
+    }
+  });
+
+  // Manual transcription endpoint (Whisper API)
+  app.post('/api/transcribe', isAuthenticated, upload.single('file'), async (req: any, res: Response) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ message: "No audio file provided" });
+        return;
+      }
+
+      // Save uploaded file to temp location
+      const tempDir = os.tmpdir();
+      const tempFile = path.join(tempDir, `upload_${Date.now()}.webm`);
+      fs.writeFileSync(tempFile, req.file.buffer);
+
+      try {
+        // Transcribe using Whisper API
+        const transcription = await transcribeAudio(tempFile);
+        
+        // Clean up temp file
+        fs.unlinkSync(tempFile);
+
+        res.json({
+          text: transcription.text,
+          duration: transcription.duration,
+        });
+      } catch (transcriptionError) {
+        console.error('Transcription error:', transcriptionError);
+        // Clean up temp file on error
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+        res.status(500).json({ message: "Failed to transcribe audio" });
+      }
+    } catch (error) {
+      console.error("Error in transcribe endpoint:", error);
+      res.status(500).json({ message: "Failed to process transcription" });
     }
   });
 
