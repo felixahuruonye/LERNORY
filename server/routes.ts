@@ -20,7 +20,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -194,6 +194,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting website:", error);
       res.status(500).json({ message: "Failed to delete website" });
+    }
+  });
+
+  app.post('/api/websites/:id/explain', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const website = await storage.getGeneratedWebsite(req.params.id);
+      if (!website) {
+        return res.status(404).json({ message: "Website not found" });
+      }
+
+      const explanation = await explainCodeForBeginners(
+        website.htmlCode,
+        website.cssCode,
+        website.jsCode || ""
+      );
+
+      res.json({ explanation });
+    } catch (error) {
+      console.error("Error explaining code:", error);
+      res.status(500).json({ message: `Failed to explain code: ${error instanceof Error ? error.message : "Unknown error"}` });
     }
   });
 

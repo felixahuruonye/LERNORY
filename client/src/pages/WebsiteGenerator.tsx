@@ -6,14 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Heart, Trash2, Copy, ChevronLeft, Eye, Code2 } from "lucide-react";
+import { Loader2, Heart, Trash2, Copy, ChevronLeft, Eye, Code2, BookOpen, X } from "lucide-react";
 
 export default function WebsiteGenerator() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [prompt, setPrompt] = useState("");
   const [selectedWebsite, setSelectedWebsite] = useState<string | null>(null);
+  const [showExplanation, setShowExplanation] = useState(false);
+  const [explanation, setExplanation] = useState("");
 
   // Fetch all websites
   const { data: websites = [], isLoading } = useQuery({
@@ -71,6 +74,26 @@ export default function WebsiteGenerator() {
       toast({
         title: "Deleted",
         description: "Website removed successfully.",
+      });
+    },
+  });
+
+  // Explain code for beginners
+  const explainMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/websites/${id}/explain`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setExplanation(data.explanation);
+      setShowExplanation(true);
+    },
+    onError: (error: any) => {
+      const message = error?.message || error?.error || "Failed to explain code";
+      toast({
+        title: "Explanation Failed",
+        description: message,
+        variant: "destructive",
       });
     },
   });
@@ -186,6 +209,31 @@ export default function WebsiteGenerator() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setLocation(`/view/${selectedWebsiteData.id}`)}
+                    className="hover-elevate active-elevate-2"
+                    data-testid="button-view-website"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => explainMutation.mutate(selectedWebsiteData.id)}
+                    disabled={explainMutation.isPending}
+                    className="hover-elevate active-elevate-2"
+                    data-testid="button-learn-code"
+                  >
+                    {explainMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <BookOpen className="h-4 w-4 mr-2" />
+                    )}
+                    Learn
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => favoriteMutation.mutate({ id: selectedWebsiteData.id, isFavorite: selectedWebsiteData.isFavorite })}
                     className="hover-elevate active-elevate-2"
                     data-testid="button-toggle-favorite"
@@ -291,6 +339,29 @@ export default function WebsiteGenerator() {
           )}
         </div>
       </div>
+
+      {/* Code Explanation Modal */}
+      <Dialog open={showExplanation} onOpenChange={setShowExplanation}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="dialog-code-explanation">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5" />
+              Learn How This Code Works
+            </DialogTitle>
+          </DialogHeader>
+          <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-sm leading-relaxed">
+            {explanation}
+          </div>
+          <Button 
+            variant="outline" 
+            className="w-full mt-4" 
+            onClick={() => setShowExplanation(false)}
+            data-testid="button-close-explanation"
+          >
+            Close
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

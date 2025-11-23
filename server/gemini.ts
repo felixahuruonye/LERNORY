@@ -68,3 +68,41 @@ Response format (ONLY output valid JSON, no other text):
     throw error;
   }
 }
+
+export async function explainCodeForBeginners(html: string, css: string, js: string): Promise<string> {
+  const codeSnippet = `HTML:\n${html}\n\nCSS:\n${css}\n\nJavaScript:\n${js}`;
+  
+  const prompt = `I am a complete beginner learning web development. Please explain this code to me in very simple, easy-to-understand language. Explain what each part does, why it's written that way, and how it works together. Use analogies and simple examples if needed.
+
+Code to explain:
+${codeSnippet}
+
+Explain it like you're teaching someone who has never written code before. Be detailed but simple.`;
+
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("Calling Gemini API to explain code...");
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    console.log("Gemini API response received for code explanation");
+    
+    const explanation = response.text;
+    
+    if (!explanation) {
+      throw new Error("Empty response from Gemini API");
+    }
+
+    return explanation;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error explaining code with Gemini:", errorMsg);
+    throw error;
+  }
+}
