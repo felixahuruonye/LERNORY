@@ -11,48 +11,50 @@ interface GeneratedWebsite {
 }
 
 export async function generateWebsiteWithGemini(prompt: string): Promise<GeneratedWebsite> {
-  const systemPrompt = `You are an expert web designer and developer. Generate a complete, functional website based on the user's request.
+  const fullPrompt = `You are a web developer. Create a website based on this description: ${prompt}
 
-You MUST respond with ONLY a JSON object (no markdown, no code fences, just pure JSON) in this exact format:
+Response format (ONLY output valid JSON, no other text):
 {
-  "title": "Website Title",
-  "html": "<complete HTML code>",
-  "css": "<complete CSS code>",
-  "js": "<complete JavaScript code>"
-}
-
-Requirements:
-- HTML: Complete, valid HTML5 with proper structure, responsive design
-- CSS: Modern, clean styling with animations where appropriate
-- JS: Functional JavaScript (can be empty if not needed)
-- Make it visually appealing and professional
-- Use modern design patterns
-- Include hover effects and transitions
-- Ensure it's mobile responsive with media queries
-- Use a modern color scheme
-- Typography should be clean and readable
-
-DO NOT include any markdown, code fences, or explanations. ONLY return valid JSON.`;
+  "title": "Website Name",
+  "html": "<html><head><title>Web</title></head><body>Content</body></html>",
+  "css": "body { margin: 0; padding: 20px; }",
+  "js": ""
+}`;
 
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("Calling Gemini API with prompt length:", prompt.length);
+    
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.7,
-      },
-      contents: prompt,
+      model: "gemini-2.5-flash",
+      contents: fullPrompt,
     });
 
-    const responseText = response.text || "";
+    console.log("Gemini API response received, extracting text...");
+    
+    const responseText = response.text;
+    
+    if (!responseText) {
+      console.error("Empty response from Gemini API");
+      throw new Error("Empty response from Gemini API");
+    }
+    
+    console.log("Response text length:", responseText.length);
+    console.log("Response text preview:", responseText.substring(0, 200));
     
     // Extract JSON from response (in case there's any surrounding text)
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error("Failed to extract JSON from Gemini response");
+      console.error("Could not extract JSON from response:", responseText.substring(0, 500));
+      throw new Error(`Failed to extract JSON from Gemini response`);
     }
 
+    console.log("JSON extracted, parsing...");
     const generatedData = JSON.parse(jsonMatch[0]);
+    console.log("JSON parsed successfully, generated data keys:", Object.keys(generatedData));
 
     return {
       title: generatedData.title || "Generated Website",
@@ -61,7 +63,8 @@ DO NOT include any markdown, code fences, or explanations. ONLY return valid JSO
       js: generatedData.js || "",
     };
   } catch (error) {
-    console.error("Error generating website with Gemini:", error);
-    throw new Error(`Failed to generate website: ${error instanceof Error ? error.message : "Unknown error"}`);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error generating website with Gemini:", errorMsg);
+    throw error;
   }
 }
