@@ -216,16 +216,14 @@ export default function Chat() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" asChild className="hover-elevate active-elevate-2">
-                <Link href="/dashboard">
-                  <a data-testid="link-back">
-                    <ArrowLeft className="h-5 w-5" />
-                  </a>
-                </Link>
-              </Button>
+              <Link href="/dashboard">
+                <Button variant="ghost" size="icon" className="hover-elevate active-elevate-2" data-testid="link-back">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
               <div>
                 <h1 className="font-display font-semibold text-lg">AI Tutor</h1>
-                <p className="text-xs text-muted-foreground">Powered by GPT-5</p>
+                <p className="text-xs text-muted-foreground">Powered by GPT-3.5 + OpenRouter</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
