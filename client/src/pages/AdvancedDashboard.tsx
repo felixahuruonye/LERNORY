@@ -48,13 +48,13 @@ export default function AdvancedDashboard() {
 
   // AI Tools Hub
   const aiTools = [
-    { id: "chat", name: "Chat Mode", icon: MessageSquare, description: "Conversational AI", color: "from-blue-500 to-cyan-500" },
-    { id: "write", name: "Writing Mode", icon: FileText, description: "Content generation", color: "from-purple-500 to-pink-500" },
-    { id: "code", name: "Coding Mode", icon: Code2, description: "Code assistance", color: "from-green-500 to-emerald-500" },
-    { id: "image", name: "Image Generation", icon: ImageIcon, description: "DALL-E integration", color: "from-orange-500 to-red-500" },
-    { id: "audio", name: "Audio Analyzer", icon: Mic, description: "Voice & transcription", color: "from-rose-500 to-pink-500" },
-    { id: "math", name: "Math Solver", icon: Cpu, description: "Problem solving", color: "from-indigo-500 to-blue-500" },
-    { id: "research", name: "Research Mode", icon: Brain, description: "Advanced research", color: "from-teal-500 to-cyan-500" },
+    { id: "chat", name: "Advanced Chat", icon: MessageSquare, description: "Multi-mode conversational AI", color: "from-blue-500 to-cyan-500", href: "/chat" },
+    { id: "website", name: "Website Generator", icon: Code2, description: "AI-powered code generation", color: "from-green-500 to-emerald-500", href: "/website-generator" },
+    { id: "live", name: "Live Session", icon: Mic, description: "Real-time transcription & recording", color: "from-rose-500 to-pink-500", href: "/live-session" },
+    { id: "image", name: "Image Generation", icon: ImageIcon, description: "DALL-E & image tools", color: "from-orange-500 to-red-500", href: "/image-gen" },
+    { id: "memory", name: "Memory Panel", icon: Brain, description: "Learning memory system", color: "from-teal-500 to-cyan-500", href: "/memory" },
+    { id: "workspace", name: "Project Workspace", icon: FolderOpen, description: "Organize your projects", color: "from-purple-500 to-pink-500", href: "/workspace" },
+    { id: "settings", name: "Settings", icon: Settings, description: "Customize your experience", color: "from-indigo-500 to-blue-500", href: "/settings" },
   ];
 
   // Recent Projects
@@ -67,9 +67,9 @@ export default function AdvancedDashboard() {
   // Quick Actions
   const quickActions = [
     { label: "New Chat", icon: MessageSquare, href: "/chat", color: "bg-blue-500/10" },
-    { label: "New Project", icon: FolderOpen, href: "/workspace", color: "bg-purple-500/10" },
+    { label: "Generate Website", icon: Code2, href: "/website-generator", color: "bg-emerald-500/10" },
+    { label: "Live Session", icon: Mic, href: "/live-session", color: "bg-rose-500/10" },
     { label: "Generate Image", icon: ImageIcon, href: "/image-gen", color: "bg-orange-500/10" },
-    { label: "Voice Session", icon: Mic, href: "/voice-session", color: "bg-rose-500/10" },
   ];
 
   // Tutorials (for first-time users)
@@ -187,7 +187,7 @@ export default function AdvancedDashboard() {
                     asChild
                     data-testid={`button-open-${tool.id}`}
                   >
-                    <Link href={`/chat?mode=${tool.id}`}>Open</Link>
+                    <Link href={tool.href || "/chat"}>Open</Link>
                   </Button>
                 </CardContent>
               </Card>
