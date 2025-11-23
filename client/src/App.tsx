@@ -7,8 +7,13 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
+import AdvancedDashboard from "@/pages/AdvancedDashboard";
 import Chat from "@/pages/Chat";
 import ImageGallery from "@/pages/ImageGallery";
+import ImageGenAdvanced from "@/pages/ImageGenAdvanced";
+import ProjectWorkspace from "@/pages/ProjectWorkspace";
+import MemoryPanel from "@/pages/MemoryPanel";
+import SettingsPanel from "@/pages/SettingsPanel";
 import LiveSession from "@/pages/LiveSession";
 import Courses from "@/pages/Courses";
 import Marketplace from "@/pages/Marketplace";
@@ -29,10 +34,14 @@ function Router() {
         <Route path="/" component={Landing} />
       ) : (
         <>
-          <Route path="/" component={Dashboard} />
-          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/" component={AdvancedDashboard} />
+          <Route path="/dashboard" component={AdvancedDashboard} />
           <Route path="/chat" component={Chat} />
           <Route path="/image-gallery" component={ImageGallery} />
+          <Route path="/image-gen" component={ImageGenAdvanced} />
+          <Route path="/workspace" component={ProjectWorkspace} />
+          <Route path="/memory" component={MemoryPanel} />
+          <Route path="/settings" component={SettingsPanel} />
           <Route path="/website-generator" component={WebsiteGenerator} />
           <Route path="/website-menu" component={WebsiteMenu} />
           <Route path="/website-learn/:id" component={WebsiteLearn} />
