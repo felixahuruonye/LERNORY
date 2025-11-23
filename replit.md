@@ -27,28 +27,34 @@ The project utilizes a Monorepo structure (`/client`, `/server`, `/shared`) to e
 
 ## Recent Updates (Nov 23, 2025)
 
-### Phase 1: Advanced Chat System - COMPLETED ✅
-- Created `chatSessions` table for organizing conversations by title, mode, bookmarks
-- Implemented full storage CRUD operations for chat sessions  
-- Added API endpoints: GET/POST/PATCH/DELETE `/api/chat/sessions`
-- File upload handler with **Gemini API primary + OpenAI/OpenRouter fallback**
-- Supports: PDF, image, video, document analysis with automatic type detection
-- New AdvancedChat component with:
-  - Sidebar chat history with rename/bookmark/delete menus
-  - New Chat button, message area with avatars
-  - Voice recording + transcription
-  - **5 floating suggestion buttons** (Summarize, Make shorter, Make actionable, Explain like I'm 10, Create tasks)
-  - AI Mode selector (Chat/Writing/Coding/Image modes)
-  - Text-to-speech for messages
-  - Side notes panel
-  - Message copy/regenerate/continue buttons
+### Phase 1: Advanced Chat System - IN PROGRESS 🔄
+- ✅ Created `chatSessions` table for organizing conversations by title, mode, bookmarks
+- ✅ Implemented full storage CRUD operations for chat sessions  
+- ✅ Added API endpoints: GET/POST/PATCH/DELETE `/api/chat/sessions`
+- ✅ File upload handler with **Gemini API primary + OpenAI/OpenRouter fallback**
+- ✅ Supports: PDF, image, video, document analysis with automatic type detection
+- ✅ Created new AdvancedChat component with:
+  - Clean sidebar with chat history
+  - **New Chat button at top of sidebar (user requested)**
+  - Message area with user/assistant avatars
+  - Voice recording (mic button)
+  - File upload (attachment button)
+  - Mobile-responsive design (sidebar collapses on mobile)
+  - Simple, clean UI (removed complex floating buttons per user feedback)
 
-**STATUS:** Component created but routing showing "Did you forget to add page to router?" despite route being registered in App.tsx. May need module resolution fix.
+**STATUS:** AdvancedChat component restructured for mobile-first, clean design. Routes registered at `/chat` in App.tsx. Current blocker: Authentication (401 errors) preventing route from rendering. Route will display once user is authenticated.
+
+**DESIGN NOTES:** 
+- Sidebar hidden by default on mobile, shown as overlay when menu button clicked
+- Responsive breakpoints: md: for tablets/desktop, sm/base: for mobile
+- All buttons touch-friendly (minimum sizes respected)
+- Clean layout without clutter
 
 ### Pending Phases
-- Phase 2: AI Modes implementation with dynamic UI
+- Phase 2: AI Modes implementation with dynamic UI (Chat/Writing/Coding/Image)
 - Phase 3: Agent System (Research/Writer/Programmer/Tutor/Automation/UI Designer)
 - Phase 4: Advanced message features (highlighting, editing, rating, multi-select, bookmarks, folders)
+- Phase 5: File analysis display and rich message formatting
 
 ## External Dependencies
 
