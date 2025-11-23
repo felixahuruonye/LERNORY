@@ -18,16 +18,16 @@ export default function WebsiteGenerator() {
   // Fetch all websites
   const { data: websites = [], isLoading } = useQuery({
     queryKey: ["/api/websites"],
-    queryFn: () => apiRequest("/api/websites").then(r => r.json()),
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/websites");
+      return res.json();
+    },
   });
 
   // Generate website mutation
   const generateMutation = useMutation({
     mutationFn: async (promptText: string) => {
-      const res = await apiRequest("/api/websites/generate", {
-        method: "POST",
-        body: JSON.stringify({ prompt: promptText }),
-      });
+      const res = await apiRequest("POST", "/api/websites/generate", { prompt: promptText });
       return res.json();
     },
     onSuccess: (data) => {
@@ -39,10 +39,11 @@ export default function WebsiteGenerator() {
         description: "Your website has been created successfully.",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      const message = error?.message || error?.error || "Failed to generate website";
       toast({
         title: "Generation Failed",
-        description: error instanceof Error ? error.message : "Failed to generate website",
+        description: message,
         variant: "destructive",
       });
     },
@@ -51,10 +52,7 @@ export default function WebsiteGenerator() {
   // Toggle favorite
   const favoriteMutation = useMutation({
     mutationFn: async ({ id, isFavorite }: { id: string; isFavorite: boolean }) => {
-      const res = await apiRequest(`/api/websites/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isFavorite: !isFavorite }),
-      });
+      const res = await apiRequest("PATCH", `/api/websites/${id}`, { isFavorite: !isFavorite });
       return res.json();
     },
     onSuccess: () => {
@@ -65,7 +63,7 @@ export default function WebsiteGenerator() {
   // Delete website
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest(`/api/websites/${id}`, { method: "DELETE" });
+      await apiRequest("DELETE", `/api/websites/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
