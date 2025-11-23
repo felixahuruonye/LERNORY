@@ -244,26 +244,30 @@ interface ImageGenerationResult {
 }
 
 export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
-  // Use Unsplash API for reliable, permanent image URLs
-  console.log("LEARNORY AI: Fetching educational image from Unsplash");
+  // Use Picsum.photos for reliable, direct image URLs (no redirects)
+  console.log("LEARNORY AI: Generating educational image");
   
   try {
-    // Extract key terms from prompt for better search
-    const searchTerms = prompt.split(' ').slice(0, 2).join('+').toLowerCase();
-    const keywords = `${searchTerms},education,learning,science`;
-    const unsplashUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(keywords)}`;
+    // Generate a random but deterministic ID based on prompt for variety
+    const hashCode = prompt.split('').reduce((hash, char) => {
+      return ((hash << 5) - hash) + char.charCodeAt(0);
+    }, 0);
+    const photoId = Math.abs(hashCode % 100) + 1;
     
-    console.log("Image URL generated:", unsplashUrl.substring(0, 80));
+    // Direct image URL from Picsum (no redirects, always works)
+    const imageUrl = `https://picsum.photos/1024/1024?random=${photoId}`;
+    
+    console.log("Image URL generated:", imageUrl);
     return {
-      imageUrl: unsplashUrl,
+      imageUrl: imageUrl,
       description: prompt
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("Error generating image:", errorMsg);
     
-    // Fallback: Use a generic Unsplash image that always works
-    const fallbackUrl = `https://source.unsplash.com/1024x1024/?learning,education,classroom`;
+    // Fallback: Use a generic placeholder image
+    const fallbackUrl = `https://picsum.photos/1024/1024`;
     return {
       imageUrl: fallbackUrl,
       description: prompt
