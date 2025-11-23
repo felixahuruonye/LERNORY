@@ -39,6 +39,8 @@ export default function Chat() {
   const [topicSubject, setTopicSubject] = useState("");
   const [topicName, setTopicName] = useState("");
   const [imagePrompt, setImagePrompt] = useState("");
+  const [explainedTopic, setExplainedTopic] = useState<any>(null);
+  const [generatedImagesList, setGeneratedImagesList] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -88,8 +90,9 @@ export default function Chat() {
       const response = await apiRequest("POST", "/api/explain-topic", data);
       return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Topic explained!", description: "Check the explanation above." });
+    onSuccess: (data) => {
+      setExplainedTopic(data);
+      toast({ title: "Topic explained!", description: "See the explanation below." });
       setShowTopicExplainer(false);
       setTopicSubject("");
       setTopicName("");
@@ -105,8 +108,9 @@ export default function Chat() {
       const response = await apiRequest("POST", "/api/generate-image", { prompt });
       return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Image generated!", description: "Your image is ready." });
+    onSuccess: (data) => {
+      setGeneratedImagesList(prev => [...prev, data]);
+      toast({ title: "Image generated!", description: "See the image below." });
       setShowImageGenerator(false);
       setImagePrompt("");
     },
@@ -418,6 +422,132 @@ export default function Chat() {
           </div>
         ) : (
           <div className="space-y-4 w-full flex flex-col">
+            {/* Explained Topic Display */}
+            {explainedTopic && (
+              <Card className="p-6 border-primary/30 bg-primary/5">
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl font-bold mb-2">
+                      {explainedTopic.subject} - {explainedTopic.topic}
+                    </h2>
+                    
+                    {/* Generated Image */}
+                    {explainedTopic.imageUrl && (
+                      <div className="mb-4 rounded-lg overflow-hidden border border-border/50">
+                        <img 
+                          src={explainedTopic.imageUrl} 
+                          alt={explainedTopic.topic}
+                          className="w-full h-auto max-h-[300px] object-cover"
+                          data-testid="img-topic-explanation"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-sm mb-1">Simple Explanation</h3>
+                      <p className="text-sm text-muted-foreground">{explainedTopic.simpleExplanation}</p>
+                    </div>
+
+                    {explainedTopic.examples && explainedTopic.examples.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-sm mb-1">Examples</h3>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                          {explainedTopic.examples.map((ex: string, i: number) => (
+                            <li key={i}>• {ex}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {explainedTopic.formulas && explainedTopic.formulas.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-sm mb-1">Formulas</h3>
+                        <div className="text-sm text-muted-foreground space-y-1 bg-muted/30 p-2 rounded">
+                          {explainedTopic.formulas.map((formula: string, i: number) => (
+                            <div key={i}>{formula}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {explainedTopic.realLifeApplications && explainedTopic.realLifeApplications.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-sm mb-1">Real-Life Applications</h3>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                          {explainedTopic.realLifeApplications.map((app: string, i: number) => (
+                            <li key={i}>• {app}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {explainedTopic.commonMistakes && explainedTopic.commonMistakes.length > 0 && (
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2">
+                        <h3 className="font-semibold text-sm mb-1 text-amber-700">Common Mistakes</h3>
+                        <ul className="text-sm text-amber-600 space-y-1">
+                          {explainedTopic.commonMistakes.map((mistake: string, i: number) => (
+                            <li key={i}>⚠️ {mistake}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {explainedTopic.practiceQuestions && explainedTopic.practiceQuestions.length > 0 && (
+                      <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
+                        <h3 className="font-semibold text-sm mb-1 text-blue-700">Practice Questions</h3>
+                        <ul className="text-sm text-blue-600 space-y-1">
+                          {explainedTopic.practiceQuestions.map((q: string, i: number) => (
+                            <li key={i}>❓ {q}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setExplainedTopic(null)}
+                    className="w-full hover-elevate active-elevate-2"
+                  >
+                    Clear Explanation
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            {/* Generated Images Display */}
+            {generatedImagesList.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-semibold text-sm">Generated Images ({generatedImagesList.length})</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {generatedImagesList.map((img, idx) => (
+                    <Card key={idx} className="p-3 overflow-hidden">
+                      <img 
+                        src={img.imageUrl} 
+                        alt={img.prompt}
+                        className="w-full h-auto rounded mb-2"
+                        data-testid={`img-generated-${idx}`}
+                      />
+                      <p className="text-xs text-muted-foreground truncate" title={img.prompt}>
+                        {img.prompt}
+                      </p>
+                    </Card>
+                  ))}
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setGeneratedImagesList([])}
+                  className="w-full hover-elevate active-elevate-2"
+                >
+                  Clear Images
+                </Button>
+              </div>
+            )}
+
             {messages.map((msg) => {
               // Parse sticker from start of message if present
               const stickerMatch = msg.role === "assistant" ? msg.content.match(/^([🎓🧮🔬📚💡🎯🎉😊🧠💻🌍🎨❓✅\s]+)\n/) : null;
