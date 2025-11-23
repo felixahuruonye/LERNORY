@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Chat from "@/pages/Chat";
+import ImageGallery from "@/pages/ImageGallery";
 import LiveSession from "@/pages/LiveSession";
 import Courses from "@/pages/Courses";
 import Marketplace from "@/pages/Marketplace";
@@ -31,6 +32,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/chat" component={Chat} />
+          <Route path="/image-gallery" component={ImageGallery} />
           <Route path="/website-generator" component={WebsiteGenerator} />
           <Route path="/website-menu" component={WebsiteMenu} />
           <Route path="/website-learn/:id" component={WebsiteLearn} />

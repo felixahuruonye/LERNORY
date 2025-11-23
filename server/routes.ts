@@ -974,6 +974,18 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Get all generated images by user
+  app.get('/api/generated-images', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const images = await storage.getGeneratedImagesByUser(userId);
+      res.json(images);
+    } catch (error) {
+      console.error("Error fetching generated images:", error);
+      res.status(500).json({ message: "Failed to fetch generated images" });
+    }
+  });
+
   // Learning history endpoint
   app.get('/api/learning-history', isAuthenticated, async (req: any, res: Response) => {
     try {

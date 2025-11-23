@@ -685,6 +685,15 @@ export default function Chat() {
               variant="outline"
               size="sm"
               className="hover-elevate active-elevate-2 text-xs"
+              onClick={() => setLocation("/image-gallery")}
+              data-testid="button-image-gallery"
+            >
+              🖼️ Gallery
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="hover-elevate active-elevate-2 text-xs"
               onClick={() => setMessage("Career advice: I want to study/work in ")}
               data-testid="button-career-advisor"
             >
