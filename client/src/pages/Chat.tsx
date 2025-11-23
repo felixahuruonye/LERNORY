@@ -28,6 +28,7 @@ export default function Chat() {
   const [message, setMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -103,9 +104,22 @@ export default function Chat() {
   }, [messages]);
 
   const speakMessage = (content: string, messageId: string) => {
+    // If already speaking this message, pause/resume
+    if (speakingMessageId === messageId) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsPaused(false);
+      } else {
+        window.speechSynthesis.pause();
+        setIsPaused(true);
+      }
+      return;
+    }
+
     // Stop any ongoing speech
     window.speechSynthesis.cancel();
     setSpeakingMessageId(messageId);
+    setIsPaused(false);
 
     const utterance = new SpeechSynthesisUtterance(content);
     utterance.rate = 1;
@@ -114,6 +128,7 @@ export default function Chat() {
 
     utterance.onend = () => {
       setSpeakingMessageId(null);
+      setIsPaused(false);
     };
 
     window.speechSynthesis.speak(utterance);
@@ -214,12 +229,6 @@ export default function Chat() {
     });
   };
 
-  const toggleSpeak = () => {
-    setIsSpeaking(!isSpeaking);
-    toast({
-      title: isSpeaking ? "Voice output disabled" : "Voice output enabled",
-    });
-  };
 
   if (authLoading || !user) {
     return (
@@ -365,7 +374,7 @@ export default function Chat() {
                       {speakingMessageId === msg.id ? (
                         <>
                           <Volume2 className="h-3 w-3 animate-pulse" />
-                          <span>Speaking...</span>
+                          <span>{isPaused ? "Paused - Tap to resume" : "Speaking... - Tap to pause"}</span>
                         </>
                       ) : (
                         <>
