@@ -27,7 +27,7 @@ export default function Chat() {
   const { toast } = useToast();
   const [message, setMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -102,27 +102,22 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Text-to-speech for AI responses
-  useEffect(() => {
-    if (!isSpeaking) return;
-    
-    // Find the last AI message
-    const lastAIMessage = [...messages].reverse().find(msg => msg.role === "assistant");
-    if (!lastAIMessage) return;
+  const speakMessage = (content: string, messageId: string) => {
+    // Stop any ongoing speech
+    window.speechSynthesis.cancel();
+    setSpeakingMessageId(messageId);
 
-    // Use Web Speech API to speak the response
-    const utterance = new SpeechSynthesisUtterance(lastAIMessage.content);
+    const utterance = new SpeechSynthesisUtterance(content);
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
-    
-    // Stop any ongoing speech
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-    }
-    
+
+    utterance.onend = () => {
+      setSpeakingMessageId(null);
+    };
+
     window.speechSynthesis.speak(utterance);
-  }, [messages, isSpeaking]);
+  };
 
   const handleSend = () => {
     if (!message.trim() || sendMessageMutation.isPending) return;
@@ -252,15 +247,6 @@ export default function Chat() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleSpeak}
-                className={`hover-elevate active-elevate-2 ${isSpeaking ? "text-primary" : ""}`}
-                data-testid="button-toggle-speak"
-              >
-                <Volume2 className="h-5 w-5" />
-              </Button>
               <ThemeToggle />
             </div>
           </div>
@@ -344,7 +330,7 @@ export default function Chat() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 w-full">
+          <div className="space-y-4 w-full flex flex-col">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -359,15 +345,36 @@ export default function Chat() {
                   </div>
                 )}
                 <Card
-                  className={`max-w-[80%] p-4 ${
+                  className={`max-w-[80%] p-4 cursor-pointer transition-opacity ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground"
-                      : "bg-card"
-                  }`}
+                      : "bg-card hover:opacity-80"
+                  } ${speakingMessageId === msg.id ? "ring-2 ring-primary" : ""}`}
+                  onClick={() => {
+                    if (msg.role === "assistant") {
+                      speakMessage(msg.content, msg.id);
+                    }
+                  }}
+                  data-testid={`card-message-${msg.id}`}
                 >
                   <div className="text-sm whitespace-pre-wrap break-words">
                     {msg.content}
                   </div>
+                  {msg.role === "assistant" && (
+                    <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                      {speakingMessageId === msg.id ? (
+                        <>
+                          <Volume2 className="h-3 w-3 animate-pulse" />
+                          <span>Speaking...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="h-3 w-3" />
+                          <span>Tap to listen</span>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </Card>
                 {msg.role === "user" && (
                   <div className="h-8 w-8 rounded-full bg-chart-2/10 flex items-center justify-center flex-shrink-0">
