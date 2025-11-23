@@ -376,7 +376,7 @@ export default function Chat() {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 w-full flex flex-col-reverse">
+          <div className="space-y-4 w-full flex flex-col">
             {messages.map((msg) => (
               <div
                 key={msg.id}
