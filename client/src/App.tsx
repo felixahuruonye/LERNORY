@@ -27,6 +27,7 @@ import WebsiteMenu from "@/pages/WebsiteMenu";
 import WebsiteLearn from "@/pages/WebsiteLearn";
 import WebsiteDebug from "@/pages/WebsiteDebug";
 import Notifications from "@/pages/Notifications";
+import LiveAI from "@/pages/LiveAI";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -61,6 +62,7 @@ function Router() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/exams" component={Exams} />
           <Route path="/notifications" component={Notifications} />
+          <Route path="/live-ai" component={LiveAI} />
         </>
       )}
       <Route component={NotFound} />

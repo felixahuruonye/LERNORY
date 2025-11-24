@@ -1348,6 +1348,88 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // LIVE AI Routes
+  app.post('/api/live-ai/voice-start', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { title, mode, language } = req.body;
+
+      const conversation = await storage.createVoiceConversation({
+        userId,
+        title: title || "Voice Conversation",
+        mode: mode || "conversational",
+        language: language || "en",
+      });
+
+      res.status(201).json(conversation);
+    } catch (error) {
+      console.error("Error starting voice conversation:", error);
+      res.status(500).json({ message: "Failed to start voice conversation" });
+    }
+  });
+
+  app.post('/api/live-ai/document-upload', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { fileName, fileType, fileUrl, fileSize } = req.body;
+
+      const doc = await storage.createDocumentUpload({
+        userId,
+        fileName,
+        fileType,
+        fileUrl,
+        fileSize,
+        isProcessing: true,
+      });
+
+      res.status(201).json(doc);
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
+  app.get('/api/live-ai/documents', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const docs = await storage.getDocumentUploadsByUser(userId);
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      res.status(500).json({ message: "Failed to fetch documents" });
+    }
+  });
+
+  app.get('/api/live-ai/conversations', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const conversations = await storage.getVoiceConversationsByUser(userId);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ message: "Failed to fetch conversations" });
+    }
+  });
+
+  app.post('/api/live-ai/feature', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { featureType, context } = req.body;
+
+      const feature = await storage.createLiveAiFeature({
+        userId,
+        featureType,
+        context,
+        status: 'pending',
+      });
+
+      res.status(201).json(feature);
+    } catch (error) {
+      console.error("Error creating feature:", error);
+      res.status(500).json({ message: "Failed to create feature" });
+    }
+  });
+
   // Send notifications for all previous chat history
   app.post('/api/notifications/send-chat-history', isAuthenticated, async (req: any, res: Response) => {
     try {

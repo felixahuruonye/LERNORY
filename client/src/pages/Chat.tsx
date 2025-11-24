@@ -17,6 +17,8 @@ import {
   Volume2,
   VolumeX,
   Settings,
+  Bell,
+  Zap,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -233,6 +235,11 @@ export default function Chat() {
               <Link href="/settings">
                 <Button variant="ghost" size="icon" data-testid="link-settings">
                   <Settings className="w-5 h-5" />
+                </Button>
+              </Link>
+              <Link href="/live-ai">
+                <Button variant="ghost" size="icon" data-testid="link-live-ai" className="text-purple-400 hover:text-purple-300">
+                  <Zap className="w-5 h-5" />
                 </Button>
               </Link>
               <Link href="/dashboard">

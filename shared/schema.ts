@@ -548,3 +548,54 @@ export const purchasesRelations = relations(purchases, ({ one }) => ({
     references: [courses.id],
   }),
 }));
+
+// LEARNORY LIVE AI Tables
+export const voiceConversations = pgTable("voice_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  vapiSessionId: varchar("vapi_session_id"),
+  title: varchar("title"),
+  mode: varchar("mode").default('conversational'), // teaching, exam, conversational
+  language: varchar("language").default('en'),
+  recordingUrl: varchar("recording_url"),
+  transcript: text("transcript"),
+  summary: text("summary"),
+  startedAt: timestamp("started_at").defaultNow(),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const documentUploads = pgTable("document_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  fileName: varchar("file_name").notNull(),
+  fileType: varchar("file_type").notNull(), // pdf, image, docx, handwritten
+  fileUrl: varchar("file_url").notNull(),
+  fileSize: integer("file_size"),
+  extractedText: text("extracted_text"),
+  aiAnalysis: jsonb("ai_analysis"),
+  isProcessing: boolean("is_processing").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const liveAiFeatures = pgTable("live_ai_features", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  featureType: varchar("feature_type").notNull(), // exam_practice, timetable, lesson, university_finder, etc
+  context: jsonb("context"),
+  result: jsonb("result"),
+  status: varchar("status").default('pending'), // pending, processing, completed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVoiceConversationSchema = createInsertSchema(voiceConversations).omit({ id: true, createdAt: true });
+export type InsertVoiceConversation = z.infer<typeof insertVoiceConversationSchema>;
+export type VoiceConversation = typeof voiceConversations.$inferSelect;
+
+export const insertDocumentUploadSchema = createInsertSchema(documentUploads).omit({ id: true, createdAt: true });
+export type InsertDocumentUpload = z.infer<typeof insertDocumentUploadSchema>;
+export type DocumentUpload = typeof documentUploads.$inferSelect;
+
+export const insertLiveAiFeatureSchema = createInsertSchema(liveAiFeatures).omit({ id: true, createdAt: true });
+export type InsertLiveAiFeature = z.infer<typeof insertLiveAiFeatureSchema>;
+export type LiveAiFeature = typeof liveAiFeatures.$inferSelect;

@@ -25,6 +25,9 @@ import {
   generatedImages,
   topicExplanations,
   notifications,
+  voiceConversations,
+  documentUploads,
+  liveAiFeatures,
   type User,
   type UpsertUser,
   type Course,
@@ -73,6 +76,12 @@ import {
   type InsertTopicExplanation,
   type Notification,
   type InsertNotification,
+  type VoiceConversation,
+  type InsertVoiceConversation,
+  type DocumentUpload,
+  type InsertDocumentUpload,
+  type LiveAiFeature,
+  type InsertLiveAiFeature,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -201,6 +210,14 @@ export interface IStorage {
   getNotification(id: string): Promise<Notification | undefined>;
   markNotificationAsRead(id: string): Promise<Notification | undefined>;
   deleteNotification(id: string): Promise<void>;
+
+  // LIVE AI operations
+  createVoiceConversation(conversation: InsertVoiceConversation): Promise<VoiceConversation>;
+  getVoiceConversationsByUser(userId: string): Promise<VoiceConversation[]>;
+  createDocumentUpload(doc: InsertDocumentUpload): Promise<DocumentUpload>;
+  getDocumentUploadsByUser(userId: string): Promise<DocumentUpload[]>;
+  createLiveAiFeature(feature: InsertLiveAiFeature): Promise<LiveAiFeature>;
+  getLiveAiFeaturesByUser(userId: string): Promise<LiveAiFeature[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -638,6 +655,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNotification(id: string): Promise<void> {
     await db.delete(notifications).where(eq(notifications.id, id));
+  }
+
+  // LIVE AI operations
+  async createVoiceConversation(conversation: InsertVoiceConversation): Promise<VoiceConversation> {
+    const [newConversation] = await db.insert(voiceConversations).values(conversation).returning();
+    return newConversation;
+  }
+
+  async getVoiceConversationsByUser(userId: string): Promise<VoiceConversation[]> {
+    return await db.select().from(voiceConversations).where(eq(voiceConversations.userId, userId)).orderBy(desc(voiceConversations.createdAt));
+  }
+
+  async createDocumentUpload(doc: InsertDocumentUpload): Promise<DocumentUpload> {
+    const [newDoc] = await db.insert(documentUploads).values(doc).returning();
+    return newDoc;
+  }
+
+  async getDocumentUploadsByUser(userId: string): Promise<DocumentUpload[]> {
+    return await db.select().from(documentUploads).where(eq(documentUploads.userId, userId)).orderBy(desc(documentUploads.createdAt));
+  }
+
+  async createLiveAiFeature(feature: InsertLiveAiFeature): Promise<LiveAiFeature> {
+    const [newFeature] = await db.insert(liveAiFeatures).values(feature).returning();
+    return newFeature;
+  }
+
+  async getLiveAiFeaturesByUser(userId: string): Promise<LiveAiFeature[]> {
+    return await db.select().from(liveAiFeatures).where(eq(liveAiFeatures.userId, userId)).orderBy(desc(liveAiFeatures.createdAt));
   }
 }
 
