@@ -2,13 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Send, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Send, Volume2, VolumeX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
-import { VoiceSettings } from "@/components/live-ai/VoiceSettings";
-import { StudyTimer } from "@/components/live-ai/StudyTimer";
 import { AvatarDisplay } from "@/components/live-ai/AvatarDisplay";
 
 interface Message {
@@ -20,35 +17,29 @@ interface Message {
 
 export default function LiveAI() {
   const { toast } = useToast();
-  const [voice, setVoice] = useState<"female" | "male">("female");
-  const [speed, setSpeed] = useState(1);
-  const [language, setLanguage] = useState("en");
-  const [tone, setTone] = useState("friendly");
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [voice] = useState<"female" | "male">("female");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [currentMode, setCurrentMode] = useState("explain");
   const [messageInput, setMessageInput] = useState("");
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const messageCountRef = useRef(0);
   const initRef = useRef(false);
-  const autoSendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mouthAnimationRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Load settings
+    // Load saved settings
     const saved = localStorage.getItem("learnory_live_ai_settings");
     if (saved) {
       try {
         const settings = JSON.parse(saved);
-        setVoice(settings.voice || "female");
-        setSpeed(settings.speed || 1);
-        setLanguage(settings.language || "en");
-        setTone(settings.tone || "friendly");
         setIsDarkMode(settings.isDarkMode || false);
       } catch (e) {
         console.error("Failed to load settings:", e);
@@ -66,7 +57,7 @@ export default function LiveAI() {
 
     if (!initRef.current) {
       initRef.current = true;
-      initializeAudio();
+      initializeContinuousListening();
       
       // Auto-greet
       setTimeout(() => {
@@ -80,9 +71,19 @@ export default function LiveAI() {
         playAudio(greeting);
       }, 1000);
     }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+      if (silenceTimeoutRef.current) {
+        clearTimeout(silenceTimeoutRef.current);
+      }
+    };
   }, []);
 
-  const initializeAudio = async () => {
+  // Continuous voice listening with Whisper
+  const initializeContinuousListening = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
@@ -94,151 +95,93 @@ export default function LiveAI() {
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-        audioChunksRef.current = [];
-        await processAudio(audioBlob);
-      };
-
       mediaRecorderRef.current = mediaRecorder;
-      toast({ title: "Microphone Ready", description: "LEARNORY Live AI is ready to listen!" });
+      
+      // Start continuous recording
+      mediaRecorder.start(100); // Collect data every 100ms
+      setIsListening(true);
+
+      // Start listening for speech
+      startSpeechDetection();
+      
+      toast({ 
+        title: "Listening Ready", 
+        description: "LEARNORY is listening... Speak naturally and I'll respond automatically!" 
+      });
     } catch (error) {
       console.error("Microphone access error:", error);
       toast({
         title: "Microphone Error",
-        description: "Please enable microphone access",
+        description: "Please enable microphone access for voice input",
         variant: "destructive",
       });
     }
   };
 
-  const startRecording = () => {
-    if (!mediaRecorderRef.current) return;
-    
-    audioChunksRef.current = [];
-    mediaRecorderRef.current.start();
-    setIsRecording(true);
-  };
-
-  const stopRecording = () => {
-    if (!mediaRecorderRef.current) return;
-    
-    mediaRecorderRef.current.stop();
-    setIsRecording(false);
-  };
-
-  const processAudio = async (audioBlob: Blob) => {
-    setIsProcessing(true);
-    try {
-      // Upload audio to transcribe
-      const formData = new FormData();
-      formData.append("audio", audioBlob, "audio.wav");
-
-      const transcribeRes = await fetch("/api/audio/transcribe", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!transcribeRes.ok) {
-        throw new Error("Transcription failed");
-      }
-
-      const { text } = await transcribeRes.json();
-      console.log("Transcribed:", text);
-
-      if (!text?.trim()) {
-        toast({ description: "Could not understand audio. Please try again." });
-        setIsProcessing(false);
-        return;
-      }
-
-      // Add user message
-      addMessage("user", text);
-
-      // Get AI response
-      const chatRes = await fetch("/api/chat/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, sessionId: null }),
-      });
-
-      if (!chatRes.ok) {
-        throw new Error("AI response failed");
-      }
-
-      const chatData = await chatRes.json();
-      const aiMessage = chatData.message || chatData.content || "I understood your question. Let me help you.";
-      addMessage("assistant", aiMessage);
-
-      // Play AI response as speech
-      await playAudio(aiMessage);
-    } catch (error) {
-      console.error("Error:", error);
+  // Speech detection using browser's Speech Recognition API
+  const startSpeechDetection = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
       toast({
-        title: "Error",
-        description: "Failed to process audio",
+        title: "Speech Recognition Not Supported",
+        description: "Use type message instead",
         variant: "destructive",
       });
-    } finally {
-      setIsProcessing(false);
+      return;
     }
-  };
 
-  const playAudio = async (text: string) => {
-    setIsSpeaking(true);
-    try {
-      const response = await fetch("/api/audio/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: voice === "female" ? "nova" : "onyx" }),
-      });
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
 
-      if (!response.ok) {
-        // If speech service fails, use browser's native speech synthesis as fallback
-        console.log("Using browser speech synthesis fallback...");
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = speed;
-        utterance.pitch = voice === "female" ? 1.2 : 0.8;
-        utterance.onend = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-        return;
-      }
+    let interimTranscript = "";
 
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
+    recognition.onstart = () => {
+      console.log("Speech recognition started");
+    };
+
+    recognition.onresult = (event: any) => {
+      interimTranscript = "";
       
-      audio.onended = () => {
-        setIsSpeaking(false);
-      };
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        
+        if (event.results[i].isFinal) {
+          // Final result - send to AI
+          if (transcript.trim()) {
+            clearTimeout(silenceTimeoutRef.current!);
+            handleSendMessage(transcript.trim());
+          }
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+    };
 
-      audio.play().catch(() => {
-        // If playback fails, use browser speech synthesis
-        console.log("Using browser speech synthesis fallback...");
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = speed;
-        utterance.pitch = voice === "female" ? 1.2 : 0.8;
-        utterance.onend = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-      });
-    } catch (error) {
-      console.error("Audio playback error:", error);
-      setIsSpeaking(false);
-      // Use fallback
-      try {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = speed;
-        utterance.pitch = voice === "female" ? 1.2 : 0.8;
-        utterance.onend = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-      } catch (e) {
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      if (event.error !== "no-speech") {
         toast({
-          title: "Audio Error",
-          description: "Speech unavailable - try typing instead",
+          title: "Speech Error",
+          description: `Error: ${event.error}`,
           variant: "destructive",
         });
       }
-    }
+    };
+
+    recognition.onend = () => {
+      console.log("Speech recognition ended, restarting...");
+      // Restart continuous listening
+      setTimeout(() => {
+        if (initRef.current) {
+          startSpeechDetection();
+        }
+      }, 100);
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
   };
 
   const addMessage = (role: "user" | "assistant", content: string) => {
@@ -251,22 +194,32 @@ export default function LiveAI() {
     setMessages((prev) => [...prev, msg]);
   };
 
-  // Auto-send with debounce (500ms after user stops typing)
-  const handleInputChange = (text: string) => {
-    setMessageInput(text);
+  // Play audio with mouth animation
+  const playAudio = async (text: string) => {
+    setIsSpeaking(true);
+    mouthAnimationRef.current = true;
 
-    // Clear existing timeout
-    if (autoSendTimeoutRef.current) {
-      clearTimeout(autoSendTimeoutRef.current);
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1;
+      utterance.pitch = voice === "female" ? 1.2 : 0.8;
+      
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        mouthAnimationRef.current = false;
+      };
+      
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        mouthAnimationRef.current = false;
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.error("Speech synthesis error:", e);
+      setIsSpeaking(false);
+      mouthAnimationRef.current = false;
     }
-
-    // If input is empty or too short, don't auto-send
-    if (!text.trim() || text.trim().length < 3) return;
-
-    // Set new timeout to auto-send after 500ms
-    autoSendTimeoutRef.current = setTimeout(() => {
-      handleSendMessage(text);
-    }, 500);
   };
 
   const handleSendMessage = async (userText?: string) => {
@@ -293,7 +246,7 @@ export default function LiveAI() {
       const aiMessage = data.message || data.content || "Got it!";
       addMessage("assistant", aiMessage);
 
-      // Speak the response with real-time avatar speech
+      // Speak the response with avatar lip-syncing
       await playAudio(aiMessage);
     } catch (error) {
       console.error("Error:", error);
@@ -311,9 +264,9 @@ export default function LiveAI() {
   useEffect(() => {
     localStorage.setItem(
       "learnory_live_ai_settings",
-      JSON.stringify({ voice, speed, language, tone, isDarkMode })
+      JSON.stringify({ isDarkMode })
     );
-  }, [voice, speed, language, tone, isDarkMode]);
+  }, [isDarkMode]);
 
   // Save messages
   useEffect(() => {
@@ -323,141 +276,104 @@ export default function LiveAI() {
   return (
     <div className={isDarkMode ? "dark" : ""}>
       <div className={`min-h-screen ${isDarkMode ? "bg-slate-900" : "bg-slate-50"}`}>
-        <div className="max-w-7xl mx-auto p-4 md:p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Sidebar */}
-            <div className="lg:col-span-1 space-y-4">
-              {/* Recording Controls */}
-              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                  Voice Control
-                </h3>
-                <div className="space-y-2">
-                  <Button
-                    onClick={isRecording ? stopRecording : startRecording}
-                    disabled={isProcessing}
-                    variant={isRecording ? "destructive" : "default"}
-                    className="w-full gap-2"
-                    data-testid={isRecording ? "button-stop-recording" : "button-start-recording"}
-                  >
-                    {isRecording ? (
-                      <>
-                        <MicOff className="w-4 h-4" />
-                        Stop Recording
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-4 h-4" />
-                        Start Recording
-                      </>
-                    )}
-                  </Button>
-                  <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                    {isRecording && "🔴 Recording..."}
-                    {isSpeaking && "🔊 Speaking..."}
-                    {isProcessing && "⏳ Processing..."}
-                  </div>
-                </div>
-              </Card>
-
-              {/* Study Timer */}
-              <StudyTimer />
-
-              {/* Voice Settings */}
-              <VoiceSettings
-                voice={voice}
-                setVoice={setVoice}
-                speed={speed}
-                setSpeed={setSpeed}
-                language={language}
-                setLanguage={setLanguage}
-                tone={tone}
-                setTone={setTone}
-                isDarkMode={isDarkMode}
-              />
-
-              {/* Theme */}
-              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                <Button
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  variant="outline"
-                  className="w-full"
-                  data-testid="button-toggle-theme"
-                >
-                  {isDarkMode ? "☀️ Light" : "🌙 Dark"}
-                </Button>
-              </Card>
-            </div>
-
-            {/* Main */}
-            <div className="lg:col-span-3 space-y-4">
-              {/* Avatar */}
-              <Card
-                className={`p-6 flex justify-center ${
-                  isDarkMode
-                    ? "bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30"
-                    : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"
-                }`}
-              >
+        <div className="max-w-4xl mx-auto p-4 md:p-6">
+          <div className="space-y-6">
+            {/* Avatar with Action Buttons - Center Stage */}
+            <div className="flex flex-col items-center gap-4">
+              {/* Avatar Display */}
+              <Card className={`p-6 w-full max-w-sm ${
+                isDarkMode
+                  ? "bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30"
+                  : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"
+              }`}>
                 <AvatarDisplay 
                   voice={voice} 
-                  isActive={isSpeaking || isRecording} 
-                  isListening={isRecording}
+                  isActive={isSpeaking} 
+                  isListening={isListening}
+                  isMouthOpen={mouthAnimationRef.current}
                 />
               </Card>
 
-              {/* Quick Actions */}
-              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                  AI Learning Tools
-                </h3>
+              {/* Status Indicator */}
+              <div className={`text-sm font-medium ${
+                isDarkMode ? "text-slate-300" : "text-slate-700"
+              }`}>
+                {isListening && "🎤 Listening..."}
+                {isSpeaking && "🔊 Speaking..."}
+                {isProcessing && "⏳ Thinking..."}
+                {!isListening && !isSpeaking && !isProcessing && "Ready to listen"}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="w-full max-w-sm">
                 <QuickActions onModeSelect={setCurrentMode} />
-              </Card>
+              </div>
 
-              {/* Chat */}
-              <Tabs defaultValue="voice" className="w-full">
-                <TabsList className="w-full grid grid-cols-2">
-                  <TabsTrigger value="voice">Voice Chat</TabsTrigger>
-                  <TabsTrigger value="type">Type Message</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="voice">
-                  <ChatInterface 
-                    messages={messages} 
-                    isLoading={isProcessing} 
-                    onSendMessage={handleSendMessage}
-                    onClearChat={() => setMessages([])}
-                    onExportChat={() => {}}
-                    onInputChange={handleInputChange}
-                  />
-                </TabsContent>
-
-                <TabsContent value="type">
-                  <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                    <div className="space-y-3">
-                      <Textarea
-                        placeholder="Type your question (auto-sends after you stop typing)..."
-                        value={messageInput}
-                        onChange={(e) => handleInputChange(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage();
-                          }
-                        }}
-                        rows={4}
-                        className="resize-none"
-                        disabled={isProcessing}
-                        data-testid="textarea-message"
-                      />
-                      <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                        {isProcessing ? "AI is thinking..." : "Press Enter to send • Shift+Enter for new line • Auto-sends after 500ms of inactivity"}
-                      </div>
-                    </div>
-                  </Card>
-                </TabsContent>
-              </Tabs>
+              {/* Theme Toggle */}
+              <Button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                variant="outline"
+                size="sm"
+                className="w-full max-w-sm"
+                data-testid="button-toggle-theme"
+              >
+                {isDarkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+              </Button>
             </div>
+
+            {/* Chat Interface - Below Avatar */}
+            <div className="w-full">
+              <ChatInterface 
+                messages={messages} 
+                isLoading={isProcessing} 
+                onSendMessage={handleSendMessage}
+                onClearChat={() => setMessages([])}
+                onExportChat={() => {}}
+              />
+            </div>
+
+            {/* Type Message Input - Simple */}
+            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+              <div className="space-y-3">
+                <Textarea
+                  placeholder="Type your question (press Enter to send)..."
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  rows={3}
+                  className="resize-none"
+                  disabled={isProcessing}
+                  data-testid="textarea-message"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleSendMessage()}
+                    disabled={!messageInput.trim() || isProcessing}
+                    className="flex-1 gap-2"
+                    data-testid="button-send-message"
+                  >
+                    <Send className="w-4 h-4" />
+                    {isProcessing ? "Thinking..." : "Send"}
+                  </Button>
+                  <Button
+                    onClick={() => setMessageInput("")}
+                    variant="outline"
+                    size="sm"
+                    data-testid="button-clear-input"
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                  💬 Speak naturally or type your questions • Press Enter to send • Shift+Enter for new line
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       </div>

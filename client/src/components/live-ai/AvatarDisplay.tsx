@@ -4,9 +4,10 @@ interface AvatarDisplayProps {
   voice: "female" | "male";
   isActive: boolean;
   isListening: boolean;
+  isMouthOpen?: boolean;
 }
 
-export function AvatarDisplay({ voice, isActive, isListening }: AvatarDisplayProps) {
+export function AvatarDisplay({ voice, isActive, isListening, isMouthOpen = false }: AvatarDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
 
@@ -17,7 +18,7 @@ export function AvatarDisplay({ voice, isActive, isListening }: AvatarDisplayPro
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let mouthOpen = false;
+    let mouthOpen = isMouthOpen;
     let blinkCounter = 0;
     let eyesClosed = false;
 
@@ -120,13 +121,13 @@ export function AvatarDisplay({ voice, isActive, isListening }: AvatarDisplayPro
       ctx.lineTo(canvas.width / 2, canvas.height / 2 + 5);
       ctx.stroke();
 
-      // Mouth - animate when speaking
+      // Mouth - animate when speaking or listening
       ctx.strokeStyle = voice === "female" ? "#E75480" : "#B8604B";
       ctx.lineWidth = 2;
       ctx.beginPath();
 
-      if (mouthOpen && isListening) {
-        // Open mouth (speaking)
+      if ((mouthOpen || isActive) && (isListening || isActive)) {
+        // Open mouth (speaking or listening)
         ctx.ellipse(canvas.width / 2, canvas.height / 2 + 25, 20, 15, 0, 0, Math.PI);
         ctx.fillStyle = "#8B3A3A";
         ctx.fill();
@@ -147,8 +148,8 @@ export function AvatarDisplay({ voice, isActive, isListening }: AvatarDisplayPro
         }
       }
 
-      // Mouth animation when listening
-      if (isListening) {
+      // Mouth animation when listening or active
+      if (isListening || isActive) {
         mouthOpen = !mouthOpen;
       } else {
         mouthOpen = false;
@@ -164,7 +165,7 @@ export function AvatarDisplay({ voice, isActive, isListening }: AvatarDisplayPro
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [voice, isListening]);
+  }, [voice, isListening, isActive, isMouthOpen]);
 
   return (
     <div className="flex flex-col items-center gap-4">

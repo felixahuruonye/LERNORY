@@ -18,7 +18,6 @@ interface ChatInterfaceProps {
   onClearChat: () => void;
   onExportChat: () => void;
   onReplayVoice?: (content: string) => void;
-  onInputChange?: (content: string) => void;
 }
 
 export function ChatInterface({
@@ -28,9 +27,7 @@ export function ChatInterface({
   onClearChat,
   onExportChat,
   onReplayVoice,
-  onInputChange,
 }: ChatInterfaceProps) {
-  const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto scroll to bottom
@@ -39,25 +36,6 @@ export function ChatInterface({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-    const content = input;
-    setInput("");
-    await onSendMessage(content);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleInputChange = (value: string) => {
-    setInput(value);
-    onInputChange?.(value);
-  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -151,21 +129,6 @@ export function ChatInterface({
         )}
       </div>
 
-      {/* Input - Auto-send on Enter, no send button needed */}
-      <div className="p-4 border-t border-slate-700 space-y-2">
-        <Textarea
-          placeholder="Type your question (press Enter to send)..."
-          value={input}
-          onChange={(e) => handleInputChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isLoading}
-          data-testid="textarea-input"
-          className="min-h-[60px] resize-none bg-slate-700 border-slate-600 text-white placeholder-slate-400"
-        />
-        <div className="text-xs text-slate-400">
-          {isLoading ? "AI is thinking..." : "Press Enter to send • Shift+Enter for new line"}
-        </div>
-      </div>
     </Card>
   );
 }
