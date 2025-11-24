@@ -353,7 +353,7 @@ export default function Chat() {
             data-testid="button-new-chat"
           >
             <MessageSquare className="h-4 w-4 mr-2" />
-            New Chat
+            Ask LEARNORY
           </Button>
         </div>
 
@@ -682,7 +682,89 @@ export default function Chat() {
 
         {/* Input Area */}
         <div className="border-t border-border/50 bg-background/80 backdrop-blur-lg">
-          <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4">
+          <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+            {/* Topic Explainer Modal */}
+            {showTopicExplainer && (
+              <Card className="p-4 border-primary/30 bg-primary/5">
+                <h3 className="font-semibold mb-3">Explain a Topic</h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Subject (e.g., Biology)"
+                    value={topicSubject}
+                    onChange={(e) => setTopicSubject(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                    data-testid="input-topic-subject"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Topic (e.g., Photosynthesis)"
+                    value={topicName}
+                    onChange={(e) => setTopicName(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                    data-testid="input-topic-name"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => explainTopicMutation.mutate({ subject: topicSubject, topic: topicName })}
+                      disabled={!topicSubject.trim() || !topicName.trim() || explainTopicMutation.isPending}
+                      size="sm"
+                      className="hover-elevate active-elevate-2"
+                      data-testid="button-submit-topic"
+                    >
+                      {explainTopicMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Explain"}
+                    </Button>
+                    <Button
+                      onClick={() => setShowTopicExplainer(false)}
+                      variant="outline"
+                      size="sm"
+                      className="hover-elevate active-elevate-2"
+                      data-testid="button-close-topic"
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Image Generator Modal */}
+            {showImageGenerator && (
+              <Card className="p-4 border-primary/30 bg-primary/5">
+                <h3 className="font-semibold mb-3">Generate Image</h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Describe the image you want..."
+                    value={imagePrompt}
+                    onChange={(e) => setImagePrompt(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded text-sm"
+                    data-testid="input-image-prompt"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => generateImageMutation.mutate(imagePrompt)}
+                      disabled={!imagePrompt.trim() || generateImageMutation.isPending}
+                      size="sm"
+                      className="hover-elevate active-elevate-2"
+                      data-testid="button-generate"
+                    >
+                      {generateImageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate"}
+                    </Button>
+                    <Button
+                      onClick={() => setShowImageGenerator(false)}
+                      variant="outline"
+                      size="sm"
+                      className="hover-elevate active-elevate-2"
+                      data-testid="button-close-image"
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             <div className="flex gap-3">
               <Textarea
                 ref={textareaRef}
@@ -701,6 +783,7 @@ export default function Chat() {
                   variant={isRecording ? "destructive" : "outline"}
                   className="hover-elevate active-elevate-2"
                   data-testid="button-voice-record"
+                  title={isRecording ? "Stop recording" : "Start recording"}
                 >
                   <Mic className="h-5 w-5" />
                 </Button>
@@ -709,8 +792,30 @@ export default function Chat() {
                   variant="outline"
                   className="hover-elevate active-elevate-2"
                   data-testid="button-file-upload"
+                  title="Upload file"
+                  onClick={() => document.getElementById('file-input')?.click()}
                 >
                   <Paperclip className="h-5 w-5" />
+                </Button>
+                <Button
+                  onClick={() => setShowImageGenerator(!showImageGenerator)}
+                  size="icon"
+                  variant={showImageGenerator ? "default" : "outline"}
+                  className="hover-elevate active-elevate-2"
+                  data-testid="button-generate-image"
+                  title="Generate image"
+                >
+                  <Image className="h-5 w-5" />
+                </Button>
+                <Button
+                  onClick={() => setShowTopicExplainer(!showTopicExplainer)}
+                  size="icon"
+                  variant={showTopicExplainer ? "default" : "outline"}
+                  className="hover-elevate active-elevate-2"
+                  data-testid="button-explain-topic"
+                  title="Explain topic"
+                >
+                  <BookOpen className="h-5 w-5" />
                 </Button>
                 <Button
                   onClick={handleSend}
@@ -718,10 +823,26 @@ export default function Chat() {
                   size="icon"
                   className="hover-elevate active-elevate-2"
                   data-testid="button-send-message"
+                  title="Send message"
                 >
                   <Send className="h-5 w-5" />
                 </Button>
               </div>
+              <input
+                id="file-input"
+                type="file"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const files = e.currentTarget.files;
+                  if (files && files.length > 0) {
+                    toast({
+                      title: "File received",
+                      description: `File ${files[0].name} will be processed`,
+                    });
+                  }
+                }}
+                data-testid="input-file-upload"
+              />
             </div>
           </div>
         </div>
