@@ -1240,5 +1240,65 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Text-to-Speech endpoint using Google Cloud TTS
+  app.post('/api/tts/speak', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { text, voiceName = "en-US-Neural2-A" } = req.body;
+
+      if (!text?.trim()) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ message: "TTS service not configured" });
+      }
+
+      // Use Google Cloud Text-to-Speech API
+      const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
+      
+      const response = await fetch(ttsUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          input: { text: text.trim() },
+          voice: {
+            languageCode: "en-US",
+            name: voiceName,
+          },
+          audioConfig: {
+            audioEncoding: "MP3",
+            pitch: 0,
+            speakingRate: 1.0,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error("TTS API error:", error);
+        return res.status(500).json({ message: "Failed to synthesize speech" });
+      }
+
+      const result = await response.json();
+      const audioContent = result.audioContent;
+
+      if (!audioContent) {
+        return res.status(500).json({ message: "No audio content generated" });
+      }
+
+      // Convert base64 to buffer and send as audio
+      const audioBuffer = Buffer.from(audioContent, "base64");
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Content-Length", audioBuffer.length);
+      res.send(audioBuffer);
+    } catch (error) {
+      console.error("Error in TTS endpoint:", error);
+      res.status(500).json({ message: "Failed to synthesize speech" });
+    }
+  });
+
   return httpServer;
 }
