@@ -73,20 +73,11 @@ export default function Chat() {
     enabled: !!user && !!currentSessionId,
   });
 
-  // Local state for optimistic updates
-  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, optimisticMessages]);
-
   // Create new session
   const createSessionMutation = useMutation({
     mutationFn: async () => {
-      const chatNumber = sessions.length + 1;
       const response = await apiRequest("POST", "/api/chat/sessions", { 
-        title: `Chat ${chatNumber}`,
+        title: `Chat ${new Date().toLocaleTimeString()}`,
         mode: "chat"
       });
       return response.json();
@@ -95,7 +86,6 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       setCurrentSessionId(newSession.id);
       setMessage("");
-      setOptimisticMessages([]);
       setExplainedTopic(null);
       setGeneratedImagesList([]);
       toast({ title: "New chat created" });
@@ -121,45 +111,19 @@ export default function Chat() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      // Optimistically add user message
-      const userMsg: ChatMessage = {
-        id: Math.random().toString(),
-        userId: user!.id,
-        sessionId: currentSessionId || undefined,
-        role: "user",
-        content,
-        createdAt: new Date().toISOString(),
-        attachments: null,
-      };
-      
-      setOptimisticMessages(prev => [...prev, userMsg]);
-      setMessage("");
-
-      // Add AI thinking message
-      const thinkingMsg: ChatMessage = {
-        id: Math.random().toString(),
-        userId: user!.id,
-        sessionId: currentSessionId || undefined,
-        role: "assistant",
-        content: "Thinking...",
-        createdAt: new Date().toISOString(),
-        attachments: null,
-      };
-      setOptimisticMessages(prev => [...prev, thinkingMsg]);
-
-      // Send to backend
       const response = await apiRequest("POST", "/api/chat/send", { content, sessionId: currentSessionId });
       return response.json();
     },
     onSuccess: () => {
-      // Clear optimistic messages and refetch from server
-      setOptimisticMessages([]);
       queryClient.invalidateQueries({ queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      setMessage("");
+      toast({
+        title: "Message sent",
+        description: "Your message was sent successfully.",
+      });
     },
     onError: (error: Error) => {
       console.error("Send message error:", error);
-      setOptimisticMessages([]); // Clear optimistic messages on error
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -403,32 +367,26 @@ export default function Chat() {
             sessions.map((session) => (
               <div
                 key={session.id}
-                className={`group flex items-center gap-2 p-2 rounded cursor-pointer transition-all hover:bg-destructive/10 ${
+                className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
                   currentSessionId === session.id
                     ? "bg-primary/20 text-primary"
-                    : ""
+                    : "hover:bg-muted"
                 }`}
               >
                 <MessageSquare className="h-4 w-4 shrink-0" />
                 <button
                   onClick={() => setCurrentSessionId(session.id)}
-                  className="flex-1 text-left text-xs sm:text-sm truncate hover-elevate active-elevate-2 p-1 min-w-0"
-                  title={session.title}
+                  className="flex-1 text-left text-sm truncate hover-elevate active-elevate-2 p-1"
                   data-testid={`button-session-${session.id}`}
                 >
                   {session.title}
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm(`Delete chat "${session.title}"?`)) {
-                      deleteSessionMutation.mutate(session.id);
-                    }
-                  }}
-                  className="p-1 shrink-0 text-destructive hover:bg-destructive/20 rounded transition-colors"
-                  title="Delete chat"
+                  onClick={() => deleteSessionMutation.mutate(session.id)}
+                  className="opacity-0 hover:opacity-100 transition-opacity p-1"
                   data-testid={`button-delete-session-${session.id}`}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             ))
@@ -544,38 +502,6 @@ export default function Chat() {
             </div>
           ) : (
             <div className="space-y-4 w-full flex flex-col">
-              {/* Display real messages + optimistic messages */}
-              {[...messages, ...optimisticMessages].map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  data-testid={`message-${msg.role}-${msg.id}`}
-                >
-                  <div
-                    className={`max-w-2xl rounded-lg p-4 ${
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground border border-border/50"
-                    }`}
-                  >
-                    <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
-                    
-                    {msg.role === "assistant" && msg.content !== "Thinking..." && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="mt-2 h-6 w-6 hover-elevate active-elevate-2"
-                        onClick={() => speakMessage(msg.content, msg.id)}
-                        title={speakingMessageId === msg.id ? (isPaused ? "Resume" : "Pause") : "Read aloud"}
-                        data-testid={`button-read-message-${msg.id}`}
-                      >
-                        <Volume2 className={`h-4 w-4 ${speakingMessageId === msg.id ? "text-primary" : ""}`} />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-
               {/* Explained Topic Display */}
               {explainedTopic && (
                 <Card className="p-6 border-primary/30 bg-primary/5">
