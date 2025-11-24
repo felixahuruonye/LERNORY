@@ -234,6 +234,11 @@ export default function LiveAI() {
 
     setMessageInput("");
     setIsProcessing(true);
+    
+    // INTERRUPT: Stop any current speech synthesis immediately
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    mouthAnimationRef.current = false;
 
     try {
       addMessage("user", text);
@@ -244,7 +249,8 @@ export default function LiveAI() {
         body: JSON.stringify({ 
           content: text, 
           sessionId: null,
-          includeUserContext: true // Request AI to remember user context
+          includeUserContext: true,
+          autoLearn: true // Enable auto-learning from this message
         }),
       });
 

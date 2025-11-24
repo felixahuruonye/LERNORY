@@ -183,13 +183,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attachments: null,
       });
 
-      // Analyze message for learning tracking
-      try {
-        const { analyzeMessageForLearning } = await import("./tutorSystem");
-        await analyzeMessageForLearning(userId, content, aiResponse);
-      } catch (err) {
-        console.error("Error analyzing message for learning:", err);
-        // Don't fail the response if analysis fails
+      // AUTO-LEARNING: Analyze message and automatically update user profile
+      if (req.body.autoLearn) {
+        try {
+          const { analyzeMessageForLearning } = await import("./tutorSystem");
+          await analyzeMessageForLearning(userId, content, aiResponse);
+          console.log("✓ Auto-learning: User profile updated from conversation");
+        } catch (err) {
+          console.error("Error in auto-learning:", err);
+          // Don't fail the response if analysis fails
+        }
       }
 
       // Generate smart title after both messages for better context
