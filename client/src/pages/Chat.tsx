@@ -117,6 +117,7 @@ export default function Chat() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       setMessage("");
       toast({
         title: "Message sent",

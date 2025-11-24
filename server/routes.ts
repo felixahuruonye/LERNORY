@@ -82,20 +82,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: msg.content
       }));
 
-      // Generate smart title after first message if session has default title
-      if (sessionId && messages.length === 1) {
-        try {
-          const session = await storage.getChatSession(sessionId);
-          if (session && (session.title === "New Chat" || session.title.startsWith("Chat "))) {
-            const smartTitle = await generateSmartChatTitle(messages);
-            await storage.updateChatSession(sessionId, { title: smartTitle });
-          }
-        } catch (titleError) {
-          console.error("Error generating smart title:", titleError);
-          // Continue even if title generation fails
-        }
-      }
-
       // Get AI response
       const aiResponse = await chatWithAI(messages);
 
@@ -107,6 +93,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: aiResponse,
         attachments: null,
       });
+
+      // Generate smart title after both messages for better context
+      if (sessionId) {
+        try {
+          const session = await storage.getChatSession(sessionId);
+          if (session && (session.title === "New Chat" || session.title.startsWith("Chat "))) {
+            // Get the updated history with both user and AI messages
+            const updatedHistory = await storage.getChatMessagesBySession(sessionId);
+            const conversationMessages = updatedHistory.map(msg => ({
+              role: msg.role,
+              content: msg.content
+            }));
+            
+            // Generate smart title from full conversation
+            const smartTitle = await generateSmartChatTitle(conversationMessages);
+            await storage.updateChatSession(sessionId, { title: smartTitle });
+            console.log("Updated chat session title to:", smartTitle);
+          }
+        } catch (titleError) {
+          console.error("Error generating smart title:", titleError);
+          // Continue even if title generation fails - don't break the chat
+        }
+      }
 
       res.json({ message: "Message sent successfully" });
     } catch (error) {
