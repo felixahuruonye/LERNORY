@@ -24,7 +24,7 @@ import type { ChatMessage, ChatSession } from "@shared/schema";
 export default function Chat() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -213,7 +213,6 @@ export default function Chat() {
                 variant="ghost"
                 size="icon"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="hidden md:inline-flex"
                 data-testid="button-toggle-sidebar"
               >
                 {sidebarOpen ? (
