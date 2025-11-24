@@ -119,6 +119,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attachments: null,
       });
 
+      // Analyze message for learning tracking
+      try {
+        const { analyzeMessageForLearning } = await import("./tutorSystem");
+        await analyzeMessageForLearning(userId, content, aiResponse);
+      } catch (err) {
+        console.error("Error analyzing message for learning:", err);
+        // Don't fail the response if analysis fails
+      }
+
       // Generate smart title after both messages for better context
       if (sessionId) {
         try {
@@ -1169,6 +1178,19 @@ KEY_WORDS: [keywords separated by commas]`,
     } catch (error) {
       console.error("Error fetching learning history:", error);
       res.status(500).json({ message: "Failed to fetch learning history" });
+    }
+  });
+
+  // Learning insights endpoint (for dashboard analytics)
+  app.get('/api/learning/insights', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { generateLearningInsights } = await import("./tutorSystem");
+      const insights = await generateLearningInsights(userId);
+      res.json(insights);
+    } catch (error) {
+      console.error("Error fetching learning insights:", error);
+      res.status(500).json({ message: "Failed to fetch learning insights" });
     }
   });
 
