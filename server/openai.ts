@@ -22,28 +22,42 @@ function isQuotaError(error: any): boolean {
   );
 }
 
-// Helper function to try OpenAI first, fallback to OpenRouter for chat only
+// Helper function to try OpenAI first, fallback to OpenRouter, then Gemini for chat
 async function tryWithFallback<T>(
   primaryFn: () => Promise<T>,
   fallbackFn?: () => Promise<T>,
+  geminiFunction?: () => Promise<T>,
   isAudioFunction?: boolean
 ): Promise<T> {
   try {
+    console.log("Trying primary API (OpenAI)...");
     return await primaryFn();
   } catch (primaryError) {
-    console.log("Primary API (OpenAI) failed:", primaryError);
+    console.error("Primary API (OpenAI) failed:", primaryError instanceof Error ? primaryError.message : primaryError);
     
-    // For audio functions (Whisper), don't try OpenRouter since it doesn't support audio
+    // For audio functions (Whisper), don't try other APIs since they don't support audio
     if (isAudioFunction) {
       throw primaryError;
     }
     
-    if (isQuotaError(primaryError) && fallbackFn) {
+    // Try fallback (OpenRouter)
+    if (fallbackFn) {
       try {
         console.log("Switching to OpenRouter API (fallback)...");
         return await fallbackFn();
       } catch (fallbackError) {
-        console.error("Fallback API (OpenRouter) also failed:", fallbackError);
+        console.error("OpenRouter API also failed:", fallbackError instanceof Error ? fallbackError.message : fallbackError);
+        
+        // Try Gemini as final fallback
+        if (geminiFunction) {
+          try {
+            console.log("Switching to Gemini API (final fallback)...");
+            return await geminiFunction();
+          } catch (geminiError) {
+            console.error("Gemini API also failed:", geminiError instanceof Error ? geminiError.message : geminiError);
+            throw geminiError;
+          }
+        }
         throw fallbackError;
       }
     }
@@ -185,6 +199,9 @@ You are LEARNORY - Nigeria's most intelligent, comprehensive learning platform d
       ]
     : messages;
 
+  // Import Gemini function for fallback
+  const { chatWithGemini } = await import("./gemini");
+
   return tryWithFallback(
     () => openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -198,7 +215,9 @@ You are LEARNORY - Nigeria's most intelligent, comprehensive learning platform d
       messages: messagesWithSystem as any,
       max_tokens: 1200,
       temperature: 0.8,
-    }).then(response => response.choices[0].message.content || "")
+    }).then(response => response.choices[0].message.content || ""),
+    
+    () => chatWithGemini(messages)
   );
 }
 

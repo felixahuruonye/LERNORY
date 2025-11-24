@@ -291,6 +291,48 @@ export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGe
   }
 }
 
+// Chat with Gemini API as fallback for chat completion
+export async function chatWithGemini(messages: Array<{ role: string; content: string }>): Promise<string> {
+  const systemPrompt = `You are LEARNORY, the world's most comprehensive AI learning platform. You are helpful, knowledgeable, and friendly. Answer questions clearly and comprehensively.`;
+
+  const conversationText = messages
+    .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`)
+    .join("\n");
+
+  const prompt = `${systemPrompt}
+
+Conversation:
+${conversationText}
+
+Provide a helpful response to the user's latest message.`;
+
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("Calling Gemini API for chat response...");
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const responseText = response.text;
+
+    if (!responseText) {
+      throw new Error("Empty response from Gemini API");
+    }
+
+    console.log("Gemini API response received");
+    return responseText;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error with Gemini chat API:", errorMsg);
+    throw error;
+  }
+}
+
 export async function generateSmartChatTitle(messages: Array<{ role: string; content: string }>): Promise<string> {
   const prompt = `You are an expert at summarizing conversations. Read the following chat conversation and generate a SHORT, descriptive title that captures the main topic or theme.
 
