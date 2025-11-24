@@ -1240,60 +1240,56 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  // Text-to-Speech endpoint using Google Cloud TTS
+  // Text-to-Speech endpoint using OpenAI TTS
   app.post('/api/tts/speak', isAuthenticated, async (req: any, res: Response) => {
     try {
-      const { text, voiceName = "en-US-Neural2-A" } = req.body;
+      const { text, voiceName = "alloy" } = req.body;
 
       if (!text?.trim()) {
         return res.status(400).json({ message: "Text is required" });
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ message: "TTS service not configured" });
       }
 
-      // Use Google Cloud Text-to-Speech API
-      const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
-      
-      const response = await fetch(ttsUrl, {
+      // Map our voice names to OpenAI voices
+      const voiceMap: Record<string, string> = {
+        "en-US-Neural2-A": "alloy",      // Adam -> alloy
+        "en-US-Neural2-C": "echo",       // Aria -> echo
+        "en-US-Neural2-B": "fable",      // Guy -> fable
+        "en-US-Neural2-E": "shimmer",    // Zira -> shimmer
+      };
+
+      const openaiVoice = voiceMap[voiceName] || "alloy";
+
+      // Use OpenAI Text-to-Speech API
+      const response = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: {
+          "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          input: { text: text.trim() },
-          voice: {
-            languageCode: "en-US",
-            name: voiceName,
-          },
-          audioConfig: {
-            audioEncoding: "MP3",
-            pitch: 0,
-            speakingRate: 1.0,
-          },
+          model: "tts-1",
+          input: text.trim(),
+          voice: openaiVoice,
+          speed: 1.0,
         }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.text();
         console.error("TTS API error:", error);
         return res.status(500).json({ message: "Failed to synthesize speech" });
       }
 
-      const result = await response.json();
-      const audioContent = result.audioContent;
-
-      if (!audioContent) {
-        return res.status(500).json({ message: "No audio content generated" });
-      }
-
-      // Convert base64 to buffer and send as audio
-      const audioBuffer = Buffer.from(audioContent, "base64");
+      // Get audio as buffer
+      const audioBuffer = await response.arrayBuffer();
       res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Content-Length", audioBuffer.length);
-      res.send(audioBuffer);
+      res.setHeader("Content-Length", audioBuffer.byteLength);
+      res.send(Buffer.from(audioBuffer));
     } catch (error) {
       console.error("Error in TTS endpoint:", error);
       res.status(500).json({ message: "Failed to synthesize speech" });

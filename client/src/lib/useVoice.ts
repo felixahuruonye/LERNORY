@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-// Available Google TTS voices
+// Available OpenAI TTS voices
 export const AVAILABLE_VOICES = [
   { name: "Adam", voiceName: "en-US-Neural2-A", gender: "male" },
   { name: "Aria", voiceName: "en-US-Neural2-C", gender: "female" },
