@@ -557,9 +557,12 @@ export const voiceConversations = pgTable("voice_conversations", {
   title: varchar("title"),
   mode: varchar("mode").default('conversational'), // teaching, exam, conversational
   language: varchar("language").default('en'),
+  avatarGender: varchar("avatar_gender").default('female'), // male or female
   recordingUrl: varchar("recording_url"),
   transcript: text("transcript"),
   summary: text("summary"),
+  messageCount: integer("message_count").default(0),
+  durationSeconds: integer("duration_seconds").default(0),
   startedAt: timestamp("started_at").defaultNow(),
   endedAt: timestamp("ended_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

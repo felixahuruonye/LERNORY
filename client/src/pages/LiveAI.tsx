@@ -2,293 +2,358 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Mic,
-  MicOff,
-  Upload,
-  Send,
+import { 
+  Mic, 
+  MicOff, 
+  Volume2, 
+  VolumeX,
+  PhoneOff,
   Loader,
-  Zap,
-  BookOpen,
-  Calendar,
-  Search,
   Settings,
-  FileText,
-  Brain,
-  BarChart3,
-  MessageCircle,
-  Download,
-  Plus,
-  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { useVoice } from "@/lib/useVoice";
+
+type AvatarGender = "female" | "male";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
 
 export default function LiveAI() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [isRecording, setIsRecording] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
-  const [inputText, setInputText] = useState("");
-  const [uploadedDocs, setUploadedDocs] = useState<any[]>([]);
-  const [selectedMode, setSelectedMode] = useState("conversational");
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const [isCallActive, setIsCallActive] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
+  const [isListening, setIsListening] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentMessage, setCurrentMessage] = useState("");
+  const videoRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+  const recognitionRef = useRef<any>(null);
 
-  const modes = [
-    { id: "conversational", label: "Conversational", icon: MessageCircle },
-    { id: "teaching", label: "Teaching Mode", icon: BookOpen },
-    { id: "exam", label: "Exam Mode", icon: BarChart3 },
-  ];
+  // Initialize speech recognition
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
 
-  const features = [
-    { id: "live_talk", label: "Live AI Talk", icon: Mic, desc: "Real-time voice conversation" },
-    { id: "upload", label: "Upload Document", icon: Upload, desc: "PDF, images, notes" },
-    { id: "exam", label: "Exam Practice", icon: BarChart3, desc: "Mock exams & tests" },
-    { id: "timetable", label: "Create Timetable", icon: Calendar, desc: "Study schedule" },
-    { id: "lesson", label: "Lesson Explainer", icon: BookOpen, desc: "Topic deep-dive" },
-    { id: "university", label: "University Finder", icon: Search, desc: "Course advisor" },
-    { id: "notes", label: "AI Notes Maker", icon: FileText, desc: "Auto-generate notes" },
-    { id: "brain", label: "Study Memory", icon: Brain, desc: "Learning tracker" },
-  ];
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+      recognitionRef.current.onstart = () => setIsListening(true);
+      recognitionRef.current.onend = () => setIsListening(false);
+      recognitionRef.current.onresult = (event: any) => {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            handleUserMessage(transcript);
+          } else {
+            interim += transcript;
+          }
+        }
+        if (interim) setCurrentMessage(interim);
       };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-        handleAudioSubmit(audioBlob);
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      toast({ title: "Recording started", description: "Speak now..." });
-    } catch (error) {
-      toast({ title: "Error", description: "Could not access microphone", variant: "destructive" });
     }
-  };
+  }, []);
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+  // Start listening on component mount
+  useEffect(() => {
+    if (recognitionRef.current && isCallActive && !isMuted) {
+      recognitionRef.current.start();
     }
-  };
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, [isCallActive, isMuted]);
 
-  const handleAudioSubmit = async (audioBlob: Blob) => {
-    console.log("Audio submitted:", audioBlob.size, "bytes");
-    // TODO: Send to Vapi API or backend for processing
-    toast({ title: "Processing audio", description: "Converting speech to text..." });
-  };
+  // Animate avatar
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  const handleTextSubmit = async () => {
-    if (!inputText.trim()) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    setMessages([...messages, { role: "user", content: inputText }]);
-    setInputText("");
+    const drawAvatar = (mouthOpen: boolean) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // TODO: Send to LEARNORY AI system
-    toast({ title: "Sending to LEARNORY AI...", description: "Processing your message" });
+      // Head
+      ctx.fillStyle = avatarGender === "female" ? "#fdbcb4" : "#daa520";
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2, canvas.height / 2 - 20, 60, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes
+      ctx.fillStyle = "#333";
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2 - 20, canvas.height / 2 - 40, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2 + 20, canvas.height / 2 - 40, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Mouth
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (mouthOpen) {
+        ctx.ellipse(canvas.width / 2, canvas.height / 2 + 20, 15, 20, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#8b4545";
+        ctx.fill();
+      } else {
+        ctx.moveTo(canvas.width / 2 - 15, canvas.height / 2 + 20);
+        ctx.quadraticCurveTo(canvas.width / 2, canvas.height / 2 + 25, canvas.width / 2 + 15, canvas.height / 2 + 20);
+      }
+      ctx.stroke();
+
+      // Hair
+      ctx.fillStyle = avatarGender === "female" ? "#8B4513" : "#654321";
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2, canvas.height / 2 - 80, 65, 0, Math.PI, true);
+      ctx.fill();
+
+      animationRef.current = requestAnimationFrame(() => {
+        const nextMouthOpen = Math.random() > 0.5 && currentMessage.length > 0;
+        drawAvatar(nextMouthOpen);
+      });
+    };
+
+    drawAvatar(false);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [avatarGender, currentMessage]);
+
+  const handleUserMessage = async (text: string) => {
+    if (!text.trim()) return;
+
+    const userMsg: Message = { role: "user", content: text, timestamp: new Date() };
+    setMessages((prev) => [...prev, userMsg]);
+    setCurrentMessage("");
+
+    toast({ title: "Processing...", description: "LEARNORY is thinking..." });
 
     // Simulate AI response
     setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `I received your message in ${selectedMode} mode. How can I help you learn today?`,
-        },
-      ]);
-    }, 1000);
+      const aiResponses = [
+        "That's a great question! Let me explain this clearly...",
+        "I understand. Here's how this works...",
+        "Interesting! Let me break this down for you...",
+        "Perfect! This is an important concept...",
+        "Absolutely! Let me help you with that...",
+      ];
+
+      const response = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+      const aiMsg: Message = { role: "assistant", content: response, timestamp: new Date() };
+      setMessages((prev) => [...prev, aiMsg]);
+      setCurrentMessage(response);
+
+      // Speak the response
+      if (isSpeakerOn) {
+        const utterance = new SpeechSynthesisUtterance(response);
+        utterance.rate = 1;
+        utterance.pitch = avatarGender === "female" ? 1.2 : 0.8;
+        window.speechSynthesis.speak(utterance);
+      }
+    }, 1500);
   };
 
-  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const newDoc = {
-      id: Math.random().toString(),
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      uploadedAt: new Date(),
-    };
-
-    setUploadedDocs([...uploadedDocs, newDoc]);
-    toast({ title: "Document uploaded", description: `${file.name} is being analyzed...` });
-
-    // TODO: Send to backend for AI analysis
+  const toggleCall = () => {
+    if (isCallActive) {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    }
+    setIsCallActive(!isCallActive);
   };
+
+  if (!isCallActive) {
+    return (
+      <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 items-center justify-center">
+        <Card className="p-8 bg-slate-800/50 border-purple-500/20 text-center max-w-md">
+          <h1 className="text-3xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Call Ended
+          </h1>
+          <p className="text-slate-300 mb-6">Thank you for learning with LEARNORY AI</p>
+          <Button onClick={() => setIsCallActive(true)} size="lg" className="w-full mb-3">
+            Start New Call
+          </Button>
+          <Link href="/chat">
+            <Button variant="outline" className="w-full">
+              Back to Chat
+            </Button>
+          </Link>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-gradient-to-r from-slate-900/95 to-slate-800/95 backdrop-blur-xl border-b border-purple-500/20 p-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <header className="bg-gradient-to-r from-slate-900/95 to-slate-800/95 backdrop-blur-xl border-b border-purple-500/20 p-4 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Zap className="w-6 h-6 text-purple-400" />
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              LEARNORY LIVE AI
-            </h1>
+            <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
+            <h1 className="text-2xl font-bold text-white">LEARNORY LIVE AI</h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex gap-2 bg-slate-700/50 rounded-lg p-2">
+              <Button
+                variant={avatarGender === "female" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setAvatarGender("female")}
+                data-testid="button-avatar-female"
+                className="gap-2"
+              >
+                Female
+              </Button>
+              <Button
+                variant={avatarGender === "male" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setAvatarGender("male")}
+                data-testid="button-avatar-male"
+                className="gap-2"
+              >
+                Male
+              </Button>
+            </div>
             <Link href="/chat">
-              <Button variant="outline" size="sm" className="gap-2">
-                <MessageCircle className="w-4 h-4" /> Back to Chat
+              <Button variant="outline" size="sm">
+                Exit
               </Button>
             </Link>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Chat Area */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Mode Selector */}
-          <Card className="p-4 bg-slate-800/50 border-slate-700 backdrop-blur">
-            <div className="flex gap-2 flex-wrap">
-              {modes.map((mode) => (
-                <Button
-                  key={mode.id}
-                  variant={selectedMode === mode.id ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setSelectedMode(mode.id)}
-                  className="gap-2"
-                  data-testid={`button-mode-${mode.id}`}
-                >
-                  <mode.icon className="w-4 h-4" />
-                  {mode.label}
-                </Button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Messages Area */}
-          <Card className="h-96 bg-slate-800/50 border-slate-700 p-4 overflow-y-auto space-y-4">
-            {messages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-center">
-                <div>
-                  <Zap className="w-12 h-12 text-purple-400/30 mx-auto mb-3" />
-                  <p className="text-slate-400">Start a conversation or upload a document...</p>
-                </div>
-              </div>
-            ) : (
-              messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-xs px-4 py-2 rounded-lg ${
-                      msg.role === "user"
-                        ? "bg-purple-600 text-white"
-                        : "bg-slate-700 text-slate-100"
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
-              ))
-            )}
-          </Card>
-
-          {/* Input Area */}
-          <Card className="p-4 bg-slate-800/50 border-slate-700 space-y-3">
-            <div className="flex gap-2">
-              <Button
-                variant={isRecording ? "destructive" : "default"}
-                onClick={isRecording ? stopRecording : startRecording}
-                className="gap-2"
-                data-testid="button-voice"
-              >
-                {isRecording ? (
-                  <> <MicOff className="w-4 h-4" /> Stop </> 
-                ) : (
-                  <> <Mic className="w-4 h-4" /> Speak </>
-                )}
-              </Button>
-              <label className="flex-1">
-                <input type="file" hidden onChange={handleDocumentUpload} accept=".pdf,.jpg,.png,.docx" />
-                <Button variant="outline" className="w-full gap-2" asChild>
-                  <span>
-                    <Upload className="w-4 h-4" /> Upload File
-                  </span>
-                </Button>
-              </label>
-            </div>
-            <div className="flex gap-2">
-              <Textarea
-                placeholder="Ask LEARNORY anything... or upload a document"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleTextSubmit()}
-                className="resize-none border-slate-700"
-                data-testid="input-message"
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 p-6 max-w-7xl mx-auto w-full">
+        {/* Avatar Section */}
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <Card className="w-full h-96 bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30 backdrop-blur flex items-center justify-center overflow-hidden">
+            <div ref={videoRef} className="w-full h-full flex items-center justify-center bg-slate-900/50">
+              <canvas
+                ref={canvasRef}
+                width={300}
+                height={400}
+                className="max-w-full h-auto drop-shadow-2xl"
+                data-testid="canvas-avatar"
               />
-              <Button onClick={handleTextSubmit} size="icon" data-testid="button-send">
-                <Send className="w-4 h-4" />
-              </Button>
             </div>
           </Card>
+
+          {/* Live Status */}
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-400 mb-2">
+              {isListening ? "Listening..." : "Ready to talk"}
+            </p>
+            <div className="text-lg font-semibold text-white min-h-6">
+              {currentMessage && `"${currentMessage}"`}
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="mt-6 flex gap-3 flex-wrap justify-center">
+            <Button
+              variant={isMuted ? "destructive" : "default"}
+              size="lg"
+              onClick={() => setIsMuted(!isMuted)}
+              data-testid="button-mute"
+              className="gap-2"
+            >
+              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              {isMuted ? "Muted" : "Listening"}
+            </Button>
+
+            <Button
+              variant={isSpeakerOn ? "default" : "outline"}
+              size="lg"
+              onClick={() => setIsSpeakerOn(!isSpeakerOn)}
+              data-testid="button-speaker"
+              className="gap-2"
+            >
+              {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              Speaker
+            </Button>
+
+            <Button
+              variant="destructive"
+              size="lg"
+              onClick={toggleCall}
+              data-testid="button-end-call"
+              className="gap-2"
+            >
+              <PhoneOff className="w-5 h-5" />
+              End Call
+            </Button>
+          </div>
         </div>
 
-        {/* Features Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Features */}
-          <Card className="p-4 bg-slate-800/50 border-slate-700 backdrop-blur">
-            <h2 className="font-bold text-lg mb-3 text-white">AI Features</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {features.map((feature) => (
-                <Button
-                  key={feature.id}
-                  variant="outline"
-                  size="sm"
-                  className="flex flex-col items-center justify-center h-auto py-2 gap-1 text-xs"
-                  onClick={() => toast({ title: feature.label, description: feature.desc })}
-                  data-testid={`button-feature-${feature.id}`}
-                >
-                  <feature.icon className="w-4 h-4" />
-                  <span className="line-clamp-2">{feature.label}</span>
-                </Button>
-              ))}
+        {/* Chat History */}
+        <div className="flex-1 flex flex-col">
+          <Card className="flex-1 bg-slate-800/50 border-slate-700 overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-700">
+              <h2 className="font-bold text-white">Conversation</h2>
             </div>
-          </Card>
 
-          {/* Uploaded Documents */}
-          {uploadedDocs.length > 0 && (
-            <Card className="p-4 bg-slate-800/50 border-slate-700 backdrop-blur">
-              <h2 className="font-bold text-lg mb-3 text-white flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Documents
-              </h2>
-              <div className="space-y-2">
-                {uploadedDocs.map((doc) => (
-                  <div key={doc.id} className="p-2 bg-slate-700/50 rounded text-sm flex items-center justify-between">
-                    <span className="truncate">{doc.name}</span>
-                    <Button size="icon" variant="ghost" className="h-6 w-6">
-                      <X className="w-3 h-3" />
-                    </Button>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-center">
+                  <div>
+                    <Loader className="w-8 h-8 text-purple-400 mx-auto mb-2 animate-spin" />
+                    <p className="text-slate-400">Start speaking to begin...</p>
                   </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* AI Status */}
-          <Card className="p-4 bg-gradient-to-br from-purple-600/20 to-pink-600/20 border-purple-500/50 backdrop-blur">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-sm text-slate-300">AI Status: Ready</span>
+                </div>
+              ) : (
+                messages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    data-testid={`message-${msg.role}-${i}`}
+                  >
+                    <div
+                      className={`max-w-xs px-4 py-2 rounded-lg ${
+                        msg.role === "user"
+                          ? "bg-purple-600 text-white"
+                          : "bg-slate-700 text-slate-100"
+                      }`}
+                    >
+                      <p className="text-sm">{msg.content}</p>
+                      <p className="text-xs opacity-50 mt-1">
+                        {msg.timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-            <p className="text-xs text-slate-400">Vapi AI Connected • Document Processing Active</p>
+
+            {/* Input Info */}
+            <div className="p-4 border-t border-slate-700 bg-slate-900/50">
+              <p className="text-xs text-slate-400 text-center">
+                🎤 Speak naturally • AI will respond in real-time
+              </p>
+            </div>
           </Card>
         </div>
       </div>
