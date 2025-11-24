@@ -94,13 +94,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: msg.content
       }));
 
-      console.log("Getting AI response with", messages.length, "messages");
+      console.log("Getting AI response with", messages.length, "messages", messages);
 
       // Get AI response
       let aiResponse: string;
       try {
         aiResponse = await chatWithAI(messages);
-        console.log("Got AI response:", aiResponse.substring(0, 100));
+        console.log("Got AI response:", aiResponse.substring(0, 150));
+        if (!aiResponse || aiResponse.trim() === "") {
+          console.warn("Empty AI response!");
+          aiResponse = "I received your message but had trouble formulating a response. Please try again.";
+        }
       } catch (aiError) {
         console.error("AI API error:", aiError);
         aiResponse = "I'm having trouble connecting to my AI services right now. Please try again in a moment.";
