@@ -1444,6 +1444,55 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Real-time Audio API: Transcribe voice to text
+  app.post('/api/audio/transcribe', isAuthenticated, upload.single('audio'), async (req: any, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No audio file provided" });
+      }
+
+      const tempFile = path.join(os.tmpdir(), `voice_${Date.now()}.wav`);
+      fs.writeFileSync(tempFile, req.file.buffer);
+
+      try {
+        const { text } = await transcribeAudio(tempFile);
+        console.log("✓ Transcribed:", text);
+        res.json({ text, success: true });
+      } finally {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      }
+    } catch (error: any) {
+      console.error("Transcription error:", error);
+      res.status(500).json({ 
+        message: error?.message || "Transcription failed",
+        text: ""
+      });
+    }
+  });
+
+  // Real-time Audio API: Convert text to speech
+  app.post('/api/audio/speak', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { text, voice = "alloy" } = req.body;
+
+      if (!text?.trim()) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+
+      // Generate speech using OpenAI TTS
+      const audioBuffer = await generateSpeech(text);
+      
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', audioBuffer.length);
+      res.send(audioBuffer);
+    } catch (error: any) {
+      console.error("Speech generation error:", error);
+      res.status(500).json({ message: error?.message || "Speech generation failed" });
+    }
+  });
+
 
   // Send notifications for all previous chat history
   app.post('/api/notifications/send-chat-history', isAuthenticated, async (req: any, res: Response) => {

@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Send, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
+import { Send, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
@@ -26,15 +26,15 @@ export default function LiveAI() {
   const [tone, setTone] = useState("friendly");
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [currentMode, setCurrentMode] = useState("explain");
   const [messageInput, setMessageInput] = useState("");
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const recognitionRef = useRef<any>(null);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const messageCountRef = useRef(0);
   const initRef = useRef(false);
 
@@ -65,131 +65,155 @@ export default function LiveAI() {
 
     if (!initRef.current) {
       initRef.current = true;
-      initializeSpeechRecognition();
-      synthRef.current = window.speechSynthesis;
+      initializeAudio();
       
-      // Auto-start with greeting
+      // Auto-greet
       setTimeout(() => {
-        setIsVoiceActive(true);
         const greetings = [
           "Hello! I'm your LEARNORY AI tutor. What would you like to learn today?",
-          "Hi! I'm here to help you learn. What topic interests you?",
-          "Welcome to LEARNORY! I'm ready to assist with your studies.",
+          "Hi! I'm here to help you study. What topic interests you?",
+          "Welcome to LEARNORY! I'm ready to assist with your learning.",
         ];
         const greeting = greetings[Math.floor(Math.random() * greetings.length)];
         addMessage("assistant", greeting);
-        speakMessage(greeting);
-        toast({ title: "Connected", description: "LEARNORY Live AI is ready!" });
-      }, 500);
+        playAudio(greeting);
+      }, 1000);
     }
   }, []);
 
-  const initializeSpeechRecognition = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.error("Speech Recognition not supported");
+  const initializeAudio = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+        audioChunksRef.current = [];
+        await processAudio(audioBlob);
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      toast({ title: "Microphone Ready", description: "LEARNORY Live AI is ready to listen!" });
+    } catch (error) {
+      console.error("Microphone access error:", error);
       toast({
-        title: "Browser Support",
-        description: "Speech recognition not supported in your browser",
+        title: "Microphone Error",
+        description: "Please enable microphone access",
         variant: "destructive",
       });
-      return;
     }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = language;
-
-    recognition.onstart = () => {
-      console.log("Listening...");
-      setIsListening(true);
-    };
-
-    recognition.onend = () => {
-      console.log("Stopped listening");
-      setIsListening(false);
-      if (isVoiceActive) {
-        recognition.start(); // Restart for continuous listening
-      }
-    };
-
-    recognition.onresult = (event: any) => {
-      let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-
-      if (event.results[event.results.length - 1].isFinal && transcript.trim()) {
-        console.log("Final transcript:", transcript);
-        handleUserSpeech(transcript.trim());
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error);
-    };
-
-    recognitionRef.current = recognition;
   };
 
-  const handleUserSpeech = async (text: string) => {
-    if (!text.trim()) return;
+  const startRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    
+    audioChunksRef.current = [];
+    mediaRecorderRef.current.start();
+    setIsRecording(true);
+  };
 
-    // Add user message
-    addMessage("user", text);
+  const stopRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+  };
 
-    // Get AI response
+  const processAudio = async (audioBlob: Blob) => {
+    setIsProcessing(true);
     try {
-      const response = await fetch("/api/chat/send", {
+      // Upload audio to transcribe
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "audio.wav");
+
+      const transcribeRes = await fetch("/api/audio/transcribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: text,
-          sessionId: null,
-        }),
+        body: formData,
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const aiMessage = data.message || data.content || "I understood your question. Let me help you with that.";
-        addMessage("assistant", aiMessage);
-        speakMessage(aiMessage);
+      if (!transcribeRes.ok) {
+        throw new Error("Transcription failed");
       }
+
+      const { text } = await transcribeRes.json();
+      console.log("Transcribed:", text);
+
+      if (!text?.trim()) {
+        toast({ description: "Could not understand audio. Please try again." });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Add user message
+      addMessage("user", text);
+
+      // Get AI response
+      const chatRes = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text, sessionId: null }),
+      });
+
+      if (!chatRes.ok) {
+        throw new Error("AI response failed");
+      }
+
+      const chatData = await chatRes.json();
+      const aiMessage = chatData.message || chatData.content || "I understood your question. Let me help you.";
+      addMessage("assistant", aiMessage);
+
+      // Play AI response as speech
+      await playAudio(aiMessage);
     } catch (error) {
-      console.error("Error getting AI response:", error);
-      const errorMsg = "Sorry, I encountered an error. Could you repeat that?";
-      addMessage("assistant", errorMsg);
-      speakMessage(errorMsg);
+      console.error("Error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to process audio",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const speakMessage = (text: string) => {
-    if (!synthRef.current) return;
+  const playAudio = async (text: string) => {
+    setIsSpeaking(true);
+    try {
+      const response = await fetch("/api/audio/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice: voice === "female" ? "nova" : "onyx" }),
+      });
 
-    // Cancel any ongoing speech
-    synthRef.current.cancel();
+      if (!response.ok) {
+        throw new Error("Speech generation failed");
+      }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = speed;
-    utterance.pitch = voice === "female" ? 1.2 : 0.8;
-    utterance.volume = 1;
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      audio.onended = () => {
+        setIsSpeaking(false);
+      };
 
-    utterance.onstart = () => {
-      console.log("Speaking...");
-      setIsSpeaking(true);
-    };
-
-    utterance.onend = () => {
-      console.log("Done speaking");
+      audio.play();
+    } catch (error) {
+      console.error("Audio playback error:", error);
       setIsSpeaking(false);
-    };
-
-    utterance.onerror = (event: any) => {
-      console.error("Speech synthesis error:", event.error);
-    };
-
-    synthRef.current.speak(utterance);
+      toast({
+        title: "Audio Error",
+        description: "Could not play audio",
+        variant: "destructive",
+      });
+    }
   };
 
   const addMessage = (role: "user" | "assistant", content: string) => {
@@ -207,58 +231,34 @@ export default function LiveAI() {
 
     const userText = messageInput;
     setMessageInput("");
-
-    addMessage("user", userText);
-    speakMessage(`User asked: ${userText}`);
+    setIsProcessing(true);
 
     try {
+      addMessage("user", userText);
+
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: userText,
-          sessionId: null,
-        }),
+        body: JSON.stringify({ content: userText, sessionId: null }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const aiMessage = data.message || data.content || "Got it! Let me help you.";
-        addMessage("assistant", aiMessage);
-        speakMessage(aiMessage);
+      if (!response.ok) {
+        throw new Error("Failed to get response");
       }
+
+      const data = await response.json();
+      const aiMessage = data.message || data.content || "Got it!";
+      addMessage("assistant", aiMessage);
+      await playAudio(aiMessage);
     } catch (error) {
       console.error("Error:", error);
-      const errorMsg = "Sorry, I encountered an error processing your request.";
-      addMessage("assistant", errorMsg);
-      speakMessage(errorMsg);
-    }
-  };
-
-  const handleToggleMute = () => {
-    setIsMuted(!isMuted);
-    if (!isMuted && synthRef.current) {
-      synthRef.current.pause();
-    } else if (isMuted && synthRef.current) {
-      synthRef.current.resume();
-    }
-  };
-
-  const handleEndCall = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    if (synthRef.current) {
-      synthRef.current.cancel();
-    }
-    setIsVoiceActive(false);
-    setIsListening(false);
-  };
-
-  const handleStartListening = () => {
-    if (recognitionRef.current && !isListening) {
-      setIsVoiceActive(true);
-      recognitionRef.current.start();
+      toast({
+        title: "Error",
+        description: "Failed to process message",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -282,42 +282,36 @@ export default function LiveAI() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Sidebar */}
             <div className="lg:col-span-1 space-y-4">
-              {/* Call Controls */}
+              {/* Recording Controls */}
               <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
                 <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                  Call Controls
+                  Voice Control
                 </h3>
                 <div className="space-y-2">
                   <Button
-                    onClick={handleStartListening}
-                    disabled={isListening}
-                    variant="default"
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={isProcessing}
+                    variant={isRecording ? "destructive" : "default"}
                     className="w-full gap-2"
+                    data-testid={isRecording ? "button-stop-recording" : "button-start-recording"}
                   >
-                    <Mic className="w-4 h-4" />
-                    {isListening ? "Listening..." : "Start Listening"}
-                  </Button>
-                  <Button
-                    onClick={handleToggleMute}
-                    variant={isMuted ? "destructive" : "outline"}
-                    className="w-full gap-2"
-                  >
-                    {isMuted ? (
+                    {isRecording ? (
                       <>
                         <MicOff className="w-4 h-4" />
-                        Muted
+                        Stop Recording
                       </>
                     ) : (
                       <>
-                        <Volume2 className="w-4 h-4" />
-                        Speaking
+                        <Mic className="w-4 h-4" />
+                        Start Recording
                       </>
                     )}
                   </Button>
-                  <Button onClick={handleEndCall} variant="destructive" className="w-full gap-2">
-                    <PhoneOff className="w-4 h-4" />
-                    End Call
-                  </Button>
+                  <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                    {isRecording && "🔴 Recording..."}
+                    {isSpeaking && "🔊 Speaking..."}
+                    {isProcessing && "⏳ Processing..."}
+                  </div>
                 </div>
               </Card>
 
@@ -343,6 +337,7 @@ export default function LiveAI() {
                   onClick={() => setIsDarkMode(!isDarkMode)}
                   variant="outline"
                   className="w-full"
+                  data-testid="button-toggle-theme"
                 >
                   {isDarkMode ? "☀️ Light" : "🌙 Dark"}
                 </Button>
@@ -361,8 +356,8 @@ export default function LiveAI() {
               >
                 <AvatarDisplay 
                   voice={voice} 
-                  isActive={isSpeaking} 
-                  isListening={isListening} 
+                  isActive={isSpeaking || isRecording} 
+                  isListening={isRecording}
                 />
               </Card>
 
@@ -375,14 +370,14 @@ export default function LiveAI() {
               </Card>
 
               {/* Chat */}
-              <Tabs defaultValue="chat" className="w-full">
+              <Tabs defaultValue="voice" className="w-full">
                 <TabsList className="w-full grid grid-cols-2">
-                  <TabsTrigger value="chat">Chat</TabsTrigger>
+                  <TabsTrigger value="voice">Voice Chat</TabsTrigger>
                   <TabsTrigger value="type">Type Message</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chat">
-                  <ChatInterface messages={messages} isLoading={false} isDarkMode={isDarkMode} />
+                <TabsContent value="voice">
+                  <ChatInterface messages={messages} isLoading={isProcessing} isDarkMode={isDarkMode} />
                 </TabsContent>
 
                 <TabsContent value="type">
@@ -399,14 +394,17 @@ export default function LiveAI() {
                         }}
                         rows={4}
                         className="resize-none"
+                        disabled={isProcessing}
+                        data-testid="textarea-message"
                       />
                       <Button
                         onClick={handleSendMessage}
-                        disabled={!messageInput.trim()}
+                        disabled={!messageInput.trim() || isProcessing}
                         className="w-full gap-2"
+                        data-testid="button-send-message"
                       >
                         <Send className="w-4 h-4" />
-                        Send & Speak
+                        Send & Listen
                       </Button>
                     </div>
                   </Card>
