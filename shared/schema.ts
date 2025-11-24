@@ -22,6 +22,7 @@ export const quizDifficultyEnum = pgEnum('quiz_difficulty', ['easy', 'medium', '
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'completed', 'failed']);
 export const learningModeEnum = pgEnum('learning_mode', ['learning', 'exam', 'revision', 'quick', 'eli5', 'advanced', 'practice']);
 export const examTypeEnum = pgEnum('exam_type', ['waec', 'neco', 'jamb', 'university', 'custom']);
+export const notificationTypeEnum = pgEnum('notification_type', ['chat', 'motivation', 'achievement', 'reminder', 'exam', 'study_plan', 'system']);
 
 // Session storage table (required for Replit Auth)
 export const sessions = pgTable(
@@ -117,6 +118,24 @@ export const lessons = pgTable("lessons", {
 export const insertLessonSchema = createInsertSchema(lessons).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertLesson = z.infer<typeof insertLessonSchema>;
 export type Lesson = typeof lessons.$inferSelect;
+
+// Notifications
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: notificationTypeEnum("type").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  icon: varchar("icon", { length: 50 }),
+  actionUrl: varchar("action_url", { length: 512 }),
+  read: boolean("read").default(false).notNull(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("IDX_notification_user_id").on(table.userId), index("IDX_notification_created").on(table.createdAt)]);
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, sentAt: true });
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
 
 // Live sessions
 export const liveSessions = pgTable("live_sessions", {

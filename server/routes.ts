@@ -73,6 +73,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.warn("Session not found, creating new session");
           const newSession = await storage.createChatSession({ userId, title: "New Chat", mode: "chat", summary: "" });
           sessionId = newSession.id;
+          
+          // Send notification for new chat
+          try {
+            await storage.createNotification({
+              userId,
+              type: "chat",
+              title: "New Chat Started",
+              message: `You started a new chat session`,
+              icon: "💬",
+              actionUrl: `/chat?sessionId=${sessionId}`,
+              read: false,
+            });
+          } catch (err) {
+            console.log("Notification skipped");
+          }
         }
       }
 
@@ -1262,6 +1277,76 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Notification routes
+  app.get('/api/notifications', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const notifications = await storage.getNotificationsByUser(userId, limit);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.post('/api/notifications', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { type, title, message, icon, actionUrl } = req.body;
+
+      const notification = await storage.createNotification({
+        userId,
+        type: type || 'system',
+        title,
+        message,
+        icon,
+        actionUrl,
+        read: false,
+      });
+
+      res.status(201).json(notification);
+    } catch (error) {
+      console.error("Error creating notification:", error);
+      res.status(500).json({ message: "Failed to create notification" });
+    }
+  });
+
+  app.get('/api/notifications/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const notification = await storage.getNotification(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      console.error("Error fetching notification:", error);
+      res.status(500).json({ message: "Failed to fetch notification" });
+    }
+  });
+
+  app.patch('/api/notifications/:id/read', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const notification = await storage.markNotificationAsRead(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.delete('/api/notifications/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      await storage.deleteNotification(req.params.id);
+      res.json({ message: "Notification deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Failed to delete notification" });
+    }
+  });
 
   return httpServer;
 }

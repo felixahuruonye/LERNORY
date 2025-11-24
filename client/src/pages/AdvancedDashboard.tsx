@@ -29,6 +29,7 @@ import {
   FileText,
   Lightbulb,
   Users,
+  Bell,
 } from "lucide-react";
 
 export default function AdvancedDashboard() {
@@ -114,6 +115,12 @@ export default function AdvancedDashboard() {
             {/* Right Controls */}
             <div className="flex items-center gap-3">
               <ThemeToggle />
+              <Button variant="ghost" size="icon" asChild className="hover-elevate relative" data-testid="link-notifications">
+                <Link href="/notifications">
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                </Link>
+              </Button>
               <Button variant="ghost" size="icon" asChild className="hover-elevate" data-testid="link-settings">
                 <Link href="/settings">
                   <Settings className="h-5 w-5" />
