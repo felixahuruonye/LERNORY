@@ -195,9 +195,17 @@ export default function LiveAI() {
     mouthAnimationRef.current = true;
 
     try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1;
+      // Clean up text for speech
+      let cleanText = text
+        .replace(/LEARNORY/g, "Learnory")  // Make it sound natural
+        .replace(/\*\*/g, "")  // Remove markdown bold markers
+        .replace(/###/g, "")   // Remove markdown headers
+        .replace(/\n\n+/g, ". "); // Replace multiple newlines with periods
+      
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 0.95;  // Slightly slower for clarity
       utterance.pitch = voice === "female" ? 1.2 : 0.8;
+      utterance.volume = 0.7; // Reduce volume to minimize noise
       
       utterance.onend = () => {
         setIsSpeaking(false);
@@ -239,8 +247,14 @@ export default function LiveAI() {
 
       const data = await response.json();
       console.log("API Response:", data);
-      const aiMessage = data.message || "Got it!";
+      let aiMessage = data.message || "Got it!";
       console.log("AI Message to display:", aiMessage);
+      
+      // Clean up display text
+      aiMessage = aiMessage
+        .replace(/LEARNORY/g, "Learnory")
+        .trim();
+      
       if (!aiMessage || aiMessage.trim() === "") {
         throw new Error("Empty response from API");
       }
