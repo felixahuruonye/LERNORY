@@ -66,8 +66,8 @@ async function tryWithFallback<T>(
 }
 
 export async function chatWithAI(messages: Array<{role: string; content: string}>): Promise<string> {
-  // Import tutoring system
-  const { generateTutorSystemPrompt } = await import("./tutorSystem");
+  // Import LEARNORY Ultra-Advanced System
+  const { generateLEARNORYSystemPrompt } = await import("./learnorySystem");
   
   // Detect language and mode
   const lastMessage = messages[messages.length - 1]?.content || "";
@@ -76,17 +76,35 @@ export async function chatWithAI(messages: Array<{role: string; content: string}
   
   const modeMatch = lastMessage.match(/\[MODE:\s*(learning|exam|revision|quick|eli5|advanced|practice)\]/i);
   const requestedMode = modeMatch ? modeMatch[1].toLowerCase() : 'learning';
+  
+  // Detect subject from message
+  const subjectKeywords = {
+    mathematics: ["math", "algebra", "calculus", "geometry", "equation", "formula"],
+    physics: ["physics", "force", "motion", "energy", "wave", "velocity"],
+    chemistry: ["chemistry", "reaction", "element", "molecule", "bond", "compound"],
+    biology: ["biology", "cell", "organism", "dna", "gene", "photosynthesis"],
+    english: ["english", "grammar", "essay", "literature", "writing"],
+    government: ["government", "constitution", "politics", "civic"],
+  };
+  
+  let detectedSubject = "general";
+  const messageText = lastMessage.toLowerCase();
+  for (const [subject, keywords] of Object.entries(subjectKeywords)) {
+    if (keywords.some(kw => messageText.includes(kw))) {
+      detectedSubject = subject;
+      break;
+    }
+  }
 
-  // Generate comprehensive system prompt with learning context
-  const systemPrompt = generateTutorSystemPrompt({
-    userId: "user",
+  // Generate comprehensive LEARNORY Ultra-Advanced system prompt
+  const systemPrompt = generateLEARNORYSystemPrompt({
+    subject: detectedSubject,
     userLevel: "intermediate",
-    subjects: [],
     weakTopics: [],
-    strongTopics: [],
-    recentTopics: [],
-    learningMode: requestedMode as any,
-    preferences: { language: requestedLanguage || "English" }
+    examType: "jamb",
+    daysUntilExam: 30,
+    currentStreak: 0,
+    averageScore: 0,
   });
 
   const messagesWithSystem = messages[0]?.role !== "system" 
