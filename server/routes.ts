@@ -20,7 +20,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -81,6 +81,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: msg.role,
         content: msg.content
       }));
+
+      // Generate smart title after first message if session has default title
+      if (sessionId && messages.length === 1) {
+        try {
+          const session = await storage.getChatSession(sessionId);
+          if (session && (session.title === "New Chat" || session.title.startsWith("Chat "))) {
+            const smartTitle = await generateSmartChatTitle(messages);
+            await storage.updateChatSession(sessionId, { title: smartTitle });
+          }
+        } catch (titleError) {
+          console.error("Error generating smart title:", titleError);
+          // Continue even if title generation fails
+        }
+      }
 
       // Get AI response
       const aiResponse = await chatWithAI(messages);

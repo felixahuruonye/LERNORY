@@ -368,7 +368,7 @@ export default function Chat() {
             sessions.map((session) => (
               <div
                 key={session.id}
-                className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                className={`flex items-center gap-1 p-2 rounded cursor-pointer transition-colors ${
                   currentSessionId === session.id
                     ? "bg-primary/20 text-primary"
                     : "hover:bg-muted"
@@ -377,14 +377,15 @@ export default function Chat() {
                 <MessageSquare className="h-4 w-4 shrink-0" />
                 <button
                   onClick={() => setCurrentSessionId(session.id)}
-                  className="flex-1 text-left text-sm truncate hover-elevate active-elevate-2 p-1"
+                  className="flex-1 text-left text-xs sm:text-sm truncate hover-elevate active-elevate-2 p-1 min-w-0"
+                  title={session.title}
                   data-testid={`button-session-${session.id}`}
                 >
                   {session.title}
                 </button>
                 <button
                   onClick={() => deleteSessionMutation.mutate(session.id)}
-                  className="opacity-0 hover:opacity-100 transition-opacity p-1"
+                  className="opacity-0 hover:opacity-100 transition-opacity p-1 shrink-0"
                   data-testid={`button-delete-session-${session.id}`}
                 >
                   <Trash2 className="h-3 w-3" />

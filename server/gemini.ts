@@ -290,3 +290,53 @@ export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGe
     };
   }
 }
+
+export async function generateSmartChatTitle(messages: Array<{ role: string; content: string }>): Promise<string> {
+  const prompt = `You are an expert at summarizing conversations. Read the following chat conversation and generate a SHORT, descriptive title that captures the main topic or theme.
+
+The title should:
+- Be 2-6 words maximum
+- Be concise and fit on mobile screens
+- Capture the main topic/theme of the conversation
+- Use clear, everyday language
+- NOT be generic like "Chat", "Conversation", or "Help"
+
+Conversation:
+${messages.map((m) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join('\n')}
+
+Return ONLY the title text, nothing else. No quotes, no explanation.`;
+
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("LEARNORY AI: Generating smart chat title...");
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    let title = response.text?.trim();
+    
+    if (!title || title.length === 0) {
+      console.warn("Empty title from Gemini, using fallback");
+      title = "New Conversation";
+    }
+
+    // Ensure title is not too long (max 50 chars)
+    if (title.length > 50) {
+      title = title.substring(0, 47) + "...";
+    }
+
+    console.log("Smart chat title generated:", title);
+    return title;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error generating smart chat title:", errorMsg);
+    
+    // Fallback to a generic title if Gemini fails
+    return "New Conversation";
+  }
+}
