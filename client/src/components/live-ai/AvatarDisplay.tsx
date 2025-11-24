@@ -121,13 +121,13 @@ export function AvatarDisplay({ voice, isActive, isListening, isMouthOpen = fals
       ctx.lineTo(canvas.width / 2, canvas.height / 2 + 5);
       ctx.stroke();
 
-      // Mouth - animate when speaking or listening
+      // Mouth - animate ONLY when actively speaking
       ctx.strokeStyle = voice === "female" ? "#E75480" : "#B8604B";
       ctx.lineWidth = 2;
       ctx.beginPath();
 
-      if ((mouthOpen || isActive) && (isListening || isActive)) {
-        // Open mouth (speaking or listening)
+      if (mouthOpen && isActive) {
+        // Open mouth when speaking
         ctx.ellipse(canvas.width / 2, canvas.height / 2 + 25, 20, 15, 0, 0, Math.PI);
         ctx.fillStyle = "#8B3A3A";
         ctx.fill();
@@ -148,8 +148,8 @@ export function AvatarDisplay({ voice, isActive, isListening, isMouthOpen = fals
         }
       }
 
-      // Mouth animation when listening or active
-      if (isListening || isActive) {
+      // Mouth animation ONLY when actively speaking (isActive = isSpeaking)
+      if (isActive) {
         mouthOpen = !mouthOpen;
       } else {
         mouthOpen = false;

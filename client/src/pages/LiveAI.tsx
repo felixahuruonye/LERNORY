@@ -243,7 +243,9 @@ export default function LiveAI() {
       }
 
       const data = await response.json();
+      console.log("API Response:", data);
       const aiMessage = data.message || data.content || "Got it!";
+      console.log("AI Message to display:", aiMessage);
       addMessage("assistant", aiMessage);
 
       // Speak the response with avatar lip-syncing
