@@ -76,8 +76,9 @@ export default function Chat() {
   // Create new session
   const createSessionMutation = useMutation({
     mutationFn: async () => {
+      const chatNumber = sessions.length + 1;
       const response = await apiRequest("POST", "/api/chat/sessions", { 
-        title: `Chat ${new Date().toLocaleTimeString()}`,
+        title: `Chat ${chatNumber}`,
         mode: "chat"
       });
       return response.json();
