@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,13 @@ import {
   Download,
   Zap,
   Keyboard,
+  Volume2,
 } from "lucide-react";
+import { useVoice, AVAILABLE_VOICES } from "@/lib/useVoice";
 
 export default function SettingsPanel() {
   const { user, isLoading: authLoading } = useAuth();
+  const { selectedVoice, setSelectedVoice, speak } = useVoice();
   const [theme, setTheme] = useState("dark");
   const [notifications, setNotifications] = useState({
     messages: true,
@@ -160,6 +163,45 @@ export default function SettingsPanel() {
           label: "Reduce Animations",
           description: "Minimize motion and transitions",
           component: <Switch data-testid="switch-reduce-animations" />,
+        },
+      ],
+    },
+    {
+      title: "Voice Settings",
+      icon: Volume2,
+      items: [
+        {
+          label: "Select Voice",
+          description: "Choose your preferred AI voice for reading responses",
+          component: (
+            <div className="flex flex-col gap-2" data-testid="select-voice">
+              <select
+                value={selectedVoice}
+                onChange={(e) => {
+                  setSelectedVoice(e.target.value);
+                  speak("Voice changed successfully");
+                }}
+                className="px-3 py-2 rounded-md border border-border bg-background text-foreground"
+                data-testid="select-voice-dropdown"
+              >
+                {AVAILABLE_VOICES.map((voice) => (
+                  <option key={voice.name} value={voice.name}>
+                    {voice.name}
+                    {voice.nigerian ? " 🇳🇬" : ""}
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => speak(`Testing ${selectedVoice} voice`)}
+                className="hover-elevate"
+                data-testid="button-test-voice"
+              >
+                Test Voice
+              </Button>
+            </div>
+          ),
         },
       ],
     },

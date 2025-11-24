@@ -47,6 +47,13 @@
   --font-serif: Georgia, serif;
   --font-mono: JetBrains Mono, monospace;
   --radius: .5rem;
+  
+  /* 7D/8D Movie Effects */
+  --glass-blur: 12px;
+  --glass-opacity: 0.7;
+  --depth-z-1: 10px;
+  --depth-z-2: 20px;
+  --depth-z-3: 30px;
   --shadow-2xs: 0px 2px 0px 0px hsl(240 5% 20% / 0.02);
   --shadow-xs: 0px 2px 0px 0px hsl(240 5% 20% / 0.03);
   --shadow-sm: 0px 2px 0px 0px hsl(240 5% 20% / 0.04), 0px 1px 2px -1px hsl(240 5% 20% / 0.06);
@@ -405,5 +412,144 @@
 
   .delay-1000 {
     animation-delay: 1s;
+  }
+
+  /* 7D/8D Glassmorphic Design */
+  @keyframes float-3d {
+    0%, 100% {
+      transform: translateZ(var(--depth-z-1)) translateY(0px);
+    }
+    50% {
+      transform: translateZ(var(--depth-z-1)) translateY(-8px);
+    }
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% {
+      filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.3));
+    }
+    50% {
+      filter: drop-shadow(0 0 16px rgba(99, 102, 241, 0.6));
+    }
+  }
+
+  /* Glassmorphic Message Cards */
+  .message-glass {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 
+      0 8px 32px rgba(0, 0, 0, 0.1),
+      inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  }
+
+  .dark .message-glass {
+    background: linear-gradient(135deg, rgba(30, 30, 46, 0.5) 0%, rgba(30, 30, 46, 0.3) 100%);
+    box-shadow: 
+      0 8px 32px rgba(0, 0, 0, 0.3),
+      inset 0 1px 2px rgba(255, 255, 255, 0.1);
+  }
+
+  /* AI Message with 3D Depth */
+  .message-ai {
+    animation: float-3d 4s ease-in-out infinite;
+    perspective: 1000px;
+  }
+
+  .message-ai:hover {
+    animation: float-3d 2s ease-in-out infinite;
+    filter: drop-shadow(0 16px 24px rgba(99, 102, 241, 0.2));
+  }
+
+  /* User Message with Gradient */
+  .message-user {
+    background: linear-gradient(135deg, rgb(99, 102, 241) 0%, rgb(99, 102, 241) 100%);
+    box-shadow:
+      0 12px 32px rgba(99, 102, 241, 0.25),
+      0 2px 8px rgba(0, 0, 0, 0.15);
+    transform: perspective(1000px) rotateX(-2deg);
+  }
+
+  .message-user:hover {
+    box-shadow:
+      0 20px 48px rgba(99, 102, 241, 0.35),
+      0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: perspective(1000px) rotateX(-2deg) translateY(-2px);
+  }
+
+  /* Chat Container Depth Effect */
+  .chat-container {
+    background: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.05), transparent 50%);
+  }
+
+  .dark .chat-container {
+    background: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.03), transparent 50%);
+  }
+
+  /* Sidebar Glass Effect */
+  .sidebar-glass {
+    background: linear-gradient(180deg, rgba(240, 240, 250, 0.95) 0%, rgba(245, 245, 255, 0.9) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(200, 200, 220, 0.4);
+  }
+
+  .dark .sidebar-glass {
+    background: linear-gradient(180deg, rgba(20, 20, 30, 0.95) 0%, rgba(25, 25, 35, 0.9) 100%);
+    border-right: 1px solid rgba(100, 100, 120, 0.2);
+  }
+
+  /* Header Glass Effect */
+  .header-glass {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(250, 250, 255, 0.6) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(200, 200, 220, 0.3);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark .header-glass {
+    background: linear-gradient(180deg, rgba(30, 30, 45, 0.8) 0%, rgba(25, 25, 40, 0.6) 100%);
+    border-bottom: 1px solid rgba(100, 100, 120, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Voice Button Glow */
+  .voice-button-glow {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .voice-button-glow:hover {
+    filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.4));
+  }
+
+  .voice-button-glow.active {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+
+  /* Depth Shadow Layers */
+  .depth-1 {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  .depth-2 {
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  }
+
+  .depth-3 {
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.16);
+  }
+
+  .dark .depth-1 {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .dark .depth-2 {
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .dark .depth-3 {
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
   }
 }

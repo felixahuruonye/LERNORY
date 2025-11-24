@@ -14,20 +14,26 @@ import {
   Loader2,
   Bot,
   User as UserIcon,
+  Volume2,
+  VolumeX,
+  Settings,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useVoice } from "@/lib/useVoice";
 import type { ChatMessage, ChatSession } from "@shared/schema";
 
 export default function Chat() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const { toggleSpeak, isPlaying } = useVoice();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load chat sessions
@@ -224,6 +230,11 @@ export default function Chat() {
               <h1 className="font-semibold text-lg">LEARNORY</h1>
             </div>
             <div className="flex items-center gap-2">
+              <Link href="/settings">
+                <Button variant="ghost" size="icon" data-testid="link-settings">
+                  <Settings className="w-5 h-5" />
+                </Button>
+              </Link>
               <Link href="/dashboard">
                 <Button variant="ghost" size="icon" data-testid="link-back">
                   <ArrowLeft className="w-5 h-5" />
@@ -263,16 +274,43 @@ export default function Chat() {
                   )}
 
                   <div
-                    className={`max-w-2xl rounded-lg p-3 ${
+                    className={`max-w-2xl rounded-lg p-4 backdrop-blur-md transition-all duration-300 ${
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground border border-border"
+                        ? "bg-gradient-to-br from-primary/90 to-primary/70 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/40"
+                        : "bg-gradient-to-br from-muted/80 to-muted/60 text-foreground border border-border/50 shadow-lg shadow-black/10 dark:shadow-black/30 hover:shadow-black/20 dark:hover:shadow-black/40"
                     }`}
                     data-testid={`card-message-${msg.id}`}
                   >
-                    <p className="whitespace-pre-wrap break-words text-sm">
-                      {msg.content}
-                    </p>
+                    <div className="flex justify-between items-start gap-3">
+                      <p className="whitespace-pre-wrap break-words text-sm flex-1">
+                        {msg.content}
+                      </p>
+                      {msg.role === "assistant" && (
+                        <button
+                          onClick={() => {
+                            setPlayingMessageId(
+                              playingMessageId === msg.id ? null : msg.id
+                            );
+                            toggleSpeak(msg.content);
+                          }}
+                          className={`flex-shrink-0 p-2 rounded-lg transition-all duration-200 ${
+                            playingMessageId === msg.id
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-primary/20"
+                          }`}
+                          title={
+                            playingMessageId === msg.id ? "Stop" : "Read aloud"
+                          }
+                          data-testid={`button-speak-${msg.id}`}
+                        >
+                          {playingMessageId === msg.id ? (
+                            <VolumeX className="w-4 h-4" />
+                          ) : (
+                            <Volume2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {msg.role === "user" && (
