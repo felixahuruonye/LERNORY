@@ -21,6 +21,7 @@ import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
 import { VoiceSettings } from "@/components/live-ai/VoiceSettings";
 import { StudyTimer } from "@/components/live-ai/StudyTimer";
+import { AvatarDisplay } from "@/components/live-ai/AvatarDisplay";
 import { vapiClient } from "@/lib/vapiClient";
 
 interface Message {
@@ -81,7 +82,7 @@ export default function LiveAI() {
     initializeVapi();
   }, []);
 
-  // Initialize Vapi on component mount
+  // Initialize Vapi on component mount and AUTO-START
   const initializeVapi = async () => {
     try {
       const configRes = await fetch("/api/vapi-config");
@@ -124,12 +125,41 @@ export default function LiveAI() {
           });
         });
 
-        toast({ title: "Ready", description: "LEARNORY Live AI is ready" });
+        // AUTO-START THE CALL
+        await autoStartCall();
       } else {
         console.error("Failed to fetch Vapi config");
       }
     } catch (error) {
       console.error("Failed to initialize Vapi:", error);
+    }
+  };
+
+  // Auto-start voice call
+  const autoStartCall = async () => {
+    try {
+      await vapiClient.startCall({
+        assistantOverrides: {
+          voice: {
+            provider: "openai",
+            voiceId: voice === "female" ? "nova" : "onyx",
+          },
+          systemPrompt: `You are LEARNORY ULTRA, an advanced AI tutor with a ${tone} tone for ${language} language instruction. 
+          Learning mode: ${currentMode}. 
+          Start by greeting the student warmly and offering to help them learn. Keep responses clear and engaging. Adapt to the student's pace.`,
+          firstMessage: voice === "female" ? 
+            "Hello! I'm your LEARNORY AI tutor. I'm ready to help you learn today. What would you like to study?" :
+            "Hello! I'm your LEARNORY AI tutor. What subject would you like to explore today?",
+        },
+      });
+      toast({ title: "Connected", description: "LEARNORY Live AI is ready" });
+    } catch (error) {
+      console.error("Failed to auto-start call:", error);
+      toast({
+        title: "Connection Issue",
+        description: "Retrying connection...",
+        variant: "destructive",
+      });
     }
   };
 
@@ -402,34 +432,35 @@ export default function LiveAI() {
             {/* Voice Controls */}
             <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
               <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                Voice Control
+                Call Controls
               </h3>
               <div className="space-y-2">
                 <Button
-                  onClick={toggleVoice}
-                  variant={isVoiceActive ? "default" : "outline"}
+                  onClick={toggleMute}
+                  variant={isMuted ? "destructive" : "default"}
                   className="w-full gap-2"
-                  data-testid="button-voice-toggle"
+                  data-testid="button-mute"
                 >
-                  {isVoiceActive ? (
+                  {isMuted ? (
                     <>
-                      <Mic className="w-4 h-4" />
-                      Listening
+                      <MicOff className="w-4 h-4" />
+                      Muted
                     </>
                   ) : (
                     <>
-                      <MicOff className="w-4 h-4" />
-                      Start Listening
+                      <Mic className="w-4 h-4" />
+                      Unmuted
                     </>
                   )}
                 </Button>
                 <Button
-                  onClick={toggleMute}
-                  variant={isMuted ? "destructive" : "outline"}
+                  onClick={toggleVoice}
+                  variant="destructive"
                   className="w-full gap-2"
-                  data-testid="button-mute"
+                  data-testid="button-end-call"
                 >
-                  {isMuted ? "Muted" : "Active"}
+                  <PhoneOff className="w-4 h-4" />
+                  End Call
                 </Button>
               </div>
             </Card>
@@ -482,6 +513,11 @@ export default function LiveAI() {
 
           {/* Main Chat Area */}
           <div className="lg:col-span-3 space-y-4">
+            {/* Avatar Display */}
+            <Card className={`p-6 flex justify-center ${isDarkMode ? "bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30" : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"}`}>
+              <AvatarDisplay voice={voice} isActive={isVoiceActive} isListening={isListening} />
+            </Card>
+
             {/* Quick Actions */}
             <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
               <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
