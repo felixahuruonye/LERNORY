@@ -46,14 +46,9 @@ export default function LiveAI() {
       }
     }
 
-    const savedMessages = localStorage.getItem("learnory_chat_messages");
-    if (savedMessages) {
-      try {
-        setMessages(JSON.parse(savedMessages));
-      } catch (e) {
-        console.error("Failed to load messages:", e);
-      }
-    }
+    // Don't load old messages - start fresh each session
+    // This prevents confusion where old history interferes with new questions
+    localStorage.removeItem("learnory_chat_messages");
 
     if (!initRef.current) {
       initRef.current = true;
