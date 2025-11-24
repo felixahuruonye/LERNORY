@@ -1352,37 +1352,44 @@ KEY_WORDS: [keywords separated by commas]`,
   app.post('/api/notifications/send-chat-history', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
+      console.log(`[Notifications] Fetching chat history for user: ${userId}`);
       
       // Get all chat sessions for user
       const sessions = await storage.getChatSessionsByUser(userId);
+      console.log(`[Notifications] Found ${sessions?.length || 0} sessions`);
       
       if (!sessions || sessions.length === 0) {
-        return res.json({ message: "No chat sessions found", count: 0 });
+        console.log(`[Notifications] No sessions found for user`);
+        return res.json({ message: "No chat sessions found", count: 0, sessions: [] });
       }
 
       // Create and store notifications for each chat
       const notificationCount = sessions.length;
+      const sessionData: any[] = [];
       
       for (const session of sessions) {
         try {
-          await storage.createNotification({
+          const notification = await storage.createNotification({
             userId,
-            type: "chat_history",
+            type: "chat_history" as any,
             title: session.title || "Previous Chat",
             message: `From ${new Date(session.createdAt).toLocaleDateString()}`,
             icon: "💬",
             actionUrl: `/chat?sessionId=${session.id}`,
             read: false,
           });
+          console.log(`[Notifications] Created notification for session: ${session.id}`);
+          sessionData.push({ id: session.id, title: session.title, createdAt: session.createdAt });
         } catch (err) {
-          console.log("Failed to create notification for session:", session.id);
+          console.error("Failed to create notification for session:", session.id, err);
         }
       }
 
+      console.log(`[Notifications] Sending ${notificationCount} notifications to client`);
       res.json({ 
         message: `Created ${notificationCount} notifications for chat history`, 
         count: notificationCount,
-        sessions: sessions.map(s => ({ id: s.id, title: s.title, createdAt: s.createdAt }))
+        sessions: sessionData
       });
     } catch (error) {
       console.error("Error sending chat history notifications:", error);

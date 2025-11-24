@@ -3,10 +3,10 @@ import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, ArrowRight, Check, Send, Loader } from "lucide-react";
-import { deleteNotification, markNotificationAsRead, sendChatHistoryNotifications } from "@/lib/notificationService";
+import { Trash2, ArrowRight, Check, Send, Loader, AlertCircle } from "lucide-react";
+import { deleteNotification, markNotificationAsRead, sendChatHistoryNotifications, requestNotificationPermission } from "@/lib/notificationService";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Notification {
   id: string;
@@ -23,6 +23,14 @@ function Notifications() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [sendingHistory, setSendingHistory] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState<"default" | "granted" | "denied">("default");
+
+  useEffect(() => {
+    // Check notification permission on mount
+    if ("Notification" in window) {
+      setPermissionStatus(Notification.permission as "default" | "granted" | "denied");
+    }
+  }, []);
 
   const { data: notifications = [], isLoading, refetch } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
@@ -43,16 +51,39 @@ function Notifications() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
   });
 
+  const handleRequestPermission = async () => {
+    console.log("Requesting notification permission...");
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      setPermissionStatus("granted");
+      toast({ title: "Permission Granted!", description: "You'll now receive notifications on your device." });
+    } else {
+      setPermissionStatus("denied");
+      toast({ title: "Permission Denied", description: "Please enable notifications in your browser settings.", variant: "destructive" });
+    }
+  };
+
   const handleSendChatHistory = async () => {
+    console.log("Send chat history clicked. Permission status:", permissionStatus);
+    
+    if (permissionStatus !== "granted") {
+      console.log("Requesting permission first...");
+      await handleRequestPermission();
+      return;
+    }
+
     setSendingHistory(true);
     try {
+      console.log("Calling sendChatHistoryNotifications...");
       const result = await sendChatHistoryNotifications();
+      console.log("Result:", result);
       toast({
         title: "Sent!",
-        description: `${result.count} notifications sent to your device!`,
+        description: `${result.count} notifications sent to your device - check for notifications!`,
       });
       refetch();
     } catch (error) {
+      console.error("Error sending notifications:", error);
       toast({ title: "Error", description: "Failed to send notifications", variant: "destructive" });
     } finally {
       setSendingHistory(false);
@@ -66,18 +97,30 @@ function Notifications() {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold text-white">Notifications</h1>
-          <Button
-            onClick={handleSendChatHistory}
-            disabled={sendingHistory}
-            className="gap-2"
-            data-testid="button-send-chat-history"
-          >
-            {sendingHistory ? (
-              <> <Loader className="w-4 h-4 animate-spin" /> Sending... </>
-            ) : (
-              <> <Send className="w-4 h-4" /> Send Chat History </>
+          <div className="flex gap-2">
+            {permissionStatus !== "granted" && (
+              <Button
+                onClick={handleRequestPermission}
+                variant="outline"
+                className="gap-2"
+                data-testid="button-request-permission"
+              >
+                <AlertCircle className="w-4 h-4" /> Enable Notifications
+              </Button>
             )}
-          </Button>
+            <Button
+              onClick={handleSendChatHistory}
+              disabled={sendingHistory || permissionStatus !== "granted"}
+              className="gap-2"
+              data-testid="button-send-chat-history"
+            >
+              {sendingHistory ? (
+                <> <Loader className="w-4 h-4 animate-spin" /> Sending... </>
+              ) : (
+                <> <Send className="w-4 h-4" /> Send Chat History </>
+              )}
+            </Button>
+          </div>
         </div>
 
         <p className="text-gray-400 mb-6">

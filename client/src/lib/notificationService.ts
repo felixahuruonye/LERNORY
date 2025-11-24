@@ -159,45 +159,54 @@ export async function createAndSendNotification(data: {
  */
 export async function sendChatHistoryNotifications(): Promise<{ count: number; message: string }> {
   try {
-    // First request notification permission
-    const hasPermission = await requestNotificationPermission();
-    if (!hasPermission) {
+    console.log("sendChatHistoryNotifications: Checking permission...", Notification.permission);
+    
+    if (Notification.permission !== "granted") {
       console.warn("Notification permission not granted");
       return { count: 0, message: "Notification permission denied" };
     }
 
     // Call backend to create notifications for all chats
+    console.log("sendChatHistoryNotifications: Calling backend...");
     const response = await fetch("/api/notifications/send-chat-history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
 
-    if (!response.ok) throw new Error("Failed to send chat history notifications");
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Backend error: ${error}`);
+    }
     
     const data = await response.json();
+    console.log("sendChatHistoryNotifications: Backend response:", data);
     
     // Send push notifications for each chat (with delay to not overwhelm)
-    if (data.count > 0) {
+    if (data.count > 0 && data.sessions && data.sessions.length > 0) {
+      console.log(`sendChatHistoryNotifications: Sending ${data.count} notifications...`);
       for (let i = 0; i < data.sessions.length; i++) {
         setTimeout(() => {
           const session = data.sessions[i];
+          console.log(`Sending notification ${i + 1}/${data.sessions.length}:`, session.title);
           if (Notification.permission === "granted") {
-            new Notification(session.title || "Previous Chat", {
+            const notification = new Notification(session.title || "Previous Chat", {
               body: `From ${new Date(session.createdAt).toLocaleDateString()} - Click to view`,
               icon: "💬",
               tag: `chat-history-${session.id}`,
               requireInteraction: true,
-            }).onclick = () => {
+            });
+            notification.onclick = () => {
+              console.log("Notification clicked:", session.id);
               window.location.href = `/chat?sessionId=${session.id}`;
             };
           }
-        }, i * 500); // 500ms delay between notifications
+        }, i * 1000); // 1 second delay between notifications for visibility
       }
     }
 
     return { count: data.count, message: data.message };
   } catch (error) {
     console.error("Error sending chat history notifications:", error);
-    return { count: 0, message: "Failed to send notifications" };
+    throw error;
   }
 }
