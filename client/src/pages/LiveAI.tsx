@@ -31,8 +31,10 @@ export default function LiveAI() {
   const [isMuted, setIsMuted] = useState(false);
   const [currentMode, setCurrentMode] = useState("explain");
   const [messageInput, setMessageInput] = useState("");
-  const vapiWebRef = useRef<any>(null);
+  const vapiRef = useRef<any>(null);
+  const callStartedRef = useRef(false);
   const messageCountRef = useRef(0);
+  const [publicKey, setPublicKey] = useState("");
 
   // Load settings
   useEffect(() => {
@@ -51,118 +53,183 @@ export default function LiveAI() {
       setMessages(JSON.parse(savedMessages));
     }
 
-    // Load Vapi Web SDK
-    loadVapiSDK();
+    // Fetch public key and initialize
+    fetchVapiKeyAndInitialize();
   }, []);
 
-  const loadVapiSDK = () => {
-    // Check if Vapi web is already loaded
-    if ((window as any).Vapi) {
-      initializeVapiCall();
-      return;
-    }
+  const fetchVapiKeyAndInitialize = async () => {
+    try {
+      const res = await fetch("/api/vapi-config");
+      if (!res.ok) throw new Error("Failed to fetch Vapi config");
 
-    // Create and load Vapi script
+      const { publicKey: key } = await res.json();
+      setPublicKey(key);
+
+      // Load Vapi SDK with proper script tag
+      loadVapiScript(key);
+    } catch (error) {
+      console.error("Failed to fetch Vapi key:", error);
+      toast({
+        title: "Configuration Error",
+        description: "Could not load voice service configuration",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadVapiScript = (key: string) => {
+    // Create script tag for Vapi SDK - use proper ESM format
     const script = document.createElement("script");
     script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web";
     script.type = "module";
+
+    script.innerHTML = `
+      import Vapi from 'https://cdn.jsdelivr.net/npm/@vapi-ai/web';
+      window.VapiSDK = Vapi;
+      window.VapiReady = true;
+    `;
+
     script.onload = () => {
-      console.log("Vapi SDK loaded");
-      setTimeout(initializeVapiCall, 500);
+      console.log("Vapi script loaded, initializing...");
+      // Give it time to execute
+      setTimeout(() => {
+        if ((window as any).VapiReady) {
+          initializeVapi(key);
+        }
+      }, 500);
     };
+
     script.onerror = () => {
-      console.error("Failed to load Vapi SDK");
+      console.error("Failed to load Vapi script");
+      // Fallback: try loading from alternative CDN
+      loadVapiAlternative(key);
+    };
+
+    document.head.appendChild(script);
+  };
+
+  const loadVapiAlternative = (key: string) => {
+    // Alternative: Load Vapi using global script
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/gh/VapiAI/web@latest/dist/vapi.min.js";
+    script.async = true;
+
+    script.onload = () => {
+      console.log("Vapi alternative loaded");
+      setTimeout(() => {
+        initializeVapi(key);
+      }, 500);
+    };
+
+    script.onerror = () => {
+      console.error("Failed to load Vapi from alternative CDN");
       toast({
-        title: "Vapi Error",
-        description: "Could not load voice service",
+        title: "SDK Load Error",
+        description: "Could not load voice SDK. Please refresh.",
         variant: "destructive",
       });
     };
-    document.body.appendChild(script);
+
+    document.head.appendChild(script);
   };
 
-  const initializeVapiCall = async () => {
+  const initializeVapi = (key: string) => {
     try {
-      // Fetch Vapi public key
-      const res = await fetch("/api/vapi-config");
-      if (!res.ok) {
-        throw new Error("Failed to fetch Vapi config");
-      }
+      // Get Vapi constructor - try multiple possible locations
+      let Vapi = (window as any).Vapi || (window as any).VapiSDK || (window as any).default;
 
-      const { publicKey } = await res.json();
-
-      // Check if Vapi is available
-      if (!(window as any).Vapi) {
-        console.error("Vapi SDK not loaded");
+      if (!Vapi) {
+        console.error("Vapi SDK not found on window");
+        setTimeout(() => initializeVapi(key), 1000);
         return;
       }
 
+      console.log("Initializing Vapi with key:", key.substring(0, 10) + "...");
+
       // Create Vapi instance
-      const vapi = new (window as any).Vapi(publicKey);
-      vapiWebRef.current = vapi;
-
-      // Setup event listeners
-      vapi.on("call-start", () => {
-        console.log("Call started");
-        setIsVoiceActive(true);
-        addMessage("assistant", "Call connected. Let's start learning!");
-      });
-
-      vapi.on("call-end", () => {
-        console.log("Call ended");
-        setIsVoiceActive(false);
-        setIsListening(false);
-      });
-
-      vapi.on("speech-start", () => {
-        console.log("User started speaking");
-        setIsListening(true);
-      });
-
-      vapi.on("speech-end", () => {
-        console.log("User finished speaking");
-        setIsListening(false);
-      });
-
-      vapi.on("message", (msg: any) => {
-        console.log("Message from Vapi:", msg);
-        if (msg.type === "transcript") {
-          if (msg.role === "assistant") {
-            addMessage("assistant", msg.transcript);
+      vapiRef.current = new Vapi({
+        apiKey: key,
+        onCallStart: () => {
+          console.log("Vapi call started");
+          setIsVoiceActive(true);
+          callStartedRef.current = true;
+          addChatMessage("assistant", "Call connected! How can I help you learn?");
+        },
+        onCallEnd: () => {
+          console.log("Vapi call ended");
+          setIsVoiceActive(false);
+          setIsListening(false);
+          callStartedRef.current = false;
+        },
+        onSpeechStart: () => {
+          console.log("Speech start");
+          setIsListening(true);
+        },
+        onSpeechEnd: () => {
+          console.log("Speech end");
+          setIsListening(false);
+        },
+        onMessage: (message: any) => {
+          console.log("Vapi message:", message);
+          if (message.type === "transcript" && message.transcript) {
+            if (message.role === "assistant") {
+              addChatMessage("assistant", message.transcript);
+            }
           }
-        }
+        },
+        onError: (error: any) => {
+          console.error("Vapi error:", error);
+          toast({
+            title: "Voice Error",
+            description: error?.message || "Voice connection failed",
+            variant: "destructive",
+          });
+        },
       });
 
-      vapi.on("error", (error: any) => {
-        console.error("Vapi error:", error);
-        toast({
-          title: "Voice Error",
-          description: error?.message || "Voice connection error",
-          variant: "destructive",
-        });
+      // Start call automatically
+      startCallAutomatically();
+    } catch (error) {
+      console.error("Error initializing Vapi:", error);
+      toast({
+        title: "Initialization Error",
+        description: "Could not initialize voice service",
+        variant: "destructive",
       });
+    }
+  };
 
-      // Start the call
-      console.log("Starting Vapi call...");
+  const startCallAutomatically = () => {
+    if (!vapiRef.current || callStartedRef.current) return;
+
+    try {
       const systemPrompt = `You are LEARNORY ULTRA, an advanced AI tutor.
-Tone: ${tone}
+Your speaking style: ${tone}
 Language: ${language}
-Mode: ${currentMode}
-Keep responses short, clear, and conversational. You are speaking, not writing.`;
+Learning mode: ${currentMode}
+Rules:
+- Keep responses SHORT and CLEAR
+- Speak naturally and conversationally
+- Maximum 2-3 sentences per response
+- Be friendly and encouraging
+- Identify and address learning topics`;
 
-      await vapi.start({
-        name: "LEARNORY AI Tutor",
+      console.log("Starting Vapi call with system prompt...");
+
+      vapiRef.current.start({
         model: {
           provider: "openai",
           model: "gpt-3.5-turbo",
+          temperature: 0.7,
           systemPrompt,
         },
         voice: {
           provider: "openai",
           voiceId: voice === "female" ? "nova" : "onyx",
         },
-        firstMessage: "Hello! I'm your LEARNORY AI tutor. What would you like to learn about today?",
-        endCallMessage: "Thank you for learning. Keep up the great work!",
+        name: "LEARNORY AI Tutor",
+        firstMessage: "Hello! I'm your LEARNORY AI tutor. What would you like to learn today?",
+        endCallMessage: "Thank you for learning with LEARNORY. Keep up the great work!",
       });
 
       toast({
@@ -170,18 +237,13 @@ Keep responses short, clear, and conversational. You are speaking, not writing.`
         description: "LEARNORY Live AI is ready. Speak naturally!",
       });
     } catch (error) {
-      console.error("Failed to initialize Vapi:", error);
-      toast({
-        title: "Connection Error",
-        description: "Could not start voice conversation",
-        variant: "destructive",
-      });
-      // Retry after 2 seconds
-      setTimeout(initializeVapiCall, 2000);
+      console.error("Error starting Vapi call:", error);
+      // Retry
+      setTimeout(startCallAutomatically, 2000);
     }
   };
 
-  const addMessage = (role: "user" | "assistant", content: string) => {
+  const addChatMessage = (role: "user" | "assistant", content: string) => {
     const msg: Message = {
       id: `${role}-${messageCountRef.current++}`,
       role,
@@ -192,36 +254,32 @@ Keep responses short, clear, and conversational. You are speaking, not writing.`
   };
 
   const handleSendMessage = () => {
-    if (!messageInput.trim()) return;
+    if (!messageInput.trim() || !vapiRef.current) return;
 
-    addMessage("user", messageInput);
+    addChatMessage("user", messageInput);
     setMessageInput("");
-
-    // The Vapi conversation will handle responses automatically
   };
 
-  const handleToggleMute = async () => {
+  const handleToggleMute = () => {
+    if (!vapiRef.current) return;
     try {
-      if (vapiWebRef.current) {
-        if (isMuted) {
-          await vapiWebRef.current.unmute();
-          setIsMuted(false);
-        } else {
-          await vapiWebRef.current.mute();
-          setIsMuted(true);
-        }
+      if (isMuted) {
+        vapiRef.current.unmute();
+        setIsMuted(false);
+      } else {
+        vapiRef.current.mute();
+        setIsMuted(true);
       }
     } catch (error) {
       console.error("Failed to toggle mute:", error);
     }
   };
 
-  const handleEndCall = async () => {
+  const handleEndCall = () => {
+    if (!vapiRef.current) return;
     try {
-      if (vapiWebRef.current) {
-        await vapiWebRef.current.stop();
-        setIsVoiceActive(false);
-      }
+      vapiRef.current.stop();
+      setIsVoiceActive(false);
     } catch (error) {
       console.error("Failed to end call:", error);
     }
@@ -265,7 +323,6 @@ Keep responses short, clear, and conversational. You are speaking, not writing.`
                     onClick={handleToggleMute}
                     variant={isMuted ? "destructive" : "default"}
                     className="w-full gap-2"
-                    data-testid="button-mute"
                   >
                     {isMuted ? (
                       <>
@@ -283,7 +340,6 @@ Keep responses short, clear, and conversational. You are speaking, not writing.`
                     onClick={handleEndCall}
                     variant="destructive"
                     className="w-full gap-2"
-                    data-testid="button-end-call"
                   >
                     <PhoneOff className="w-4 h-4" />
                     End Call
