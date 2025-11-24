@@ -64,6 +64,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Message content is required" });
       }
 
+      console.log("Received message:", content.substring(0, 50));
+
       // Save user message
       await storage.createChatMessage({
         userId,
@@ -82,8 +84,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: msg.content
       }));
 
+      console.log("Getting AI response with", messages.length, "messages");
+
       // Get AI response
-      const aiResponse = await chatWithAI(messages);
+      let aiResponse: string;
+      try {
+        aiResponse = await chatWithAI(messages);
+        console.log("Got AI response:", aiResponse.substring(0, 100));
+      } catch (aiError) {
+        console.error("AI API error:", aiError);
+        aiResponse = "I'm having trouble connecting to my AI services right now. Please try again in a moment. This could be due to API issues or temporary service interruption.";
+      }
 
       // Save AI response
       await storage.createChatMessage({
@@ -120,7 +131,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Message sent successfully" });
     } catch (error) {
       console.error("Error sending message:", error);
-      res.status(500).json({ message: "Failed to send message" });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: "Failed to send message: " + errorMsg });
     }
   });
 

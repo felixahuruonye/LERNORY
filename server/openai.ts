@@ -1,6 +1,7 @@
 // OpenAI integration blueprint reference: javascript_openai
 import OpenAI from "openai";
 import fs from "fs";
+import { chatWithGemini } from "./gemini";
 
 // Initialize OpenAI client (primary)
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -198,9 +199,6 @@ You are LEARNORY - Nigeria's most intelligent, comprehensive learning platform d
         ...messages
       ]
     : messages;
-
-  // Import Gemini function for fallback
-  const { chatWithGemini } = await import("./gemini");
 
   return tryWithFallback(
     () => openai.chat.completions.create({
