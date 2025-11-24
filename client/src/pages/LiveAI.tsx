@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Send, Mic, MicOff, PhoneOff } from "lucide-react";
+import { Send, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
@@ -16,12 +16,6 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
-}
-
-declare global {
-  interface Window {
-    Vapi: any;
-  }
 }
 
 export default function LiveAI() {
@@ -37,9 +31,11 @@ export default function LiveAI() {
   const [isMuted, setIsMuted] = useState(false);
   const [currentMode, setCurrentMode] = useState("explain");
   const [messageInput, setMessageInput] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const vapiInstanceRef = useRef<any>(null);
-  const messageIdRef = useRef(0);
+  const recognitionRef = useRef<any>(null);
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const messageCountRef = useRef(0);
   const initRef = useRef(false);
 
   useEffect(() => {
@@ -69,134 +65,136 @@ export default function LiveAI() {
 
     if (!initRef.current) {
       initRef.current = true;
-      initVapi();
+      initializeSpeechRecognition();
+      synthRef.current = window.speechSynthesis;
+      
+      // Auto-start with greeting
+      setTimeout(() => {
+        setIsVoiceActive(true);
+        const greetings = [
+          "Hello! I'm your LEARNORY AI tutor. What would you like to learn today?",
+          "Hi! I'm here to help you learn. What topic interests you?",
+          "Welcome to LEARNORY! I'm ready to assist with your studies.",
+        ];
+        const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+        addMessage("assistant", greeting);
+        speakMessage(greeting);
+        toast({ title: "Connected", description: "LEARNORY Live AI is ready!" });
+      }, 500);
     }
   }, []);
 
-  const initVapi = async () => {
-    try {
-      // Fetch config
-      const configRes = await fetch("/api/vapi-config");
-      const { publicKey } = await configRes.json();
-
-      // Load Vapi SDK
-      const script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.js";
-      script.async = true;
-
-      script.onload = () => {
-        console.log("Vapi SDK loaded successfully");
-        setTimeout(() => startVapiCall(publicKey), 1000);
-      };
-
-      script.onerror = () => {
-        console.error("Failed to load Vapi SDK");
-        toast({
-          title: "SDK Error",
-          description: "Could not load voice SDK",
-          variant: "destructive",
-        });
-      };
-
-      document.body.appendChild(script);
-    } catch (error) {
-      console.error("Init error:", error);
+  const initializeSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.error("Speech Recognition not supported");
       toast({
-        title: "Initialization Error",
-        description: String(error),
+        title: "Browser Support",
+        description: "Speech recognition not supported in your browser",
         variant: "destructive",
       });
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = language;
+
+    recognition.onstart = () => {
+      console.log("Listening...");
+      setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      console.log("Stopped listening");
+      setIsListening(false);
+      if (isVoiceActive) {
+        recognition.start(); // Restart for continuous listening
+      }
+    };
+
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+
+      if (event.results[event.results.length - 1].isFinal && transcript.trim()) {
+        console.log("Final transcript:", transcript);
+        handleUserSpeech(transcript.trim());
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+    };
+
+    recognitionRef.current = recognition;
+  };
+
+  const handleUserSpeech = async (text: string) => {
+    if (!text.trim()) return;
+
+    // Add user message
+    addMessage("user", text);
+
+    // Get AI response
+    try {
+      const response = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: text,
+          sessionId: null,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const aiMessage = data.message || data.content || "I understood your question. Let me help you with that.";
+        addMessage("assistant", aiMessage);
+        speakMessage(aiMessage);
+      }
+    } catch (error) {
+      console.error("Error getting AI response:", error);
+      const errorMsg = "Sorry, I encountered an error. Could you repeat that?";
+      addMessage("assistant", errorMsg);
+      speakMessage(errorMsg);
     }
   };
 
-  const startVapiCall = async (publicKey: string) => {
-    try {
-      if (!window.Vapi) {
-        console.error("Vapi not loaded");
-        setTimeout(() => startVapiCall(publicKey), 500);
-        return;
-      }
+  const speakMessage = (text: string) => {
+    if (!synthRef.current) return;
 
-      console.log("Creating Vapi instance...");
+    // Cancel any ongoing speech
+    synthRef.current.cancel();
 
-      // Create Vapi instance with direct call config
-      vapiInstanceRef.current = new window.Vapi({
-        apiKey: publicKey,
-        onCallStart: () => {
-          console.log("✓ Call started");
-          setIsVoiceActive(true);
-          addMessage("assistant", "Hello! I'm your LEARNORY AI tutor. I'm ready to help you learn!");
-        },
-        onCallEnd: () => {
-          console.log("✓ Call ended");
-          setIsVoiceActive(false);
-          setIsListening(false);
-        },
-        onSpeechStart: () => {
-          console.log("✓ Speech detected");
-          setIsListening(true);
-        },
-        onSpeechEnd: () => {
-          console.log("✓ Speech ended");
-          setIsListening(false);
-        },
-        onMessage: (message: any) => {
-          console.log("Message:", message);
-          if (message?.transcript) {
-            if (message.role === "assistant") {
-              addMessage("assistant", message.transcript);
-            }
-          }
-        },
-        onError: (error: any) => {
-          console.error("Vapi error:", error);
-          toast({
-            title: "Connection Error",
-            description: error?.message || "Voice error",
-            variant: "destructive",
-          });
-        },
-      });
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = speed;
+    utterance.pitch = voice === "female" ? 1.2 : 0.8;
+    utterance.volume = 1;
 
-      console.log("Starting call...");
+    utterance.onstart = () => {
+      console.log("Speaking...");
+      setIsSpeaking(true);
+    };
 
-      // Start the call
-      await vapiInstanceRef.current.start({
-        model: {
-          provider: "openai",
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: `You are LEARNORY ULTRA - an advanced AI tutor. 
-Tone: ${tone}
-Language: ${language}  
-Mode: ${currentMode}
-RULES: Keep responses SHORT (max 2-3 sentences). Speak naturally like a real person. Be warm and encouraging.`,
-            },
-          ],
-        },
-        voice: {
-          provider: "openai",
-          voiceId: voice === "female" ? "nova" : "onyx",
-        },
-        firstMessage: `Hello! I'm your LEARNORY AI tutor in ${tone} mode. I'm here to help you with ${currentMode}. What would you like to learn?`,
-      });
+    utterance.onend = () => {
+      console.log("Done speaking");
+      setIsSpeaking(false);
+    };
 
-      toast({
-        title: "Connected!",
-        description: "Listening now. Speak naturally!",
-      });
-    } catch (error) {
-      console.error("Failed to start call:", error);
-      // Retry
-      setTimeout(() => startVapiCall(publicKey), 2000);
-    }
+    utterance.onerror = (event: any) => {
+      console.error("Speech synthesis error:", event.error);
+    };
+
+    synthRef.current.speak(utterance);
   };
 
   const addMessage = (role: "user" | "assistant", content: string) => {
     const msg: Message = {
-      id: `${role}-${++messageIdRef.current}`,
+      id: `${role}-${++messageCountRef.current}`,
       role,
       content,
       timestamp: Date.now(),
@@ -204,34 +202,63 @@ RULES: Keep responses SHORT (max 2-3 sentences). Speak naturally like a real per
     setMessages((prev) => [...prev, msg]);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!messageInput.trim()) return;
-    addMessage("user", messageInput);
-    setMessageInput("");
-  };
 
-  const handleToggleMute = async () => {
-    if (!vapiInstanceRef.current) return;
+    const userText = messageInput;
+    setMessageInput("");
+
+    addMessage("user", userText);
+    speakMessage(`User asked: ${userText}`);
+
     try {
-      if (isMuted) {
-        await vapiInstanceRef.current.unmute();
-        setIsMuted(false);
-      } else {
-        await vapiInstanceRef.current.mute();
-        setIsMuted(true);
+      const response = await fetch("/api/chat/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: userText,
+          sessionId: null,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const aiMessage = data.message || data.content || "Got it! Let me help you.";
+        addMessage("assistant", aiMessage);
+        speakMessage(aiMessage);
       }
     } catch (error) {
-      console.error("Mute error:", error);
+      console.error("Error:", error);
+      const errorMsg = "Sorry, I encountered an error processing your request.";
+      addMessage("assistant", errorMsg);
+      speakMessage(errorMsg);
     }
   };
 
-  const handleEndCall = async () => {
-    if (!vapiInstanceRef.current) return;
-    try {
-      await vapiInstanceRef.current.stop();
-      setIsVoiceActive(false);
-    } catch (error) {
-      console.error("End call error:", error);
+  const handleToggleMute = () => {
+    setIsMuted(!isMuted);
+    if (!isMuted && synthRef.current) {
+      synthRef.current.pause();
+    } else if (isMuted && synthRef.current) {
+      synthRef.current.resume();
+    }
+  };
+
+  const handleEndCall = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    if (synthRef.current) {
+      synthRef.current.cancel();
+    }
+    setIsVoiceActive(false);
+    setIsListening(false);
+  };
+
+  const handleStartListening = () => {
+    if (recognitionRef.current && !isListening) {
+      setIsVoiceActive(true);
+      recognitionRef.current.start();
     }
   };
 
@@ -262,8 +289,17 @@ RULES: Keep responses SHORT (max 2-3 sentences). Speak naturally like a real per
                 </h3>
                 <div className="space-y-2">
                   <Button
+                    onClick={handleStartListening}
+                    disabled={isListening}
+                    variant="default"
+                    className="w-full gap-2"
+                  >
+                    <Mic className="w-4 h-4" />
+                    {isListening ? "Listening..." : "Start Listening"}
+                  </Button>
+                  <Button
                     onClick={handleToggleMute}
-                    variant={isMuted ? "destructive" : "default"}
+                    variant={isMuted ? "destructive" : "outline"}
                     className="w-full gap-2"
                   >
                     {isMuted ? (
@@ -273,8 +309,8 @@ RULES: Keep responses SHORT (max 2-3 sentences). Speak naturally like a real per
                       </>
                     ) : (
                       <>
-                        <Mic className="w-4 h-4" />
-                        Unmuted
+                        <Volume2 className="w-4 h-4" />
+                        Speaking
                       </>
                     )}
                   </Button>
@@ -323,7 +359,11 @@ RULES: Keep responses SHORT (max 2-3 sentences). Speak naturally like a real per
                     : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"
                 }`}
               >
-                <AvatarDisplay voice={voice} isActive={isVoiceActive} isListening={isListening} />
+                <AvatarDisplay 
+                  voice={voice} 
+                  isActive={isSpeaking} 
+                  isListening={isListening} 
+                />
               </Card>
 
               {/* Quick Actions */}
@@ -366,7 +406,7 @@ RULES: Keep responses SHORT (max 2-3 sentences). Speak naturally like a real per
                         className="w-full gap-2"
                       >
                         <Send className="w-4 h-4" />
-                        Send
+                        Send & Speak
                       </Button>
                     </div>
                   </Card>
