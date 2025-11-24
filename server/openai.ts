@@ -338,10 +338,9 @@ export async function chatWithAISmartFallback(messages: any[]): Promise<string> 
   // Try Gemini first
   try {
     console.log("Trying Gemini API...");
-    const { explainTopicWithLEARNORY } = await import("./gemini");
-    const lastMsg = messages[messages.length - 1]?.content || "";
-    const response = await explainTopicWithLEARNORY(lastMsg);
-    console.log("✓ Gemini succeeded");
+    const { chatWithGemini } = await import("./gemini");
+    const response = await chatWithGemini(messages);
+    console.log("✓ Gemini succeeded with response:", response.substring(0, 100));
     return response;
   } catch (err) {
     console.log("✗ Gemini failed, trying OpenRouter...", (err as any)?.message);
