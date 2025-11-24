@@ -1,7 +1,6 @@
 // OpenAI integration blueprint reference: javascript_openai
 import OpenAI from "openai";
 import fs from "fs";
-import { chatWithGemini } from "./gemini";
 
 // Initialize OpenAI client (primary)
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -200,23 +199,46 @@ You are LEARNORY - Nigeria's most intelligent, comprehensive learning platform d
       ]
     : messages;
 
-  return tryWithFallback(
-    () => openai.chat.completions.create({
+  try {
+    console.log("Trying OpenAI API...");
+    const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: messagesWithSystem as any,
       max_tokens: 1500,
       temperature: 0.8,
-    }).then(response => response.choices[0].message.content || ""),
+    });
+    const result = response.choices[0].message.content || "";
+    console.log("✓ OpenAI succeeded");
+    return result;
+  } catch (error1) {
+    console.error("✗ OpenAI failed:", error1 instanceof Error ? error1.message : error1);
     
-    () => openrouter.chat.completions.create({
-      model: "meta-llama/llama-3-8b-instruct",
-      messages: messagesWithSystem as any,
-      max_tokens: 1200,
-      temperature: 0.8,
-    }).then(response => response.choices[0].message.content || ""),
-    
-    () => chatWithGemini(messages)
-  );
+    try {
+      console.log("Trying OpenRouter API...");
+      const response = await openrouter.chat.completions.create({
+        model: "meta-llama/llama-3-8b-instruct",
+        messages: messagesWithSystem as any,
+        max_tokens: 1200,
+        temperature: 0.8,
+      });
+      const result = response.choices[0].message.content || "";
+      console.log("✓ OpenRouter succeeded");
+      return result;
+    } catch (error2) {
+      console.error("✗ OpenRouter failed:", error2 instanceof Error ? error2.message : error2);
+      
+      try {
+        console.log("Trying Gemini API...");
+        const { chatWithGemini } = await import("./gemini");
+        const result = await chatWithGemini(messages);
+        console.log("✓ Gemini succeeded");
+        return result;
+      } catch (error3) {
+        console.error("✗ Gemini failed:", error3 instanceof Error ? error3.message : error3);
+        throw new Error("All AI APIs failed. Please try again later.");
+      }
+    }
+  }
 }
 
 export async function generateLesson(transcriptText: string): Promise<any> {
