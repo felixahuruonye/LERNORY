@@ -113,7 +113,7 @@ export default function LiveAI() {
     }
   };
 
-  // Speech detection using browser's Speech Recognition API
+  // Speech detection using browser's Speech Recognition API with proper continuous listening
   const startSpeechDetection = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -131,9 +131,11 @@ export default function LiveAI() {
     recognition.lang = "en-US";
 
     let interimTranscript = "";
+    let isProcessingMessage = false;
 
     recognition.onstart = () => {
-      console.log("Speech recognition started");
+      console.log("✓ Voice recognition actively listening");
+      setIsListening(true);
     };
 
     recognition.onresult = (event: any) => {
@@ -143,10 +145,12 @@ export default function LiveAI() {
         const transcript = event.results[i][0].transcript;
         
         if (event.results[i].isFinal) {
-          // Final result - send to AI
-          if (transcript.trim()) {
-            clearTimeout(silenceTimeoutRef.current!);
+          // Final result - send to AI (only if not already processing)
+          if (transcript.trim() && !isProcessingMessage && !isProcessing) {
+            isProcessingMessage = true;
             handleSendMessage(transcript.trim());
+            // Reset after message is sent
+            setTimeout(() => { isProcessingMessage = false; }, 1000);
           }
         } else {
           interimTranscript += transcript;
@@ -156,7 +160,9 @@ export default function LiveAI() {
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
-      if (event.error !== "no-speech") {
+      setIsListening(false);
+      // Only show toast for real errors, not "no-speech" or "aborted"
+      if (event.error !== "no-speech" && event.error !== "aborted" && event.error !== "not-allowed") {
         toast({
           title: "Speech Error",
           description: `Error: ${event.error}`,
@@ -166,13 +172,10 @@ export default function LiveAI() {
     };
 
     recognition.onend = () => {
-      console.log("Speech recognition ended, restarting...");
-      // Restart continuous listening
-      setTimeout(() => {
-        if (initRef.current) {
-          startSpeechDetection();
-        }
-      }, 100);
+      console.log("Speech recognition session ended");
+      setIsListening(false);
+      // DO NOT RESTART - Let it end naturally and user can speak again when ready
+      // This prevents the constant restart loop
     };
 
     recognition.start();
@@ -238,7 +241,11 @@ export default function LiveAI() {
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, sessionId: null }),
+        body: JSON.stringify({ 
+          content: text, 
+          sessionId: null,
+          includeUserContext: true // Request AI to remember user context
+        }),
       });
 
       if (!response.ok) {
@@ -271,6 +278,15 @@ export default function LiveAI() {
       });
     } finally {
       setIsProcessing(false);
+      // Resume listening after message is processed
+      if (recognitionRef.current && initRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {
+          // Recognition may already be running
+          console.log("Voice recognition already active");
+        }
+      }
     }
   };
 

@@ -73,13 +73,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/chat/send', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
-      let { content, sessionId } = req.body;
+      let { content, sessionId, includeUserContext } = req.body;
 
       if (!content?.trim()) {
         return res.status(400).json({ message: "Message content is required" });
       }
 
       console.log("Received message:", content.substring(0, 50));
+
+      // Get user info for personalization
+      const user = await storage.getUser(userId);
+      const userName = user?.firstName || "Friend";
 
       // Verify session exists if provided, otherwise create a new one
       if (sessionId) {
@@ -119,17 +123,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const history = sessionId 
         ? await storage.getChatMessagesBySession(sessionId)
         : await storage.getChatMessagesByUser(userId, 20);
-      const messages = history.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }));
+      
+      // Get user memory/progress for context
+      const userProgress = await storage.getUserProgressByUser(userId);
+      const examResults = await storage.getExamResultsByUser(userId);
+      
+      // Build personalized system message
+      let systemMessage = `You are Learnory, an advanced AI tutor. You are speaking to ${userName}.`;
+      
+      if (includeUserContext) {
+        if (userProgress.length > 0) {
+          const topicsSummary = userProgress.map(p => `${p.subject}: ${p.topicsStudied?.join(", ") || "Started"}`).join(" | ");
+          systemMessage += ` ${userName} has been studying: ${topicsSummary}.`;
+          
+          if (userProgress.some(p => p.weakTopics?.length)) {
+            const weakTopics = userProgress.flatMap(p => p.weakTopics || []);
+            systemMessage += ` Areas to focus on: ${weakTopics.join(", ")}.`;
+          }
+        }
+        
+        if (examResults.length > 0) {
+          const lastExam = examResults[0];
+          systemMessage += ` ${userName}'s recent exam: ${lastExam.examName} (${lastExam.score}%). `;
+        }
+        
+        systemMessage += ` Remember this user across conversations and refer to them as ${userName}. Be personalized, encouraging, and track their learning progress.`;
+      }
+      
+      const messages = [
+        { role: "system" as const, content: systemMessage },
+        ...history.map(msg => ({
+          role: msg.role as "user" | "assistant",
+          content: msg.content
+        }))
+      ];
 
-      console.log("Getting AI response with", messages.length, "messages", messages);
+      console.log("Getting AI response with", messages.length, "messages (including user context)");
 
       // Get AI response with smart fallback (Gemini → OpenRouter → OpenAI)
       let aiResponse: string;
       try {
-        aiResponse = await chatWithAISmartFallback(messages);
+        aiResponse = await chatWithAISmartFallback(messages as any);
         console.log("Got AI response:", aiResponse.substring(0, 150));
         if (!aiResponse || aiResponse.trim() === "") {
           console.warn("Empty AI response!");
