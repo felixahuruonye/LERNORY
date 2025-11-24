@@ -80,7 +80,14 @@ export default function LiveAI() {
   // Continuous voice listening with Whisper
   const initializeContinuousListening = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request microphone permission with explicit settings
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
       
       const mediaRecorder = new MediaRecorder(stream);
       
@@ -100,16 +107,27 @@ export default function LiveAI() {
       startSpeechDetection();
       
       toast({ 
-        title: "Listening Ready", 
-        description: "LEARNORY is listening... Speak naturally and I'll respond automatically!" 
+        title: "✓ Voice Ready", 
+        description: "Listening continuously... Speak naturally!" 
       });
-    } catch (error) {
+      console.log("✓ Microphone access granted - Voice recognition ready");
+    } catch (error: any) {
       console.error("Microphone access error:", error);
+      const errorMsg = error?.name === "NotAllowedError" 
+        ? "Please grant microphone permission in your browser settings"
+        : error?.name === "NotFoundError"
+        ? "No microphone found on this device"
+        : "Failed to access microphone";
+      
       toast({
         title: "Microphone Error",
-        description: "Please enable microphone access for voice input",
+        description: errorMsg,
         variant: "destructive",
       });
+      
+      // Still try to start speech detection even without recording
+      console.log("Attempting speech recognition without recording...");
+      startSpeechDetection();
     }
   };
 
