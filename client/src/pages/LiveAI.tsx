@@ -1,255 +1,320 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Mic,
   MicOff,
-  Volume2,
-  VolumeX,
   PhoneOff,
-  Loader,
+  Settings,
+  Upload,
+  Moon,
+  Sun,
+  FileUp,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { ChatInterface } from "@/components/live-ai/ChatInterface";
+import { QuickActions } from "@/components/live-ai/QuickActions";
+import { VoiceSettings } from "@/components/live-ai/VoiceSettings";
+import { StudyTimer } from "@/components/live-ai/StudyTimer";
 
-type AvatarGender = "female" | "male";
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
 
 export default function LiveAI() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [isCallActive, setIsCallActive] = useState(true);
+
+  // Chat state
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentMode, setCurrentMode] = useState<string>("ask-question");
+
+  // Voice state
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
-  const [isConnecting, setIsConnecting] = useState(true);
-  const [callDuration, setCallDuration] = useState(0);
-  const vapiRef = useRef<any>(null);
-  const callRef = useRef<any>(null);
-  const durationIntervalRef = useRef<NodeJS.Timeout>();
-  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
-  // Initialize Vapi call
+  // Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [voice, setVoice] = useState("female");
+  const [speed, setSpeed] = useState(1);
+  const [language, setLanguage] = useState("en");
+  const [tone, setTone] = useState("friendly");
+  const [isDarkMode, setIsDarkMode] = useState(true);
+
+  // UI state
+  const [showFileUpload, setShowFileUpload] = useState(false);
+
+  // Load settings and messages from localStorage
   useEffect(() => {
-    const initVapi = async () => {
-      try {
-        // Dynamic import of Vapi SDK
-        const VapiClass = (window as any).Vapi;
-        if (!VapiClass) {
-          // Load Vapi script
-          const script = document.createElement("script");
-          script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest";
-          script.async = true;
-          script.onload = () => {
-            initializeVapiCall();
-          };
-          document.head.appendChild(script);
-          return;
-        }
-
-        initializeVapiCall();
-      } catch (error) {
-        console.error("Failed to initialize Vapi:", error);
-        toast({
-          title: "Connection Error",
-          description: "Failed to initialize voice connection",
-          variant: "destructive",
-        });
-      }
-    };
-
-    const initializeVapiCall = async () => {
-      try {
-        // Fetch public key from backend
-        const configRes = await fetch("/api/vapi-config");
-        if (!configRes.ok) {
-          throw new Error("Failed to fetch Vapi configuration");
-        }
-        const { publicKey } = await configRes.json();
-
-        const vapi = new (window as any).Vapi(publicKey);
-        vapiRef.current = vapi;
-
-        // Set up event handlers
-        vapi.on("call-start", handleCallStart);
-        vapi.on("call-end", handleCallEnd);
-        vapi.on("speech-start", handleSpeechStart);
-        vapi.on("speech-end", handleSpeechEnd);
-        vapi.on("message", handleMessage);
-        vapi.on("error", handleError);
-
-        // Start call with assistant configuration
-        const assistantConfig = {
-          model: {
-            provider: "openai",
-            model: "gpt-3.5-turbo",
-            messages: [
-              {
-                role: "system",
-                content: `You are LEARNORY ULTRA, an advanced AI tutor. You are a ${avatarGender === "female" ? "professional female" : "professional male"} educational assistant. Respond conversationally and helpfully to educational questions. Keep responses concise and engaging. Avoid lengthy explanations unless specifically asked.`,
-              },
-            ],
-          },
-          voice: {
-            provider: "openai",
-            voiceId: avatarGender === "female" ? "nova" : "onyx",
-          },
-        };
-
-        // Start the call
-        await vapi.start(assistantConfig);
-        callRef.current = vapi;
-
-        // Start duration timer
-        durationIntervalRef.current = setInterval(() => {
-          setCallDuration((prev) => prev + 1);
-        }, 1000);
-
-        setIsConnecting(false);
-      } catch (error) {
-        console.error("Failed to start Vapi call:", error);
-        toast({
-          title: "Connection Failed",
-          description: "Could not establish voice connection. Please try again.",
-          variant: "destructive",
-        });
-        setIsCallActive(false);
-      }
-    };
-
-    initVapi();
-
-    return () => {
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-      }
-      if (vapiRef.current) {
-        vapiRef.current.removeAllListeners();
-      }
-    };
-  }, []);
-
-  const handleCallStart = useCallback(() => {
-    console.log("Call started");
-    setIsConnecting(false);
-    toast({ title: "Connected", description: "Voice call started" });
-  }, [toast]);
-
-  const handleCallEnd = useCallback(() => {
-    console.log("Call ended");
-    if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current);
+    const saved = localStorage.getItem("learnory_live_ai_settings");
+    if (saved) {
+      const settings = JSON.parse(saved);
+      setVoice(settings.voice);
+      setSpeed(settings.speed);
+      setLanguage(settings.language);
+      setTone(settings.tone);
+      setIsDarkMode(settings.isDarkMode);
     }
-    setIsCallActive(false);
+
+    const savedMessages = localStorage.getItem("learnory_chat_messages");
+    if (savedMessages) {
+      try {
+        setMessages(JSON.parse(savedMessages));
+      } catch (e) {
+        console.error("Failed to load messages:", e);
+      }
+    }
+
+    initSpeechRecognition();
   }, []);
 
-  const handleSpeechStart = useCallback(() => {
-    console.log("User started speaking");
-  }, []);
+  // Save settings to localStorage
+  useEffect(() => {
+    const settings = { voice, speed, language, tone, isDarkMode };
+    localStorage.setItem("learnory_live_ai_settings", JSON.stringify(settings));
+  }, [voice, speed, language, tone, isDarkMode]);
 
-  const handleSpeechEnd = useCallback(() => {
-    console.log("User stopped speaking");
-  }, []);
+  // Save messages to localStorage
+  useEffect(() => {
+    localStorage.setItem("learnory_chat_messages", JSON.stringify(messages));
+  }, [messages]);
 
-  const handleMessage = useCallback((message: any) => {
-    console.log("Message from Vapi:", message);
-  }, []);
+  // Initialize speech recognition
+  const initSpeechRecognition = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
 
-  const handleError = useCallback(
-    (error: any) => {
-      console.error("Vapi error:", error);
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            handleSendMessage(transcript);
+            transcript = "";
+          }
+        }
+      };
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  };
+
+  // Handle voice toggling
+  const toggleVoice = async () => {
+    if (isVoiceActive) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsVoiceActive(false);
+      setIsListening(false);
+    } else {
+      if (recognitionRef.current && !isMuted) {
+        recognitionRef.current.start();
+      }
+      setIsVoiceActive(true);
+    }
+  };
+
+  // Handle mute
+  const toggleMute = () => {
+    if (recognitionRef.current) {
+      if (isMuted) {
+        recognitionRef.current.start();
+      } else {
+        recognitionRef.current.stop();
+      }
+    }
+    setIsMuted(!isMuted);
+  };
+
+  // Send message with mode context
+  const handleSendMessage = async (content: string) => {
+    if (!content.trim()) return;
+
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content,
+      timestamp: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+
+    try {
+      // Create mode-aware prompt
+      const modePrompts: Record<string, string> = {
+        "explain": "Explain this concept clearly with examples:",
+        "past-questions": "Help me solve this past question:",
+        "scan-image": "Analyze this image and explain:",
+        "summarize": "Summarize the key points:",
+        "voice-tutor": "Teach me about this topic:",
+        "study-plan": "Create a study plan for:",
+        "mock-exam": "Generate a mock exam question about:",
+        "lesson-replay": "Replay the lesson on:",
+        "topic-breakdown": "Break down this topic step-by-step:",
+        "ask-question": "Answer this question:",
+      };
+
+      const modePrefix = modePrompts[currentMode] || modePrompts["ask-question"];
+      const fullPrompt = `${modePrefix} ${content}`;
+
+      // Simulate AI response (will integrate with Vapi API later)
+      const responses = [
+        `Great question about ${content.split(" ")[0]}! Let me explain...`,
+        `I understand you're asking about this. Here's what you need to know...`,
+        `This is an important concept. Let me break it down for you...`,
+        `Perfect question! Let me provide a detailed explanation...`,
+      ];
+
+      const response =
+        responses[Math.floor(Math.random() * responses.length)];
+
+      // Simulate API delay
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const assistantMessage: Message = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: response,
+        timestamp: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // Text-to-speech (will be replaced with Vapi voice)
+      if ("speechSynthesis" in window) {
+        const utterance = new SpeechSynthesisUtterance(response);
+        utterance.rate = speed;
+        utterance.pitch = voice === "female" ? 1.2 : 0.8;
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
       toast({
-        title: "Call Error",
-        description: error?.message || "An error occurred during the call",
+        title: "Error",
+        description: "Failed to get AI response",
         variant: "destructive",
       });
-    },
-    [toast]
-  );
-
-  const toggleMute = () => {
-    if (vapiRef.current) {
-      if (isMuted) {
-        vapiRef.current.unmute();
-      } else {
-        vapiRef.current.mute();
-      }
-      setIsMuted(!isMuted);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const endCall = async () => {
-    if (vapiRef.current) {
-      await vapiRef.current.stop();
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-      }
-      setIsCallActive(false);
+  // Clear chat
+  const handleClearChat = () => {
+    if (confirm("Clear all messages?")) {
+      setMessages([]);
+      localStorage.removeItem("learnory_chat_messages");
     }
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  // Export chat
+  const handleExportChat = () => {
+    const text = messages
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "learnory-chat.txt";
+    a.click();
   };
 
-  if (!isCallActive) {
-    return (
-      <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 items-center justify-center">
-        <Card className="p-8 bg-slate-800/50 border-purple-500/20 text-center max-w-md">
-          <h1 className="text-3xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Call Ended
-          </h1>
-          <p className="text-slate-300 mb-2">
-            Duration: {formatDuration(callDuration)}
-          </p>
-          <p className="text-slate-400 mb-6 text-sm">
-            Thank you for learning with LEARNORY AI
-          </p>
-          <Link href="/chat">
-            <Button className="w-full">Back to Chat</Button>
-          </Link>
-        </Card>
-      </div>
-    );
-  }
+  // Replay voice
+  const handleReplayVoice = (content: string) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(content);
+      utterance.rate = speed;
+      utterance.pitch = voice === "female" ? 1.2 : 0.8;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Show file upload notification
+    toast({
+      title: "File Uploaded",
+      description: `${file.name} uploaded. Analyzing...`,
+    });
+
+    setShowFileUpload(false);
+
+    // Simulate file analysis
+    const fileAnalysisMessage: Message = {
+      id: `assistant-${Date.now()}`,
+      role: "assistant",
+      content: `I've analyzed ${file.name}. This appears to be a ${file.type} file. How can I help you with this?`,
+      timestamp: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, fileAnalysisMessage]);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+    <div
+      className={`min-h-screen ${isDarkMode ? "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" : "bg-gradient-to-br from-white to-slate-100"}`}
+    >
       {/* Header */}
-      <header className="bg-gradient-to-r from-slate-900/95 to-slate-800/95 backdrop-blur-xl border-b border-purple-500/20 p-4 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+      <header
+        className={`${isDarkMode ? "bg-gradient-to-r from-slate-900/95 to-slate-800/95" : "bg-gradient-to-r from-white to-slate-100"} backdrop-blur-xl border-b ${isDarkMode ? "border-purple-500/20" : "border-slate-300"} p-4 sticky top-0 z-50`}
+      >
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div
-              className={`w-3 h-3 rounded-full ${isConnecting ? "bg-yellow-400 animate-pulse" : "bg-green-400 animate-pulse"}`}
-              data-testid="status-indicator"
-            />
-            <h1 className="text-2xl font-bold text-white">LEARNORY LIVE AI</h1>
-            <span className="text-sm text-slate-400">{formatDuration(callDuration)}</span>
+            <Zap className="w-6 h-6 text-purple-500" />
+            <h1 className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+              LEARNORY LIVE AI
+            </h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex gap-2 bg-slate-700/50 rounded-lg p-2">
-              <Button
-                variant={avatarGender === "female" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setAvatarGender("female")}
-                data-testid="button-avatar-female"
-              >
-                Female
-              </Button>
-              <Button
-                variant={avatarGender === "male" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setAvatarGender("male")}
-                data-testid="button-avatar-male"
-              >
-                Male
-              </Button>
-            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              data-testid="button-theme-toggle"
+            >
+              {isDarkMode ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setShowSettings(!showSettings)}
+              data-testid="button-settings"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
             <Link href="/chat">
               <Button variant="outline" size="sm">
-                Exit
+                Back
               </Button>
             </Link>
           </div>
@@ -257,104 +322,157 @@ export default function LiveAI() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6">
-        {isConnecting ? (
-          <div className="text-center">
-            <Loader className="w-12 h-12 text-purple-400 mx-auto mb-4 animate-spin" />
-            <h2 className="text-xl font-semibold text-white mb-2">
-              Connecting...
-            </h2>
-            <p className="text-slate-400">Initializing LEARNORY Live AI</p>
-          </div>
-        ) : (
-          <>
-            {/* Avatar Display */}
-            <Card className="w-full max-w-md h-96 bg-gradient-to-br from-purple-600/20 to-pink-600/20 border-purple-500/30 backdrop-blur flex items-center justify-center overflow-hidden mb-6">
-              <div
-                ref={videoContainerRef}
-                className="w-full h-full flex items-center justify-center bg-slate-900/50"
-                data-testid="avatar-container"
-              >
-                {/* Vapi will inject video/avatar here */}
-                <div className="text-center">
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 mx-auto mb-4 flex items-center justify-center">
-                    <div className="text-5xl">
-                      {avatarGender === "female" ? "👩" : "👨"}
-                    </div>
-                  </div>
-                  <p className="text-slate-300">
-                    {avatarGender === "female"
-                      ? "Female Tutor"
-                      : "Male Tutor"}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Powered by Vapi Real-time AI
-                  </p>
-                </div>
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar */}
+          <div className="lg:col-span-1 space-y-4">
+            {/* Voice Controls */}
+            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+              <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                Voice Control
+              </h3>
+              <div className="space-y-2">
+                <Button
+                  onClick={toggleVoice}
+                  variant={isVoiceActive ? "default" : "outline"}
+                  className="w-full gap-2"
+                  data-testid="button-voice-toggle"
+                >
+                  {isVoiceActive ? (
+                    <>
+                      <Mic className="w-4 h-4" />
+                      Listening
+                    </>
+                  ) : (
+                    <>
+                      <MicOff className="w-4 h-4" />
+                      Start Listening
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={toggleMute}
+                  variant={isMuted ? "destructive" : "outline"}
+                  className="w-full gap-2"
+                  data-testid="button-mute"
+                >
+                  {isMuted ? "Muted" : "Active"}
+                </Button>
               </div>
             </Card>
 
-            {/* Status Text */}
-            <p className="text-slate-300 mb-6 text-center max-w-md">
-              Speak naturally. LEARNORY AI is listening and will respond in
-              real-time with personalized tutoring.
-            </p>
+            {/* Study Timer */}
+            <StudyTimer />
 
-            {/* Controls */}
-            <div className="flex gap-4 flex-wrap justify-center">
-              <Button
-                variant={isMuted ? "destructive" : "default"}
-                size="lg"
-                onClick={toggleMute}
-                data-testid="button-mute"
-                className="gap-2"
-              >
-                {isMuted ? (
-                  <>
-                    <MicOff className="w-5 h-5" />
-                    Muted
-                  </>
-                ) : (
-                  <>
-                    <Mic className="w-5 h-5" />
-                    Listening
-                  </>
-                )}
-              </Button>
+            {/* Settings Panel */}
+            {showSettings && (
+              <VoiceSettings
+                onClose={() => setShowSettings(false)}
+                voice={voice}
+                speed={speed}
+                language={language}
+                tone={tone}
+                onVoiceChange={setVoice}
+                onSpeedChange={setSpeed}
+                onLanguageChange={setLanguage}
+                onToneChange={setTone}
+              />
+            )}
 
+            {/* File Upload */}
+            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+              <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                Upload Files
+              </h3>
+              <input
+                type="file"
+                id="file-upload"
+                accept="image/*,.pdf,.doc,.docx"
+                onChange={handleFileUpload}
+                className="hidden"
+                data-testid="input-file-upload"
+              />
               <Button
-                variant={isSpeakerOn ? "default" : "outline"}
-                size="lg"
-                onClick={() => setIsSpeakerOn(!isSpeakerOn)}
-                data-testid="button-speaker"
-                className="gap-2"
+                onClick={() => document.getElementById("file-upload")?.click()}
+                variant="outline"
+                className="w-full gap-2"
+                data-testid="button-upload-file"
               >
-                {isSpeakerOn ? (
-                  <>
-                    <Volume2 className="w-5 h-5" />
-                    Speaker On
-                  </>
-                ) : (
-                  <>
-                    <VolumeX className="w-5 h-5" />
-                    Speaker Off
-                  </>
-                )}
+                <Upload className="w-4 h-4" />
+                Upload File
               </Button>
+              <p className={`text-xs mt-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                Images, PDF, Documents
+              </p>
+            </Card>
+          </div>
 
-              <Button
-                variant="destructive"
-                size="lg"
-                onClick={endCall}
-                data-testid="button-end-call"
-                className="gap-2"
+          {/* Main Chat Area */}
+          <div className="lg:col-span-3 space-y-4">
+            {/* Quick Actions */}
+            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+              <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                AI Learning Tools
+              </h3>
+              <QuickActions onModeSelect={setCurrentMode} />
+            </Card>
+
+            {/* Tabs */}
+            <Tabs defaultValue="chat" className="w-full">
+              <TabsList
+                className={`w-full ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}
               >
-                <PhoneOff className="w-5 h-5" />
-                End Call
-              </Button>
-            </div>
-          </>
-        )}
+                <TabsTrigger value="chat" data-testid="tab-chat">
+                  Chat
+                </TabsTrigger>
+                <TabsTrigger value="transcript" data-testid="tab-transcript">
+                  Transcript
+                </TabsTrigger>
+                <TabsTrigger value="notes" data-testid="tab-notes">
+                  Notes
+                </TabsTrigger>
+                <TabsTrigger value="documents" data-testid="tab-documents">
+                  Documents
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="chat" className="h-96">
+                <ChatInterface
+                  messages={messages}
+                  isLoading={isLoading}
+                  onSendMessage={handleSendMessage}
+                  onClearChat={handleClearChat}
+                  onExportChat={handleExportChat}
+                  onReplayVoice={handleReplayVoice}
+                />
+              </TabsContent>
+
+              <TabsContent value="transcript">
+                <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                  <p className={isDarkMode ? "text-slate-300" : "text-slate-600"}>
+                    Real-time transcript will appear here as you speak
+                  </p>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="notes">
+                <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                  <p className={isDarkMode ? "text-slate-300" : "text-slate-600"}>
+                    Your study notes will be saved here
+                  </p>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="documents">
+                <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                  <p className={isDarkMode ? "text-slate-300" : "text-slate-600"}>
+                    Uploaded documents will appear here
+                  </p>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </div>
     </div>
   );
