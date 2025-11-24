@@ -14,6 +14,9 @@ const DEFAULT_VOICE = "Adam";
 function preprocessTextForSpeech(text: string): string {
   let processed = text;
   
+  // Convert LEARNORY to lowercase so it's read as a word, not spelled
+  processed = processed.replace(/LEARNORY/g, "learnory");
+  
   // Remove markdown formatting
   processed = processed
     .replace(/\*\*(.+?)\*\*/g, "$1") // Remove **bold**
