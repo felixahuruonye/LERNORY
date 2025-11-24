@@ -18,6 +18,7 @@ interface ChatInterfaceProps {
   onClearChat: () => void;
   onExportChat: () => void;
   onReplayVoice?: (content: string) => void;
+  onInputChange?: (content: string) => void;
 }
 
 export function ChatInterface({
@@ -27,6 +28,7 @@ export function ChatInterface({
   onClearChat,
   onExportChat,
   onReplayVoice,
+  onInputChange,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -50,6 +52,11 @@ export function ChatInterface({
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleInputChange = (value: string) => {
+    setInput(value);
+    onInputChange?.(value);
   };
 
   const copyToClipboard = (text: string) => {
@@ -144,26 +151,20 @@ export function ChatInterface({
         )}
       </div>
 
-      {/* Input */}
+      {/* Input - Auto-send on Enter, no send button needed */}
       <div className="p-4 border-t border-slate-700 space-y-2">
         <Textarea
-          placeholder="Type your question or message..."
+          placeholder="Type your question (press Enter to send)..."
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
           data-testid="textarea-input"
           className="min-h-[60px] resize-none bg-slate-700 border-slate-600 text-white placeholder-slate-400"
         />
-        <Button
-          onClick={handleSend}
-          disabled={isLoading || !input.trim()}
-          className="w-full gap-2"
-          data-testid="button-send-message"
-        >
-          <Send className="w-4 h-4" />
-          {isLoading ? "Thinking..." : "Send"}
-        </Button>
+        <div className="text-xs text-slate-400">
+          {isLoading ? "AI is thinking..." : "Press Enter to send • Shift+Enter for new line"}
+        </div>
       </div>
     </Card>
   );

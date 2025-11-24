@@ -333,6 +333,62 @@ export async function generateSpeech(text: string): Promise<Buffer> {
   }
 }
 
+// Smart multi-API chat with auto-fallback (Gemini → OpenRouter → OpenAI)
+export async function chatWithAISmartFallback(messages: any[]): Promise<string> {
+  // Try Gemini first
+  try {
+    console.log("Trying Gemini API...");
+    const { explainTopicWithLEARNORY } = await import("./gemini");
+    const lastMsg = messages[messages.length - 1]?.content || "";
+    const response = await explainTopicWithLEARNORY(lastMsg);
+    console.log("✓ Gemini succeeded");
+    return response;
+  } catch (err) {
+    console.log("✗ Gemini failed, trying OpenRouter...", (err as any)?.message);
+  }
+
+  // Try OpenRouter
+  try {
+    console.log("Trying OpenRouter API...");
+    const response = await fetch("https://openrouter.io/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://replit.com",
+      },
+      body: JSON.stringify({
+        model: "openai/gpt-3.5-turbo",
+        messages,
+        temperature: 0.7,
+      }),
+    });
+    
+    if (!response.ok) throw new Error("OpenRouter failed");
+    const data = await response.json();
+    console.log("✓ OpenRouter succeeded");
+    return data.choices[0]?.message?.content || "I received your message.";
+  } catch (err) {
+    console.log("✗ OpenRouter failed, trying OpenAI...", (err as any)?.message);
+  }
+
+  // Try OpenAI (primary)
+  try {
+    console.log("Trying OpenAI API...");
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages,
+      temperature: 0.7,
+      max_tokens: 1000,
+    });
+    console.log("✓ OpenAI succeeded");
+    return response.choices[0]?.message?.content || "I received your message.";
+  } catch (err) {
+    console.error("✗ All APIs failed:", err);
+    return "I'm having trouble connecting to my AI services right now. Please try again.";
+  }
+}
+
 export async function summarizeText(text: string, length: 'short' | 'medium' | 'long' = 'medium'): Promise<string> {
   const lengthInstructions = {
     short: "in 2-3 sentences",

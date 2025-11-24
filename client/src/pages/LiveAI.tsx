@@ -37,6 +37,7 @@ export default function LiveAI() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const messageCountRef = useRef(0);
   const initRef = useRef(false);
+  const autoSendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Load settings
@@ -250,20 +251,38 @@ export default function LiveAI() {
     setMessages((prev) => [...prev, msg]);
   };
 
-  const handleSendMessage = async () => {
-    if (!messageInput.trim()) return;
+  // Auto-send with debounce (500ms after user stops typing)
+  const handleInputChange = (text: string) => {
+    setMessageInput(text);
 
-    const userText = messageInput;
+    // Clear existing timeout
+    if (autoSendTimeoutRef.current) {
+      clearTimeout(autoSendTimeoutRef.current);
+    }
+
+    // If input is empty or too short, don't auto-send
+    if (!text.trim() || text.trim().length < 3) return;
+
+    // Set new timeout to auto-send after 500ms
+    autoSendTimeoutRef.current = setTimeout(() => {
+      handleSendMessage(text);
+    }, 500);
+  };
+
+  const handleSendMessage = async (userText?: string) => {
+    const text = userText || messageInput;
+    if (!text.trim() || isProcessing) return;
+
     setMessageInput("");
     setIsProcessing(true);
 
     try {
-      addMessage("user", userText);
+      addMessage("user", text);
 
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userText, sessionId: null }),
+        body: JSON.stringify({ content: text, sessionId: null }),
       });
 
       if (!response.ok) {
@@ -273,6 +292,8 @@ export default function LiveAI() {
       const data = await response.json();
       const aiMessage = data.message || data.content || "Got it!";
       addMessage("assistant", aiMessage);
+
+      // Speak the response with real-time avatar speech
       await playAudio(aiMessage);
     } catch (error) {
       console.error("Error:", error);
@@ -401,18 +422,26 @@ export default function LiveAI() {
                 </TabsList>
 
                 <TabsContent value="voice">
-                  <ChatInterface messages={messages} isLoading={isProcessing} isDarkMode={isDarkMode} />
+                  <ChatInterface 
+                    messages={messages} 
+                    isLoading={isProcessing} 
+                    onSendMessage={handleSendMessage}
+                    onClearChat={() => setMessages([])}
+                    onExportChat={() => {}}
+                    onInputChange={handleInputChange}
+                  />
                 </TabsContent>
 
                 <TabsContent value="type">
                   <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
                     <div className="space-y-3">
                       <Textarea
-                        placeholder="Type your question..."
+                        placeholder="Type your question (auto-sends after you stop typing)..."
                         value={messageInput}
-                        onChange={(e) => setMessageInput(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter" && e.ctrlKey) {
+                        onChange={(e) => handleInputChange(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
                             handleSendMessage();
                           }
                         }}
@@ -421,15 +450,9 @@ export default function LiveAI() {
                         disabled={isProcessing}
                         data-testid="textarea-message"
                       />
-                      <Button
-                        onClick={handleSendMessage}
-                        disabled={!messageInput.trim() || isProcessing}
-                        className="w-full gap-2"
-                        data-testid="button-send-message"
-                      >
-                        <Send className="w-4 h-4" />
-                        Send & Listen
-                      </Button>
+                      <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                        {isProcessing ? "AI is thinking..." : "Press Enter to send • Shift+Enter for new line • Auto-sends after 500ms of inactivity"}
+                      </div>
                     </div>
                   </Card>
                 </TabsContent>

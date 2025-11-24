@@ -12,6 +12,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import {
   chatWithAI,
+  chatWithAISmartFallback,
   generateLesson,
   generateSyllabus,
   gradeQuiz,
@@ -125,10 +126,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("Getting AI response with", messages.length, "messages", messages);
 
-      // Get AI response
+      // Get AI response with smart fallback (Gemini → OpenRouter → OpenAI)
       let aiResponse: string;
       try {
-        aiResponse = await chatWithAI(messages);
+        aiResponse = await chatWithAISmartFallback(messages);
         console.log("Got AI response:", aiResponse.substring(0, 150));
         if (!aiResponse || aiResponse.trim() === "") {
           console.warn("Empty AI response!");
