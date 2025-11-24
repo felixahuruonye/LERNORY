@@ -1348,5 +1348,47 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Send notifications for all previous chat history
+  app.post('/api/notifications/send-chat-history', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Get all chat sessions for user
+      const sessions = await storage.getChatSessionsByUser(userId);
+      
+      if (!sessions || sessions.length === 0) {
+        return res.json({ message: "No chat sessions found", count: 0 });
+      }
+
+      // Create and store notifications for each chat
+      const notificationCount = sessions.length;
+      
+      for (const session of sessions) {
+        try {
+          await storage.createNotification({
+            userId,
+            type: "chat_history",
+            title: session.title || "Previous Chat",
+            message: `From ${new Date(session.createdAt).toLocaleDateString()}`,
+            icon: "💬",
+            actionUrl: `/chat?sessionId=${session.id}`,
+            read: false,
+          });
+        } catch (err) {
+          console.log("Failed to create notification for session:", session.id);
+        }
+      }
+
+      res.json({ 
+        message: `Created ${notificationCount} notifications for chat history`, 
+        count: notificationCount,
+        sessions: sessions.map(s => ({ id: s.id, title: s.title, createdAt: s.createdAt }))
+      });
+    } catch (error) {
+      console.error("Error sending chat history notifications:", error);
+      res.status(500).json({ message: "Failed to send chat history notifications" });
+    }
+  });
+
   return httpServer;
 }

@@ -153,3 +153,51 @@ export async function createAndSendNotification(data: {
     console.error("Error creating and sending notification:", error);
   }
 }
+
+/**
+ * Send device notifications for all previous chat history
+ */
+export async function sendChatHistoryNotifications(): Promise<{ count: number; message: string }> {
+  try {
+    // First request notification permission
+    const hasPermission = await requestNotificationPermission();
+    if (!hasPermission) {
+      console.warn("Notification permission not granted");
+      return { count: 0, message: "Notification permission denied" };
+    }
+
+    // Call backend to create notifications for all chats
+    const response = await fetch("/api/notifications/send-chat-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) throw new Error("Failed to send chat history notifications");
+    
+    const data = await response.json();
+    
+    // Send push notifications for each chat (with delay to not overwhelm)
+    if (data.count > 0) {
+      for (let i = 0; i < data.sessions.length; i++) {
+        setTimeout(() => {
+          const session = data.sessions[i];
+          if (Notification.permission === "granted") {
+            new Notification(session.title || "Previous Chat", {
+              body: `From ${new Date(session.createdAt).toLocaleDateString()} - Click to view`,
+              icon: "💬",
+              tag: `chat-history-${session.id}`,
+              requireInteraction: true,
+            }).onclick = () => {
+              window.location.href = `/chat?sessionId=${session.id}`;
+            };
+          }
+        }, i * 500); // 500ms delay between notifications
+      }
+    }
+
+    return { count: data.count, message: data.message };
+  } catch (error) {
+    console.error("Error sending chat history notifications:", error);
+    return { count: 0, message: "Failed to send notifications" };
+  }
+}

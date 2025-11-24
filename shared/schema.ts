@@ -22,7 +22,7 @@ export const quizDifficultyEnum = pgEnum('quiz_difficulty', ['easy', 'medium', '
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'completed', 'failed']);
 export const learningModeEnum = pgEnum('learning_mode', ['learning', 'exam', 'revision', 'quick', 'eli5', 'advanced', 'practice']);
 export const examTypeEnum = pgEnum('exam_type', ['waec', 'neco', 'jamb', 'university', 'custom']);
-export const notificationTypeEnum = pgEnum('notification_type', ['chat', 'motivation', 'achievement', 'reminder', 'exam', 'study_plan', 'system']);
+export const notificationTypeEnum = pgEnum('notification_type', ['chat', 'chat_history', 'motivation', 'achievement', 'reminder', 'exam', 'study_plan', 'system']);
 
 // Session storage table (required for Replit Auth)
 export const sessions = pgTable(
