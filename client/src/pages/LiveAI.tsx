@@ -244,8 +244,11 @@ export default function LiveAI() {
 
       const data = await response.json();
       console.log("API Response:", data);
-      const aiMessage = data.message || data.content || "Got it!";
+      const aiMessage = data.message || "Got it!";
       console.log("AI Message to display:", aiMessage);
+      if (!aiMessage || aiMessage.trim() === "") {
+        throw new Error("Empty response from API");
+      }
       addMessage("assistant", aiMessage);
 
       // Speak the response with avatar lip-syncing
