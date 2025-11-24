@@ -73,6 +73,11 @@ export default function Chat() {
     enabled: !!user && !!currentSessionId,
   });
 
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   // Create new session
   const createSessionMutation = useMutation({
     mutationFn: async () => {
@@ -116,13 +121,11 @@ export default function Chat() {
       return response.json();
     },
     onSuccess: () => {
+      // Refetch messages to show both user message and AI response
       queryClient.invalidateQueries({ queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId] });
+      // Refetch sessions to update chat title
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       setMessage("");
-      toast({
-        title: "Message sent",
-        description: "Your message was sent successfully.",
-      });
     },
     onError: (error: Error) => {
       console.error("Send message error:", error);
@@ -369,10 +372,10 @@ export default function Chat() {
             sessions.map((session) => (
               <div
                 key={session.id}
-                className={`flex items-center gap-1 p-2 rounded cursor-pointer transition-colors ${
+                className={`group flex items-center gap-2 p-2 rounded cursor-pointer transition-all hover:bg-destructive/10 ${
                   currentSessionId === session.id
                     ? "bg-primary/20 text-primary"
-                    : "hover:bg-muted"
+                    : ""
                 }`}
               >
                 <MessageSquare className="h-4 w-4 shrink-0" />
@@ -385,11 +388,16 @@ export default function Chat() {
                   {session.title}
                 </button>
                 <button
-                  onClick={() => deleteSessionMutation.mutate(session.id)}
-                  className="opacity-0 hover:opacity-100 transition-opacity p-1 shrink-0"
+                  onClick={() => {
+                    if (confirm(`Delete chat "${session.title}"?`)) {
+                      deleteSessionMutation.mutate(session.id);
+                    }
+                  }}
+                  className="p-1 shrink-0 text-destructive hover:bg-destructive/20 rounded transition-colors"
+                  title="Delete chat"
                   data-testid={`button-delete-session-${session.id}`}
                 >
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             ))
