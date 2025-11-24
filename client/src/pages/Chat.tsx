@@ -73,10 +73,13 @@ export default function Chat() {
     enabled: !!user && !!currentSessionId,
   });
 
+  // Local state for optimistic updates
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, optimisticMessages]);
 
   // Create new session
   const createSessionMutation = useMutation({
@@ -92,6 +95,7 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       setCurrentSessionId(newSession.id);
       setMessage("");
+      setOptimisticMessages([]);
       setExplainedTopic(null);
       setGeneratedImagesList([]);
       toast({ title: "New chat created" });
@@ -117,18 +121,45 @@ export default function Chat() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
+      // Optimistically add user message
+      const userMsg: ChatMessage = {
+        id: Math.random().toString(),
+        userId: user!.id,
+        sessionId: currentSessionId || undefined,
+        role: "user",
+        content,
+        createdAt: new Date().toISOString(),
+        attachments: null,
+      };
+      
+      setOptimisticMessages(prev => [...prev, userMsg]);
+      setMessage("");
+
+      // Add AI thinking message
+      const thinkingMsg: ChatMessage = {
+        id: Math.random().toString(),
+        userId: user!.id,
+        sessionId: currentSessionId || undefined,
+        role: "assistant",
+        content: "Thinking...",
+        createdAt: new Date().toISOString(),
+        attachments: null,
+      };
+      setOptimisticMessages(prev => [...prev, thinkingMsg]);
+
+      // Send to backend
       const response = await apiRequest("POST", "/api/chat/send", { content, sessionId: currentSessionId });
       return response.json();
     },
     onSuccess: () => {
-      // Refetch messages to show both user message and AI response
+      // Clear optimistic messages and refetch from server
+      setOptimisticMessages([]);
       queryClient.invalidateQueries({ queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId] });
-      // Refetch sessions to update chat title
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-      setMessage("");
     },
     onError: (error: Error) => {
       console.error("Send message error:", error);
+      setOptimisticMessages([]); // Clear optimistic messages on error
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -513,6 +544,38 @@ export default function Chat() {
             </div>
           ) : (
             <div className="space-y-4 w-full flex flex-col">
+              {/* Display real messages + optimistic messages */}
+              {[...messages, ...optimisticMessages].map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  data-testid={`message-${msg.role}-${msg.id}`}
+                >
+                  <div
+                    className={`max-w-2xl rounded-lg p-4 ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground border border-border/50"
+                    }`}
+                  >
+                    <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
+                    
+                    {msg.role === "assistant" && msg.content !== "Thinking..." && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="mt-2 h-6 w-6 hover-elevate active-elevate-2"
+                        onClick={() => speakMessage(msg.content, msg.id)}
+                        title={speakingMessageId === msg.id ? (isPaused ? "Resume" : "Pause") : "Read aloud"}
+                        data-testid={`button-read-message-${msg.id}`}
+                      >
+                        <Volume2 className={`h-4 w-4 ${speakingMessageId === msg.id ? "text-primary" : ""}`} />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
               {/* Explained Topic Display */}
               {explainedTopic && (
                 <Card className="p-6 border-primary/30 bg-primary/5">
