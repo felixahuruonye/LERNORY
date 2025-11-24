@@ -178,7 +178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ message: "Message sent successfully" });
+      res.json({ message: "Message sent successfully", content: aiResponse });
     } catch (error) {
       console.error("Error sending message:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
