@@ -69,8 +69,13 @@ export default function Chat() {
 
   // Load messages for current session
   const { data: messages = [], isLoading: messagesLoading } = useQuery<ChatMessage[]>({
-    queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId],
+    queryKey: ["/api/chat/messages", currentSessionId],
     enabled: !!user && !!currentSessionId,
+    queryFn: async () => {
+      const res = await fetch(`/api/chat/messages?sessionId=${currentSessionId}`);
+      if (!res.ok) throw new Error("Failed to load messages");
+      return res.json();
+    },
   });
 
   // Create new session
@@ -115,12 +120,9 @@ export default function Chat() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/chat/messages?sessionId=${currentSessionId}`, currentSessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/messages", currentSessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       setMessage("");
-      toast({
-        title: "Message sent",
-        description: "Your message was sent successfully.",
-      });
     },
     onError: (error: Error) => {
       console.error("Send message error:", error);
