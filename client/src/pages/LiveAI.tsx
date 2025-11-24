@@ -1,28 +1,29 @@
-import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Settings,
+  Send,
+  Volume2,
   Mic,
   MicOff,
   PhoneOff,
-  Settings,
   Upload,
-  Moon,
-  Sun,
-  FileUp,
-  Zap,
-  Loader,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
 import { VoiceSettings } from "@/components/live-ai/VoiceSettings";
 import { StudyTimer } from "@/components/live-ai/StudyTimer";
 import { AvatarDisplay } from "@/components/live-ai/AvatarDisplay";
-import { vapiClient } from "@/lib/vapiClient";
+import { vapiWebService } from "@/lib/vapiWebService";
 
 interface Message {
   id: string;
@@ -32,91 +33,88 @@ interface Message {
 }
 
 export default function LiveAI() {
-  const { user } = useAuth();
   const { toast } = useToast();
-
-  // Chat state
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentMode, setCurrentMode] = useState<string>("ask-question");
-
-  // Voice state
-  const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
-
-  // Settings state
-  const [showSettings, setShowSettings] = useState(false);
-  const [voice, setVoice] = useState("female");
+  const [voice, setVoice] = useState<"female" | "male">("female");
   const [speed, setSpeed] = useState(1);
   const [language, setLanguage] = useState("en");
   const [tone, setTone] = useState("friendly");
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentMode, setCurrentMode] = useState("explain");
+  const [messageInput, setMessageInput] = useState("");
 
-  // UI state
-  const [showFileUpload, setShowFileUpload] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const initializingRef = useRef(false);
 
-  // Load settings, messages, and initialize Vapi
+  // Load saved settings
   useEffect(() => {
     const saved = localStorage.getItem("learnory_live_ai_settings");
     if (saved) {
       const settings = JSON.parse(saved);
-      setVoice(settings.voice);
-      setSpeed(settings.speed);
-      setLanguage(settings.language);
-      setTone(settings.tone);
-      setIsDarkMode(settings.isDarkMode);
+      setVoice(settings.voice || "female");
+      setSpeed(settings.speed || 1);
+      setLanguage(settings.language || "en");
+      setTone(settings.tone || "friendly");
+      setIsDarkMode(settings.isDarkMode || false);
     }
 
     const savedMessages = localStorage.getItem("learnory_chat_messages");
     if (savedMessages) {
-      try {
-        setMessages(JSON.parse(savedMessages));
-      } catch (e) {
-        console.error("Failed to load messages:", e);
-      }
+      setMessages(JSON.parse(savedMessages));
     }
 
-    initSpeechRecognition();
+    // Initialize Vapi and start auto voice call
     initializeVapi();
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
   }, []);
 
-  // Initialize Vapi on component mount and AUTO-START
+  // Initialize Vapi and auto-start call
   const initializeVapi = async () => {
+    if (initializingRef.current) return;
+    initializingRef.current = true;
+
     try {
       const configRes = await fetch("/api/vapi-config");
       if (configRes.ok) {
         const { publicKey } = await configRes.json();
-        await vapiClient.initialize(publicKey);
+        await vapiWebService.initialize(publicKey);
 
-        // Set up Vapi event handlers
-        vapiClient.onCallStart(() => {
+        // Set up event handlers
+        vapiWebService.on("callStart", () => {
           console.log("Vapi call started");
           setIsVoiceActive(true);
+          initSpeechRecognition();
         });
 
-        vapiClient.onCallEnd(() => {
+        vapiWebService.on("callEnd", () => {
           console.log("Vapi call ended");
           setIsVoiceActive(false);
           setIsListening(false);
         });
 
-        vapiClient.onSpeechStart(() => {
+        vapiWebService.on("speechStart", () => {
           setIsListening(true);
         });
 
-        vapiClient.onSpeechEnd(() => {
+        vapiWebService.on("speechEnd", () => {
           setIsListening(false);
         });
 
-        vapiClient.onTranscript((transcript: any) => {
-          if (transcript.role === "user") {
-            handleSendMessage(transcript.transcript);
-          }
+        vapiWebService.on("transcript", (transcript: any) => {
+          handleUserSpeech(transcript.content);
         });
 
-        vapiClient.onError((error: any) => {
+        vapiWebService.on("error", (error: any) => {
           console.error("Vapi error:", error);
           toast({
             title: "Connection Error",
@@ -125,34 +123,51 @@ export default function LiveAI() {
           });
         });
 
-        // AUTO-START THE CALL
+        // Auto-start the voice call
         await autoStartCall();
       } else {
         console.error("Failed to fetch Vapi config");
+        toast({
+          title: "Setup Error",
+          description: "Could not load Vapi configuration",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Failed to initialize Vapi:", error);
+      toast({
+        title: "Initialization Error",
+        description: "Could not initialize voice system",
+        variant: "destructive",
+      });
     }
   };
 
   // Auto-start voice call
   const autoStartCall = async () => {
     try {
-      await vapiClient.startCall({
-        assistantOverrides: {
-          voice: {
-            provider: "openai",
-            voiceId: voice === "female" ? "nova" : "onyx",
-          },
-          systemPrompt: `You are LEARNORY ULTRA, an advanced AI tutor with a ${tone} tone for ${language} language instruction. 
-          Learning mode: ${currentMode}. 
-          Start by greeting the student warmly and offering to help them learn. Keep responses clear and engaging. Adapt to the student's pace.`,
-          firstMessage: voice === "female" ? 
-            "Hello! I'm your LEARNORY AI tutor. I'm ready to help you learn today. What would you like to study?" :
-            "Hello! I'm your LEARNORY AI tutor. What subject would you like to explore today?",
-        },
+      await vapiWebService.startCall({
+        voice,
+        speed,
+        language,
+        tone,
       });
-      toast({ title: "Connected", description: "LEARNORY Live AI is ready" });
+
+      toast({
+        title: "Connected",
+        description: "LEARNORY Live AI is ready to help! Speak naturally or type below.",
+      });
+
+      // Add initial greeting message
+      const greeting: Message = {
+        id: `greeting-${Date.now()}`,
+        role: "assistant",
+        content: voice === "female"
+          ? "Hello! I'm your LEARNORY AI tutor. I'm ready to help you learn today. What would you like to study?"
+          : "Hello! I'm your LEARNORY AI tutor. What subject would you like to explore today?",
+        timestamp: Date.now(),
+      };
+      setMessages([greeting]);
     } catch (error) {
       console.error("Failed to auto-start call:", error);
       toast({
@@ -160,6 +175,186 @@ export default function LiveAI() {
         description: "Retrying connection...",
         variant: "destructive",
       });
+      setTimeout(autoStartCall, 2000);
+    }
+  };
+
+  // Handle user speech (from Vapi transcript)
+  const handleUserSpeech = async (speech: string) => {
+    if (!speech.trim()) return;
+    console.log("User speech received:", speech);
+
+    // Send to backend for AI response
+    await sendMessageToBackend(speech);
+  };
+
+  // Initialize speech recognition
+  const initSpeechRecognition = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = language;
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            handleUserSpeech(transcript);
+            transcript = "";
+          }
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
+  };
+
+  // Send message to backend for AI response
+  const sendMessageToBackend = async (userMessage: string) => {
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/live-ai/stream-response", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userMessage,
+          mode: currentMode,
+          voice,
+          speed,
+          language,
+          tone,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get response");
+      }
+
+      // Read the event stream
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let aiResponse = "";
+      let messageId = `ai-${Date.now()}`;
+      let aiMessageAdded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const jsonStr = line.substring(6);
+            try {
+              const data = JSON.parse(jsonStr);
+
+              if (data.chunk) {
+                aiResponse += data.chunk;
+
+                // Add initial message if not yet added
+                if (!aiMessageAdded) {
+                  const assistantMsg: Message = {
+                    id: messageId,
+                    role: "assistant",
+                    content: data.chunk,
+                    timestamp: Date.now(),
+                  };
+                  setMessages((prev) => [...prev, assistantMsg]);
+                  aiMessageAdded = true;
+                } else {
+                  // Update existing message with new chunk
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === messageId
+                        ? { ...msg, content: msg.content + data.chunk }
+                        : msg
+                    )
+                  );
+                }
+
+                // Send chunks to Vapi for voice output
+                await vapiWebService.speakText(data.chunk);
+              }
+
+              if (data.isComplete) {
+                break;
+              }
+            } catch (e) {
+              console.error("Error parsing stream data:", e);
+            }
+          }
+        }
+      }
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast({
+        title: "Error",
+        description: "Failed to get AI response",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
+  // Handle manual message sending via input
+  const handleSendMessage = async () => {
+    if (!messageInput.trim()) return;
+
+    const userMsg: Message = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: messageInput,
+      timestamp: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setMessageInput("");
+
+    await sendMessageToBackend(messageInput);
+  };
+
+  // Toggle voice call
+  const toggleVoice = async () => {
+    try {
+      await vapiWebService.stopCall();
+      setIsVoiceActive(false);
+    } catch (error) {
+      console.error("Failed to toggle voice:", error);
+    }
+  };
+
+  // Toggle mute
+  const toggleMute = async () => {
+    try {
+      if (isMuted) {
+        await vapiWebService.unmute();
+      } else {
+        await vapiWebService.mute();
+      }
+      setIsMuted(!isMuted);
+    } catch (error) {
+      console.error("Failed to toggle mute:", error);
     }
   };
 
@@ -174,412 +369,139 @@ export default function LiveAI() {
     localStorage.setItem("learnory_chat_messages", JSON.stringify(messages));
   }, [messages]);
 
-  // Initialize speech recognition
-  const initSpeechRecognition = () => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-      recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            handleSendMessage(transcript);
-            transcript = "";
-          }
-        }
-      };
-      recognition.onerror = (event: any) => {
-        console.error("Speech recognition error:", event.error);
-      };
-
-      recognitionRef.current = recognition;
-    }
-  };
-
-  // Handle voice toggling with Vapi
-  const toggleVoice = async () => {
-    if (isVoiceActive) {
-      try {
-        await vapiClient.stopCall();
-      } catch (error) {
-        console.error("Failed to stop Vapi call:", error);
-      }
-    } else {
-      try {
-        await vapiClient.startCall({
-          assistantOverrides: {
-            voice: {
-              provider: "openai",
-              voiceId: voice === "female" ? "nova" : "onyx",
-            },
-            systemPrompt: `You are LEARNORY ULTRA, an advanced AI tutor with a ${tone} tone for ${language} language instruction. 
-            Learning mode: ${currentMode}. 
-            Keep responses clear and engaging. Adapt to the student's pace.`,
-          },
-        });
-      } catch (error) {
-        console.error("Failed to start Vapi call:", error);
-        toast({
-          title: "Connection Failed",
-          description: "Could not establish voice connection",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  // Handle mute with Vapi
-  const toggleMute = async () => {
-    try {
-      if (isMuted) {
-        await vapiClient.unmute();
-      } else {
-        await vapiClient.mute();
-      }
-      setIsMuted(!isMuted);
-    } catch (error) {
-      console.error("Failed to toggle mute:", error);
-    }
-  };
-
-  // Send message with mode context
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim()) return;
-
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content,
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      // Create mode-aware prompt
-      const modePrompts: Record<string, string> = {
-        "explain": "Explain this concept clearly with examples:",
-        "past-questions": "Help me solve this past question:",
-        "scan-image": "Analyze this image and explain:",
-        "summarize": "Summarize the key points:",
-        "voice-tutor": "Teach me about this topic:",
-        "study-plan": "Create a study plan for:",
-        "mock-exam": "Generate a mock exam question about:",
-        "lesson-replay": "Replay the lesson on:",
-        "topic-breakdown": "Break down this topic step-by-step:",
-        "ask-question": "Answer this question:",
-      };
-
-      const modePrefix = modePrompts[currentMode] || modePrompts["ask-question"];
-      const fullPrompt = `${modePrefix} ${content}`;
-
-      // Simulate AI response (will integrate with Vapi API later)
-      const responses = [
-        `Great question about ${content.split(" ")[0]}! Let me explain...`,
-        `I understand you're asking about this. Here's what you need to know...`,
-        `This is an important concept. Let me break it down for you...`,
-        `Perfect question! Let me provide a detailed explanation...`,
-      ];
-
-      const response =
-        responses[Math.floor(Math.random() * responses.length)];
-
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: response,
-        timestamp: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Text-to-speech (will be replaced with Vapi voice)
-      if ("speechSynthesis" in window) {
-        const utterance = new SpeechSynthesisUtterance(response);
-        utterance.rate = speed;
-        utterance.pitch = voice === "female" ? 1.2 : 0.8;
-        window.speechSynthesis.speak(utterance);
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to get AI response",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Clear chat
-  const handleClearChat = () => {
-    if (confirm("Clear all messages?")) {
-      setMessages([]);
-      localStorage.removeItem("learnory_chat_messages");
-    }
-  };
-
-  // Export chat
-  const handleExportChat = () => {
-    const text = messages
-      .map((m) => `${m.role}: ${m.content}`)
-      .join("\n\n");
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "learnory-chat.txt";
-    a.click();
-  };
-
-  // Replay voice
-  const handleReplayVoice = (content: string) => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(content);
-      utterance.rate = speed;
-      utterance.pitch = voice === "female" ? 1.2 : 0.8;
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  // Handle file upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Show file upload notification
-    toast({
-      title: "File Uploaded",
-      description: `${file.name} uploaded. Analyzing...`,
-    });
-
-    setShowFileUpload(false);
-
-    // Simulate file analysis
-    const fileAnalysisMessage: Message = {
-      id: `assistant-${Date.now()}`,
-      role: "assistant",
-      content: `I've analyzed ${file.name}. This appears to be a ${file.type} file. How can I help you with this?`,
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, fileAnalysisMessage]);
-  };
-
   return (
-    <div
-      className={`min-h-screen ${isDarkMode ? "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" : "bg-gradient-to-br from-white to-slate-100"}`}
-    >
-      {/* Header */}
-      <header
-        className={`${isDarkMode ? "bg-gradient-to-r from-slate-900/95 to-slate-800/95" : "bg-gradient-to-r from-white to-slate-100"} backdrop-blur-xl border-b ${isDarkMode ? "border-purple-500/20" : "border-slate-300"} p-4 sticky top-0 z-50`}
-      >
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Zap className="w-6 h-6 text-purple-500" />
-            <h1 className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-              LEARNORY LIVE AI
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              data-testid="button-theme-toggle"
-            >
-              {isDarkMode ? (
-                <Sun className="w-5 h-5" />
-              ) : (
-                <Moon className="w-5 h-5" />
-              )}
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setShowSettings(!showSettings)}
-              data-testid="button-settings"
-            >
-              <Settings className="w-5 h-5" />
-            </Button>
-            <Link href="/chat">
-              <Button variant="outline" size="sm">
-                Back
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+    <div className={isDarkMode ? "dark" : ""}>
+      <div className={`min-h-screen ${isDarkMode ? "bg-slate-900" : "bg-slate-50"}`}>
+        <div className="max-w-7xl mx-auto p-4 md:p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Sidebar */}
+            <div className="lg:col-span-1 space-y-4">
+              {/* Voice Controls */}
+              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                  Call Controls
+                </h3>
+                <div className="space-y-2">
+                  <Button
+                    onClick={toggleMute}
+                    variant={isMuted ? "destructive" : "default"}
+                    className="w-full gap-2"
+                    data-testid="button-mute"
+                  >
+                    {isMuted ? (
+                      <>
+                        <MicOff className="w-4 h-4" />
+                        Muted
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-4 h-4" />
+                        Unmuted
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={toggleVoice}
+                    variant="destructive"
+                    className="w-full gap-2"
+                    data-testid="button-end-call"
+                  >
+                    <PhoneOff className="w-4 h-4" />
+                    End Call
+                  </Button>
+                </div>
+              </Card>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4 md:p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Voice Controls */}
-            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-              <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                Call Controls
-              </h3>
-              <div className="space-y-2">
-                <Button
-                  onClick={toggleMute}
-                  variant={isMuted ? "destructive" : "default"}
-                  className="w-full gap-2"
-                  data-testid="button-mute"
-                >
-                  {isMuted ? (
-                    <>
-                      <MicOff className="w-4 h-4" />
-                      Muted
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-4 h-4" />
-                      Unmuted
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={toggleVoice}
-                  variant="destructive"
-                  className="w-full gap-2"
-                  data-testid="button-end-call"
-                >
-                  <PhoneOff className="w-4 h-4" />
-                  End Call
-                </Button>
-              </div>
-            </Card>
+              {/* Study Timer */}
+              <StudyTimer />
 
-            {/* Study Timer */}
-            <StudyTimer />
-
-            {/* Settings Panel */}
-            {showSettings && (
+              {/* Voice Settings */}
               <VoiceSettings
-                onClose={() => setShowSettings(false)}
                 voice={voice}
+                setVoice={setVoice}
                 speed={speed}
+                setSpeed={setSpeed}
                 language={language}
+                setLanguage={setLanguage}
                 tone={tone}
-                onVoiceChange={setVoice}
-                onSpeedChange={setSpeed}
-                onLanguageChange={setLanguage}
-                onToneChange={setTone}
+                setTone={setTone}
+                isDarkMode={isDarkMode}
               />
-            )}
 
-            {/* File Upload */}
-            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-              <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                Upload Files
-              </h3>
-              <input
-                type="file"
-                id="file-upload"
-                accept="image/*,.pdf,.doc,.docx"
-                onChange={handleFileUpload}
-                className="hidden"
-                data-testid="input-file-upload"
-              />
-              <Button
-                onClick={() => document.getElementById("file-upload")?.click()}
-                variant="outline"
-                className="w-full gap-2"
-                data-testid="button-upload-file"
-              >
-                <Upload className="w-4 h-4" />
-                Upload File
-              </Button>
-              <p className={`text-xs mt-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                Images, PDF, Documents
-              </p>
-            </Card>
-          </div>
+              {/* Theme Toggle */}
+              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                <Button
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  variant="outline"
+                  className="w-full gap-2"
+                  data-testid="button-theme"
+                >
+                  {isDarkMode ? "☀️ Light" : "🌙 Dark"}
+                </Button>
+              </Card>
+            </div>
 
-          {/* Main Chat Area */}
-          <div className="lg:col-span-3 space-y-4">
-            {/* Avatar Display */}
-            <Card className={`p-6 flex justify-center ${isDarkMode ? "bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30" : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"}`}>
-              <AvatarDisplay voice={voice} isActive={isVoiceActive} isListening={isListening} />
-            </Card>
+            {/* Main Chat Area */}
+            <div className="lg:col-span-3 space-y-4">
+              {/* Avatar Display */}
+              <Card className={`p-6 flex justify-center ${isDarkMode ? "bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30" : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"}`}>
+                <AvatarDisplay voice={voice} isActive={isVoiceActive} isListening={isListening} />
+              </Card>
 
-            {/* Quick Actions */}
-            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-              <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                AI Learning Tools
-              </h3>
-              <QuickActions onModeSelect={setCurrentMode} />
-            </Card>
+              {/* Quick Actions */}
+              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                  AI Learning Tools
+                </h3>
+                <QuickActions onModeSelect={setCurrentMode} />
+              </Card>
 
-            {/* Tabs */}
-            <Tabs defaultValue="chat" className="w-full">
-              <TabsList
-                className={`w-full ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}
-              >
-                <TabsTrigger value="chat" data-testid="tab-chat">
-                  Chat
-                </TabsTrigger>
-                <TabsTrigger value="transcript" data-testid="tab-transcript">
-                  Transcript
-                </TabsTrigger>
-                <TabsTrigger value="notes" data-testid="tab-notes">
-                  Notes
-                </TabsTrigger>
-                <TabsTrigger value="documents" data-testid="tab-documents">
-                  Documents
-                </TabsTrigger>
-              </TabsList>
+              {/* Tabs */}
+              <Tabs defaultValue="chat" className="w-full">
+                <TabsList className="w-full grid grid-cols-2" data-testid="tabs-live-ai">
+                  <TabsTrigger value="chat" data-testid="tab-chat">
+                    Chat
+                  </TabsTrigger>
+                  <TabsTrigger value="input" data-testid="tab-input">
+                    Type Message
+                  </TabsTrigger>
+                </TabsList>
 
-              <TabsContent value="chat" className="h-96">
-                <ChatInterface
-                  messages={messages}
-                  isLoading={isLoading}
-                  onSendMessage={handleSendMessage}
-                  onClearChat={handleClearChat}
-                  onExportChat={handleExportChat}
-                  onReplayVoice={handleReplayVoice}
-                />
-              </TabsContent>
+                <TabsContent value="chat" className="space-y-4">
+                  <ChatInterface messages={messages} isLoading={isLoading} isDarkMode={isDarkMode} />
+                </TabsContent>
 
-              <TabsContent value="transcript">
-                <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                  <p className={isDarkMode ? "text-slate-300" : "text-slate-600"}>
-                    Real-time transcript will appear here as you speak
-                  </p>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="notes">
-                <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                  <p className={isDarkMode ? "text-slate-300" : "text-slate-600"}>
-                    Your study notes will be saved here
-                  </p>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="documents">
-                <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                  <p className={isDarkMode ? "text-slate-300" : "text-slate-600"}>
-                    Uploaded documents will appear here
-                  </p>
-                </Card>
-              </TabsContent>
-            </Tabs>
+                <TabsContent value="input" className="space-y-4">
+                  <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                    <div className="space-y-3">
+                      <Textarea
+                        ref={messageInputRef}
+                        placeholder="Type your question or topic..."
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter" && e.ctrlKey) {
+                            handleSendMessage();
+                          }
+                        }}
+                        className="resize-none"
+                        rows={4}
+                        data-testid="input-message"
+                      />
+                      <Button
+                        onClick={handleSendMessage}
+                        disabled={isLoading || !messageInput.trim()}
+                        className="w-full gap-2"
+                        data-testid="button-send"
+                      >
+                        <Send className="w-4 h-4" />
+                        Send Message
+                      </Button>
+                    </div>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
           </div>
         </div>
       </div>

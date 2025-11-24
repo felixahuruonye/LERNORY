@@ -1444,6 +1444,55 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Live AI Streaming Response Endpoint (SSE)
+  app.post('/api/live-ai/stream-response', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { userMessage, sessionId, mode, voice, speed, language, tone } = req.body;
+
+      if (!userMessage) {
+        return res.status(400).json({ message: "User message is required" });
+      }
+
+      // Set SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      // Dynamic import of liveAiHandler
+      const { processLiveAIMessage } = await import('./liveAiHandler');
+
+      // Get streaming response
+      const stream = await processLiveAIMessage({
+        userId,
+        userMessage,
+        sessionId,
+        mode: mode || 'learning',
+        voice: voice || 'female',
+        speed: speed || 1,
+        language: language || 'en',
+        tone: tone || 'friendly',
+      });
+
+      // Stream response chunks
+      let chunkIndex = 0;
+      for await (const chunk of stream) {
+        const data = JSON.stringify(chunk);
+        res.write(`data: ${data}\n\n`);
+        chunkIndex++;
+      }
+
+      // Send completion signal
+      res.write(`data: ${JSON.stringify({ isComplete: true, totalChunks: chunkIndex })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Error in stream response:", error);
+      res.write(`data: ${JSON.stringify({ error: "Stream error", isComplete: true })}\n\n`);
+      res.end();
+    }
+  });
+
   // Send notifications for all previous chat history
   app.post('/api/notifications/send-chat-history', isAuthenticated, async (req: any, res: Response) => {
     try {
