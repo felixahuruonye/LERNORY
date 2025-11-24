@@ -314,17 +314,23 @@ export async function transcribeAudio(audioFilePath: string): Promise<{ text: st
 }
 
 export async function generateSpeech(text: string): Promise<Buffer> {
-  return tryWithFallback(
-    () => openai.audio.speech.create({
+  try {
+    console.log("Generating speech with OpenAI...");
+    const response = await openai.audio.speech.create({
       model: "tts-1",
       voice: "alloy",
-      input: text,
-    }).then(response => Buffer.from(response as any)),
-    
-    // No OpenRouter speech support
-    undefined,
-    false
-  );
+      input: text.slice(0, 4096), // Limit to 4096 chars
+    });
+    console.log("✓ Speech generated");
+    return Buffer.from(response as any);
+  } catch (error: any) {
+    console.error("OpenAI TTS error:", error?.message);
+    // If quota exceeded, throw with helpful message
+    if (error?.status === 429 || error?.code === "insufficient_quota") {
+      throw new Error("Speech service temporarily unavailable - quota reached. Using text-only mode.");
+    }
+    throw error;
+  }
 }
 
 export async function summarizeText(text: string, length: 'short' | 'medium' | 'long' = 'medium'): Promise<string> {

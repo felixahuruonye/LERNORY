@@ -193,7 +193,14 @@ export default function LiveAI() {
       });
 
       if (!response.ok) {
-        throw new Error("Speech generation failed");
+        // If speech service fails, use browser's native speech synthesis as fallback
+        console.log("Using browser speech synthesis fallback...");
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = speed;
+        utterance.pitch = voice === "female" ? 1.2 : 0.8;
+        utterance.onend = () => setIsSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+        return;
       }
 
       const audioBlob = await response.blob();
@@ -204,15 +211,32 @@ export default function LiveAI() {
         setIsSpeaking(false);
       };
 
-      audio.play();
+      audio.play().catch(() => {
+        // If playback fails, use browser speech synthesis
+        console.log("Using browser speech synthesis fallback...");
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = speed;
+        utterance.pitch = voice === "female" ? 1.2 : 0.8;
+        utterance.onend = () => setIsSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+      });
     } catch (error) {
       console.error("Audio playback error:", error);
       setIsSpeaking(false);
-      toast({
-        title: "Audio Error",
-        description: "Could not play audio",
-        variant: "destructive",
-      });
+      // Use fallback
+      try {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = speed;
+        utterance.pitch = voice === "female" ? 1.2 : 0.8;
+        utterance.onend = () => setIsSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        toast({
+          title: "Audio Error",
+          description: "Speech unavailable - try typing instead",
+          variant: "destructive",
+        });
+      }
     }
   };
 
