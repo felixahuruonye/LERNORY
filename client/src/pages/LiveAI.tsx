@@ -13,6 +13,7 @@ import {
   Sun,
   FileUp,
   Zap,
+  Loader,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -20,6 +21,7 @@ import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
 import { VoiceSettings } from "@/components/live-ai/VoiceSettings";
 import { StudyTimer } from "@/components/live-ai/StudyTimer";
+import { vapiClient } from "@/lib/vapiClient";
 
 interface Message {
   id: string;
@@ -54,7 +56,7 @@ export default function LiveAI() {
   // UI state
   const [showFileUpload, setShowFileUpload] = useState(false);
 
-  // Load settings and messages from localStorage
+  // Load settings, messages, and initialize Vapi
   useEffect(() => {
     const saved = localStorage.getItem("learnory_live_ai_settings");
     if (saved) {
@@ -76,7 +78,60 @@ export default function LiveAI() {
     }
 
     initSpeechRecognition();
+    initializeVapi();
   }, []);
+
+  // Initialize Vapi on component mount
+  const initializeVapi = async () => {
+    try {
+      const configRes = await fetch("/api/vapi-config");
+      if (configRes.ok) {
+        const { publicKey } = await configRes.json();
+        await vapiClient.initialize(publicKey);
+
+        // Set up Vapi event handlers
+        vapiClient.onCallStart(() => {
+          console.log("Vapi call started");
+          setIsVoiceActive(true);
+        });
+
+        vapiClient.onCallEnd(() => {
+          console.log("Vapi call ended");
+          setIsVoiceActive(false);
+          setIsListening(false);
+        });
+
+        vapiClient.onSpeechStart(() => {
+          setIsListening(true);
+        });
+
+        vapiClient.onSpeechEnd(() => {
+          setIsListening(false);
+        });
+
+        vapiClient.onTranscript((transcript: any) => {
+          if (transcript.role === "user") {
+            handleSendMessage(transcript.transcript);
+          }
+        });
+
+        vapiClient.onError((error: any) => {
+          console.error("Vapi error:", error);
+          toast({
+            title: "Connection Error",
+            description: error?.message || "Voice connection error",
+            variant: "destructive",
+          });
+        });
+
+        toast({ title: "Ready", description: "LEARNORY Live AI is ready" });
+      } else {
+        console.error("Failed to fetch Vapi config");
+      }
+    } catch (error) {
+      console.error("Failed to initialize Vapi:", error);
+    }
+  };
 
   // Save settings to localStorage
   useEffect(() => {
@@ -118,32 +173,50 @@ export default function LiveAI() {
     }
   };
 
-  // Handle voice toggling
+  // Handle voice toggling with Vapi
   const toggleVoice = async () => {
     if (isVoiceActive) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
+      try {
+        await vapiClient.stopCall();
+      } catch (error) {
+        console.error("Failed to stop Vapi call:", error);
       }
-      setIsVoiceActive(false);
-      setIsListening(false);
     } else {
-      if (recognitionRef.current && !isMuted) {
-        recognitionRef.current.start();
+      try {
+        await vapiClient.startCall({
+          assistantOverrides: {
+            voice: {
+              provider: "openai",
+              voiceId: voice === "female" ? "nova" : "onyx",
+            },
+            systemPrompt: `You are LEARNORY ULTRA, an advanced AI tutor with a ${tone} tone for ${language} language instruction. 
+            Learning mode: ${currentMode}. 
+            Keep responses clear and engaging. Adapt to the student's pace.`,
+          },
+        });
+      } catch (error) {
+        console.error("Failed to start Vapi call:", error);
+        toast({
+          title: "Connection Failed",
+          description: "Could not establish voice connection",
+          variant: "destructive",
+        });
       }
-      setIsVoiceActive(true);
     }
   };
 
-  // Handle mute
-  const toggleMute = () => {
-    if (recognitionRef.current) {
+  // Handle mute with Vapi
+  const toggleMute = async () => {
+    try {
       if (isMuted) {
-        recognitionRef.current.start();
+        await vapiClient.unmute();
       } else {
-        recognitionRef.current.stop();
+        await vapiClient.mute();
       }
+      setIsMuted(!isMuted);
+    } catch (error) {
+      console.error("Failed to toggle mute:", error);
     }
-    setIsMuted(!isMuted);
   };
 
   // Send message with mode context
