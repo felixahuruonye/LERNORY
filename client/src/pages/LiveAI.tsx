@@ -3,20 +3,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Send,
-  Mic,
-  MicOff,
-  PhoneOff,
-  Zap,
-} from "lucide-react";
+import { Send, Mic, MicOff, PhoneOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
 import { VoiceSettings } from "@/components/live-ai/VoiceSettings";
 import { StudyTimer } from "@/components/live-ai/StudyTimer";
 import { AvatarDisplay } from "@/components/live-ai/AvatarDisplay";
-import { vapiClient } from "@/lib/vapiClient";
 
 interface Message {
   id: string;
@@ -38,9 +31,10 @@ export default function LiveAI() {
   const [isMuted, setIsMuted] = useState(false);
   const [currentMode, setCurrentMode] = useState("explain");
   const [messageInput, setMessageInput] = useState("");
-  const initRef = useRef(false);
+  const vapiWebRef = useRef<any>(null);
+  const messageCountRef = useRef(0);
 
-  // Load settings on mount
+  // Load settings
   useEffect(() => {
     const saved = localStorage.getItem("learnory_live_ai_settings");
     if (saved) {
@@ -57,163 +51,166 @@ export default function LiveAI() {
       setMessages(JSON.parse(savedMessages));
     }
 
-    // Initialize Vapi only once
-    if (!initRef.current) {
-      initRef.current = true;
-      initializeVapi();
-    }
+    // Load Vapi Web SDK
+    loadVapiSDK();
   }, []);
 
-  const initializeVapi = async () => {
+  const loadVapiSDK = () => {
+    // Check if Vapi web is already loaded
+    if ((window as any).Vapi) {
+      initializeVapiCall();
+      return;
+    }
+
+    // Create and load Vapi script
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web";
+    script.type = "module";
+    script.onload = () => {
+      console.log("Vapi SDK loaded");
+      setTimeout(initializeVapiCall, 500);
+    };
+    script.onerror = () => {
+      console.error("Failed to load Vapi SDK");
+      toast({
+        title: "Vapi Error",
+        description: "Could not load voice service",
+        variant: "destructive",
+      });
+    };
+    document.body.appendChild(script);
+  };
+
+  const initializeVapiCall = async () => {
     try {
+      // Fetch Vapi public key
       const res = await fetch("/api/vapi-config");
-      if (!res.ok) throw new Error("Failed to fetch Vapi config");
+      if (!res.ok) {
+        throw new Error("Failed to fetch Vapi config");
+      }
 
       const { publicKey } = await res.json();
 
-      // Initialize Vapi with public key
-      await vapiClient.initialize(publicKey);
+      // Check if Vapi is available
+      if (!(window as any).Vapi) {
+        console.error("Vapi SDK not loaded");
+        return;
+      }
+
+      // Create Vapi instance
+      const vapi = new (window as any).Vapi(publicKey);
+      vapiWebRef.current = vapi;
 
       // Setup event listeners
-      vapiClient.on("callStart", () => {
+      vapi.on("call-start", () => {
+        console.log("Call started");
         setIsVoiceActive(true);
+        addMessage("assistant", "Call connected. Let's start learning!");
       });
 
-      vapiClient.on("callEnd", () => {
+      vapi.on("call-end", () => {
+        console.log("Call ended");
         setIsVoiceActive(false);
         setIsListening(false);
       });
 
-      vapiClient.on("speechStart", () => {
+      vapi.on("speech-start", () => {
+        console.log("User started speaking");
         setIsListening(true);
       });
 
-      vapiClient.on("speechEnd", () => {
+      vapi.on("speech-end", () => {
+        console.log("User finished speaking");
         setIsListening(false);
       });
 
-      vapiClient.on("transcript", (data: any) => {
-        if (data.role === "assistant" && data.content) {
-          // Add AI message with streaming effect
-          setMessages((prev) => {
-            const lastMsg = prev[prev.length - 1];
-            if (lastMsg?.role === "assistant" && !lastMsg.content.endsWith(" ")) {
-              return prev.map((msg, i) =>
-                i === prev.length - 1
-                  ? {
-                      ...msg,
-                      content: msg.content + " " + data.content,
-                    }
-                  : msg
-              );
-            }
-            return [
-              ...prev,
-              {
-                id: `ai-${Date.now()}`,
-                role: "assistant",
-                content: data.content,
-                timestamp: Date.now(),
-              },
-            ];
-          });
+      vapi.on("message", (msg: any) => {
+        console.log("Message from Vapi:", msg);
+        if (msg.type === "transcript") {
+          if (msg.role === "assistant") {
+            addMessage("assistant", msg.transcript);
+          }
         }
       });
 
-      vapiClient.on("error", (error: any) => {
+      vapi.on("error", (error: any) => {
         console.error("Vapi error:", error);
         toast({
-          title: "Connection Error",
-          description: error?.message || "Voice error",
+          title: "Voice Error",
+          description: error?.message || "Voice connection error",
           variant: "destructive",
         });
       });
 
-      // Auto-start the call
-      await autoStartCall();
-    } catch (error) {
-      console.error("Failed to initialize Vapi:", error);
-      toast({
-        title: "Initialization Error",
-        description: "Could not initialize voice",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const autoStartCall = async () => {
-    try {
-      const systemPrompt = `You are LEARNORY ULTRA, an advanced AI tutor with a ${tone} speaking style.
-Learning mode: ${currentMode}
+      // Start the call
+      console.log("Starting Vapi call...");
+      const systemPrompt = `You are LEARNORY ULTRA, an advanced AI tutor.
+Tone: ${tone}
 Language: ${language}
-Keep responses clear, concise, and conversational. Speak naturally as if talking to a student.`;
+Mode: ${currentMode}
+Keep responses short, clear, and conversational. You are speaking, not writing.`;
 
-      await vapiClient.startCall({
-        voice,
-        speed,
-        systemPrompt,
-        firstMessage: `Hello! I'm your LEARNORY AI tutor. I'm here to help you with ${currentMode}. What would you like to learn about?`,
-      });
-
-      // Add greeting to chat
-      setMessages([
-        {
-          id: "greeting",
-          role: "assistant",
-          content: "Connected! I'm ready to help you learn.",
-          timestamp: Date.now(),
+      await vapi.start({
+        name: "LEARNORY AI Tutor",
+        model: {
+          provider: "openai",
+          model: "gpt-3.5-turbo",
+          systemPrompt,
         },
-      ]);
+        voice: {
+          provider: "openai",
+          voiceId: voice === "female" ? "nova" : "onyx",
+        },
+        firstMessage: "Hello! I'm your LEARNORY AI tutor. What would you like to learn about today?",
+        endCallMessage: "Thank you for learning. Keep up the great work!",
+      });
 
       toast({
         title: "Connected",
-        description: "LEARNORY Live AI is ready. Speak naturally or type below.",
+        description: "LEARNORY Live AI is ready. Speak naturally!",
       });
     } catch (error) {
-      console.error("Failed to start call:", error);
-      setTimeout(autoStartCall, 2000);
+      console.error("Failed to initialize Vapi:", error);
+      toast({
+        title: "Connection Error",
+        description: "Could not start voice conversation",
+        variant: "destructive",
+      });
+      // Retry after 2 seconds
+      setTimeout(initializeVapiCall, 2000);
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!messageInput.trim()) return;
-
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: messageInput,
+  const addMessage = (role: "user" | "assistant", content: string) => {
+    const msg: Message = {
+      id: `${role}-${messageCountRef.current++}`,
+      role,
+      content,
       timestamp: Date.now(),
     };
+    setMessages((prev) => [...prev, msg]);
+  };
 
-    setMessages((prev) => [...prev, userMsg]);
+  const handleSendMessage = () => {
+    if (!messageInput.trim()) return;
+
+    addMessage("user", messageInput);
     setMessageInput("");
 
-    // Send via Vapi - it will handle the response
-    try {
-      // Create a virtual message that gets sent through Vapi
-      const tempId = `temp-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: tempId,
-          role: "assistant",
-          content: "Processing...",
-          timestamp: Date.now(),
-        },
-      ]);
-    } catch (error) {
-      console.error("Error sending message:", error);
-    }
+    // The Vapi conversation will handle responses automatically
   };
 
   const handleToggleMute = async () => {
     try {
-      if (isMuted) {
-        await vapiClient.unmute();
-      } else {
-        await vapiClient.mute();
+      if (vapiWebRef.current) {
+        if (isMuted) {
+          await vapiWebRef.current.unmute();
+          setIsMuted(false);
+        } else {
+          await vapiWebRef.current.mute();
+          setIsMuted(true);
+        }
       }
-      setIsMuted(!isMuted);
     } catch (error) {
       console.error("Failed to toggle mute:", error);
     }
@@ -221,8 +218,10 @@ Keep responses clear, concise, and conversational. Speak naturally as if talking
 
   const handleEndCall = async () => {
     try {
-      await vapiClient.stopCall();
-      setIsVoiceActive(false);
+      if (vapiWebRef.current) {
+        await vapiWebRef.current.stop();
+        setIsVoiceActive(false);
+      }
     } catch (error) {
       console.error("Failed to end call:", error);
     }
@@ -308,7 +307,7 @@ Keep responses clear, concise, and conversational. Speak naturally as if talking
                 isDarkMode={isDarkMode}
               />
 
-              {/* Theme Toggle */}
+              {/* Theme */}
               <Card
                 className={`p-4 ${
                   isDarkMode
@@ -319,15 +318,14 @@ Keep responses clear, concise, and conversational. Speak naturally as if talking
                 <Button
                   onClick={() => setIsDarkMode(!isDarkMode)}
                   variant="outline"
-                  className="w-full gap-2"
-                  data-testid="button-theme"
+                  className="w-full"
                 >
-                  {isDarkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+                  {isDarkMode ? "☀️ Light" : "🌙 Dark"}
                 </Button>
               </Card>
             </div>
 
-            {/* Main Content */}
+            {/* Main */}
             <div className="lg:col-span-3 space-y-4">
               {/* Avatar */}
               <Card
@@ -362,11 +360,11 @@ Keep responses clear, concise, and conversational. Speak naturally as if talking
                 <QuickActions onModeSelect={setCurrentMode} />
               </Card>
 
-              {/* Chat Tabs */}
+              {/* Chat */}
               <Tabs defaultValue="chat" className="w-full">
                 <TabsList className="w-full grid grid-cols-2">
                   <TabsTrigger value="chat">Chat</TabsTrigger>
-                  <TabsTrigger value="input">Type Message</TabsTrigger>
+                  <TabsTrigger value="type">Type Message</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="chat">
@@ -377,7 +375,7 @@ Keep responses clear, concise, and conversational. Speak naturally as if talking
                   />
                 </TabsContent>
 
-                <TabsContent value="input">
+                <TabsContent value="type">
                   <Card
                     className={`p-4 ${
                       isDarkMode
@@ -395,8 +393,8 @@ Keep responses clear, concise, and conversational. Speak naturally as if talking
                             handleSendMessage();
                           }
                         }}
-                        className="resize-none"
                         rows={4}
+                        className="resize-none"
                       />
                       <Button
                         onClick={handleSendMessage}
