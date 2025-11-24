@@ -173,7 +173,7 @@ export default function SettingsPanel() {
           component: <Badge>Cmd K</Badge>,
         },
         {
-          label: "New Chat",
+          label: "Ask LEARNORY",
           description: "Cmd/Ctrl + N",
           component: <Badge>Cmd N</Badge>,
         },

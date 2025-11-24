@@ -66,7 +66,7 @@ export default function AdvancedDashboard() {
 
   // Quick Actions
   const quickActions = [
-    { label: "New Chat", icon: MessageSquare, href: "/chat", color: "bg-blue-500/10" },
+    { label: "Ask LEARNORY", icon: MessageSquare, href: "/chat", color: "bg-blue-500/10" },
     { label: "Generate Website", icon: Code2, href: "/website-generator", color: "bg-emerald-500/10" },
     { label: "Live Session", icon: Mic, href: "/live-session", color: "bg-rose-500/10" },
     { label: "Generate Image", icon: ImageIcon, href: "/image-gen", color: "bg-orange-500/10" },
