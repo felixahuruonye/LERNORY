@@ -39,6 +39,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Vapi public key endpoint
+  app.get('/api/vapi-config', isAuthenticated, (req: Request, res: Response) => {
+    try {
+      const publicKey = process.env.VAPI_PUBLIC_KEY;
+      if (!publicKey) {
+        return res.status(500).json({ message: "Vapi not configured" });
+      }
+      res.json({ publicKey });
+    } catch (error) {
+      console.error("Error fetching Vapi config:", error);
+      res.status(500).json({ message: "Failed to fetch Vapi config" });
+    }
+  });
+
   // Chat routes
   app.get('/api/chat/messages', isAuthenticated, async (req: any, res: Response) => {
     try {
