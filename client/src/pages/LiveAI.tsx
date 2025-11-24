@@ -2,20 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Settings,
   Send,
-  Volume2,
   Mic,
   MicOff,
   PhoneOff,
-  Upload,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
@@ -23,7 +16,7 @@ import { QuickActions } from "@/components/live-ai/QuickActions";
 import { VoiceSettings } from "@/components/live-ai/VoiceSettings";
 import { StudyTimer } from "@/components/live-ai/StudyTimer";
 import { AvatarDisplay } from "@/components/live-ai/AvatarDisplay";
-import { vapiWebService } from "@/lib/vapiWebService";
+import { vapiClient } from "@/lib/vapiClient";
 
 interface Message {
   id: string;
@@ -43,15 +36,11 @@ export default function LiveAI() {
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [currentMode, setCurrentMode] = useState("explain");
   const [messageInput, setMessageInput] = useState("");
+  const initRef = useRef(false);
 
-  const recognitionRef = useRef<any>(null);
-  const messageInputRef = useRef<HTMLTextAreaElement>(null);
-  const initializingRef = useRef(false);
-
-  // Load saved settings
+  // Load settings on mount
   useEffect(() => {
     const saved = localStorage.getItem("learnory_live_ai_settings");
     if (saved) {
@@ -68,256 +57,124 @@ export default function LiveAI() {
       setMessages(JSON.parse(savedMessages));
     }
 
-    // Initialize Vapi and start auto voice call
-    initializeVapi();
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-    };
+    // Initialize Vapi only once
+    if (!initRef.current) {
+      initRef.current = true;
+      initializeVapi();
+    }
   }, []);
 
-  // Initialize Vapi and auto-start call
   const initializeVapi = async () => {
-    if (initializingRef.current) return;
-    initializingRef.current = true;
-
     try {
-      const configRes = await fetch("/api/vapi-config");
-      if (configRes.ok) {
-        const { publicKey } = await configRes.json();
-        await vapiWebService.initialize(publicKey);
+      const res = await fetch("/api/vapi-config");
+      if (!res.ok) throw new Error("Failed to fetch Vapi config");
 
-        // Set up event handlers
-        vapiWebService.on("callStart", () => {
-          console.log("Vapi call started");
-          setIsVoiceActive(true);
-          initSpeechRecognition();
-        });
+      const { publicKey } = await res.json();
 
-        vapiWebService.on("callEnd", () => {
-          console.log("Vapi call ended");
-          setIsVoiceActive(false);
-          setIsListening(false);
-        });
+      // Initialize Vapi with public key
+      await vapiClient.initialize(publicKey);
 
-        vapiWebService.on("speechStart", () => {
-          setIsListening(true);
-        });
+      // Setup event listeners
+      vapiClient.on("callStart", () => {
+        setIsVoiceActive(true);
+      });
 
-        vapiWebService.on("speechEnd", () => {
-          setIsListening(false);
-        });
+      vapiClient.on("callEnd", () => {
+        setIsVoiceActive(false);
+        setIsListening(false);
+      });
 
-        vapiWebService.on("transcript", (transcript: any) => {
-          handleUserSpeech(transcript.content);
-        });
+      vapiClient.on("speechStart", () => {
+        setIsListening(true);
+      });
 
-        vapiWebService.on("error", (error: any) => {
-          console.error("Vapi error:", error);
-          toast({
-            title: "Connection Error",
-            description: error?.message || "Voice connection error",
-            variant: "destructive",
+      vapiClient.on("speechEnd", () => {
+        setIsListening(false);
+      });
+
+      vapiClient.on("transcript", (data: any) => {
+        if (data.role === "assistant" && data.content) {
+          // Add AI message with streaming effect
+          setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg?.role === "assistant" && !lastMsg.content.endsWith(" ")) {
+              return prev.map((msg, i) =>
+                i === prev.length - 1
+                  ? {
+                      ...msg,
+                      content: msg.content + " " + data.content,
+                    }
+                  : msg
+              );
+            }
+            return [
+              ...prev,
+              {
+                id: `ai-${Date.now()}`,
+                role: "assistant",
+                content: data.content,
+                timestamp: Date.now(),
+              },
+            ];
           });
-        });
+        }
+      });
 
-        // Auto-start the voice call
-        await autoStartCall();
-      } else {
-        console.error("Failed to fetch Vapi config");
+      vapiClient.on("error", (error: any) => {
+        console.error("Vapi error:", error);
         toast({
-          title: "Setup Error",
-          description: "Could not load Vapi configuration",
+          title: "Connection Error",
+          description: error?.message || "Voice error",
           variant: "destructive",
         });
-      }
+      });
+
+      // Auto-start the call
+      await autoStartCall();
     } catch (error) {
       console.error("Failed to initialize Vapi:", error);
       toast({
         title: "Initialization Error",
-        description: "Could not initialize voice system",
+        description: "Could not initialize voice",
         variant: "destructive",
       });
     }
   };
 
-  // Auto-start voice call
   const autoStartCall = async () => {
     try {
-      await vapiWebService.startCall({
+      const systemPrompt = `You are LEARNORY ULTRA, an advanced AI tutor with a ${tone} speaking style.
+Learning mode: ${currentMode}
+Language: ${language}
+Keep responses clear, concise, and conversational. Speak naturally as if talking to a student.`;
+
+      await vapiClient.startCall({
         voice,
         speed,
-        language,
-        tone,
+        systemPrompt,
+        firstMessage: `Hello! I'm your LEARNORY AI tutor. I'm here to help you with ${currentMode}. What would you like to learn about?`,
       });
+
+      // Add greeting to chat
+      setMessages([
+        {
+          id: "greeting",
+          role: "assistant",
+          content: "Connected! I'm ready to help you learn.",
+          timestamp: Date.now(),
+        },
+      ]);
 
       toast({
         title: "Connected",
-        description: "LEARNORY Live AI is ready to help! Speak naturally or type below.",
+        description: "LEARNORY Live AI is ready. Speak naturally or type below.",
       });
-
-      // Add initial greeting message
-      const greeting: Message = {
-        id: `greeting-${Date.now()}`,
-        role: "assistant",
-        content: voice === "female"
-          ? "Hello! I'm your LEARNORY AI tutor. I'm ready to help you learn today. What would you like to study?"
-          : "Hello! I'm your LEARNORY AI tutor. What subject would you like to explore today?",
-        timestamp: Date.now(),
-      };
-      setMessages([greeting]);
     } catch (error) {
-      console.error("Failed to auto-start call:", error);
-      toast({
-        title: "Connection Issue",
-        description: "Retrying connection...",
-        variant: "destructive",
-      });
+      console.error("Failed to start call:", error);
       setTimeout(autoStartCall, 2000);
     }
   };
 
-  // Handle user speech (from Vapi transcript)
-  const handleUserSpeech = async (speech: string) => {
-    if (!speech.trim()) return;
-    console.log("User speech received:", speech);
-
-    // Send to backend for AI response
-    await sendMessageToBackend(speech);
-  };
-
-  // Initialize speech recognition
-  const initSpeechRecognition = () => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = false;
-      recognition.lang = language;
-
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-
-      recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            handleUserSpeech(transcript);
-            transcript = "";
-          }
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error("Speech recognition error:", event.error);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    }
-  };
-
-  // Send message to backend for AI response
-  const sendMessageToBackend = async (userMessage: string) => {
-    setIsLoading(true);
-
-    try {
-      const response = await fetch("/api/live-ai/stream-response", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userMessage,
-          mode: currentMode,
-          voice,
-          speed,
-          language,
-          tone,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to get response");
-      }
-
-      // Read the event stream
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let aiResponse = "";
-      let messageId = `ai-${Date.now()}`;
-      let aiMessageAdded = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const jsonStr = line.substring(6);
-            try {
-              const data = JSON.parse(jsonStr);
-
-              if (data.chunk) {
-                aiResponse += data.chunk;
-
-                // Add initial message if not yet added
-                if (!aiMessageAdded) {
-                  const assistantMsg: Message = {
-                    id: messageId,
-                    role: "assistant",
-                    content: data.chunk,
-                    timestamp: Date.now(),
-                  };
-                  setMessages((prev) => [...prev, assistantMsg]);
-                  aiMessageAdded = true;
-                } else {
-                  // Update existing message with new chunk
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === messageId
-                        ? { ...msg, content: msg.content + data.chunk }
-                        : msg
-                    )
-                  );
-                }
-
-                // Send chunks to Vapi for voice output
-                await vapiWebService.speakText(data.chunk);
-              }
-
-              if (data.isComplete) {
-                break;
-              }
-            } catch (e) {
-              console.error("Error parsing stream data:", e);
-            }
-          }
-        }
-      }
-
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to get AI response",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-    }
-  };
-
-  // Handle manual message sending via input
   const handleSendMessage = async () => {
     if (!messageInput.trim()) return;
 
@@ -331,26 +188,30 @@ export default function LiveAI() {
     setMessages((prev) => [...prev, userMsg]);
     setMessageInput("");
 
-    await sendMessageToBackend(messageInput);
-  };
-
-  // Toggle voice call
-  const toggleVoice = async () => {
+    // Send via Vapi - it will handle the response
     try {
-      await vapiWebService.stopCall();
-      setIsVoiceActive(false);
+      // Create a virtual message that gets sent through Vapi
+      const tempId = `temp-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: tempId,
+          role: "assistant",
+          content: "Processing...",
+          timestamp: Date.now(),
+        },
+      ]);
     } catch (error) {
-      console.error("Failed to toggle voice:", error);
+      console.error("Error sending message:", error);
     }
   };
 
-  // Toggle mute
-  const toggleMute = async () => {
+  const handleToggleMute = async () => {
     try {
       if (isMuted) {
-        await vapiWebService.unmute();
+        await vapiClient.unmute();
       } else {
-        await vapiWebService.mute();
+        await vapiClient.mute();
       }
       setIsMuted(!isMuted);
     } catch (error) {
@@ -358,13 +219,22 @@ export default function LiveAI() {
     }
   };
 
-  // Save settings to localStorage
+  const handleEndCall = async () => {
+    try {
+      await vapiClient.stopCall();
+      setIsVoiceActive(false);
+    } catch (error) {
+      console.error("Failed to end call:", error);
+    }
+  };
+
+  // Save settings
   useEffect(() => {
     const settings = { voice, speed, language, tone, isDarkMode };
     localStorage.setItem("learnory_live_ai_settings", JSON.stringify(settings));
   }, [voice, speed, language, tone, isDarkMode]);
 
-  // Save messages to localStorage
+  // Save messages
   useEffect(() => {
     localStorage.setItem("learnory_chat_messages", JSON.stringify(messages));
   }, [messages]);
@@ -376,14 +246,24 @@ export default function LiveAI() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Sidebar */}
             <div className="lg:col-span-1 space-y-4">
-              {/* Voice Controls */}
-              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+              {/* Call Controls */}
+              <Card
+                className={`p-4 ${
+                  isDarkMode
+                    ? "bg-slate-800 border-slate-700"
+                    : "bg-white border-slate-200"
+                }`}
+              >
+                <h3
+                  className={`font-bold mb-3 ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
                   Call Controls
                 </h3>
                 <div className="space-y-2">
                   <Button
-                    onClick={toggleMute}
+                    onClick={handleToggleMute}
                     variant={isMuted ? "destructive" : "default"}
                     className="w-full gap-2"
                     data-testid="button-mute"
@@ -401,7 +281,7 @@ export default function LiveAI() {
                     )}
                   </Button>
                   <Button
-                    onClick={toggleVoice}
+                    onClick={handleEndCall}
                     variant="destructive"
                     className="w-full gap-2"
                     data-testid="button-end-call"
@@ -429,54 +309,85 @@ export default function LiveAI() {
               />
 
               {/* Theme Toggle */}
-              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+              <Card
+                className={`p-4 ${
+                  isDarkMode
+                    ? "bg-slate-800 border-slate-700"
+                    : "bg-white border-slate-200"
+                }`}
+              >
                 <Button
                   onClick={() => setIsDarkMode(!isDarkMode)}
                   variant="outline"
                   className="w-full gap-2"
                   data-testid="button-theme"
                 >
-                  {isDarkMode ? "☀️ Light" : "🌙 Dark"}
+                  {isDarkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
                 </Button>
               </Card>
             </div>
 
-            {/* Main Chat Area */}
+            {/* Main Content */}
             <div className="lg:col-span-3 space-y-4">
-              {/* Avatar Display */}
-              <Card className={`p-6 flex justify-center ${isDarkMode ? "bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30" : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"}`}>
-                <AvatarDisplay voice={voice} isActive={isVoiceActive} isListening={isListening} />
+              {/* Avatar */}
+              <Card
+                className={`p-6 flex justify-center ${
+                  isDarkMode
+                    ? "bg-gradient-to-br from-purple-600/10 to-pink-600/10 border-purple-500/30"
+                    : "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-200"
+                }`}
+              >
+                <AvatarDisplay
+                  voice={voice}
+                  isActive={isVoiceActive}
+                  isListening={isListening}
+                />
               </Card>
 
               {/* Quick Actions */}
-              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                <h3 className={`font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+              <Card
+                className={`p-4 ${
+                  isDarkMode
+                    ? "bg-slate-800 border-slate-700"
+                    : "bg-white border-slate-200"
+                }`}
+              >
+                <h3
+                  className={`font-bold mb-3 ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
                   AI Learning Tools
                 </h3>
                 <QuickActions onModeSelect={setCurrentMode} />
               </Card>
 
-              {/* Tabs */}
+              {/* Chat Tabs */}
               <Tabs defaultValue="chat" className="w-full">
-                <TabsList className="w-full grid grid-cols-2" data-testid="tabs-live-ai">
-                  <TabsTrigger value="chat" data-testid="tab-chat">
-                    Chat
-                  </TabsTrigger>
-                  <TabsTrigger value="input" data-testid="tab-input">
-                    Type Message
-                  </TabsTrigger>
+                <TabsList className="w-full grid grid-cols-2">
+                  <TabsTrigger value="chat">Chat</TabsTrigger>
+                  <TabsTrigger value="input">Type Message</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chat" className="space-y-4">
-                  <ChatInterface messages={messages} isLoading={isLoading} isDarkMode={isDarkMode} />
+                <TabsContent value="chat">
+                  <ChatInterface
+                    messages={messages}
+                    isLoading={false}
+                    isDarkMode={isDarkMode}
+                  />
                 </TabsContent>
 
-                <TabsContent value="input" className="space-y-4">
-                  <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                <TabsContent value="input">
+                  <Card
+                    className={`p-4 ${
+                      isDarkMode
+                        ? "bg-slate-800 border-slate-700"
+                        : "bg-white border-slate-200"
+                    }`}
+                  >
                     <div className="space-y-3">
                       <Textarea
-                        ref={messageInputRef}
-                        placeholder="Type your question or topic..."
+                        placeholder="Type your question..."
                         value={messageInput}
                         onChange={(e) => setMessageInput(e.target.value)}
                         onKeyPress={(e) => {
@@ -486,16 +397,14 @@ export default function LiveAI() {
                         }}
                         className="resize-none"
                         rows={4}
-                        data-testid="input-message"
                       />
                       <Button
                         onClick={handleSendMessage}
-                        disabled={isLoading || !messageInput.trim()}
+                        disabled={!messageInput.trim()}
                         className="w-full gap-2"
-                        data-testid="button-send"
                       >
                         <Send className="w-4 h-4" />
-                        Send Message
+                        Send
                       </Button>
                     </div>
                   </Card>
