@@ -219,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           systemMessage += `Remember ALL previous conversations, every topic discussed, every question asked, and ${userName}'s complete learning journey. `;
         }
         
-        systemMessage += `CRITICAL INSTRUCTION: You MUST remember ${userName} across ALL sessions and conversations. Always reference past topics, previous questions, and learning progress. This is ${userName}, and you remember EVERYTHING about their learning - their struggles, their strengths, their curiosity. Be proactive in remembering and referencing their learning history, not just answering what they ask.`;
+        systemMessage += `CRITICAL INSTRUCTION: Your PRIMARY goal is to ANSWER THE USER'S CURRENT QUESTION thoroughly and accurately. After providing a complete answer, optionally reference relevant past topics or learning context if it helps. You remember ${userName} across all sessions and can reference their learning journey when relevant, but NEVER sacrifice answering their current question to do so.`;
       }
       
       const messages = [
