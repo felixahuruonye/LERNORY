@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import fs from "fs";
 import os from "os";
 import path from "path";
+// @ts-ignore - multer types not available but package is installed
 import multer from "multer";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -359,8 +360,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Try Gemini first
       try {
-        analysis = await explainTopicWithLEARNORY(originalname, originalname);
-        analysis = analysis || "File analyzed with Gemini API";
+        const geminiResult = await explainTopicWithLEARNORY(originalname, originalname);
+        analysis = (geminiResult?.simpleExplanation || geminiResult?.detailedBreakdown || JSON.stringify(geminiResult)) || "File analyzed with Gemini API";
       } catch (geminiErr) {
         console.error("Gemini API failed:", geminiErr);
         usedApi = "openai";
@@ -660,12 +661,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/lessons', isAuthenticated, async (req: any, res: Response) => {
     try {
       const { courseId } = req.query;
-      let lessons;
+      let lessons: any[] = [];
 
       if (courseId) {
         lessons = await storage.getLessonsByCourse(courseId as string);
-      } else {
-        lessons = [];
       }
 
       res.json(lessons);
@@ -757,12 +756,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/quizzes', isAuthenticated, async (req: any, res: Response) => {
     try {
       const { courseId } = req.query;
-      let quizzes;
+      let quizzes: any[] = [];
 
       if (courseId) {
         quizzes = await storage.getQuizzesByCourse(courseId as string);
-      } else {
-        quizzes = [];
       }
 
       res.json(quizzes);
@@ -1049,7 +1046,8 @@ KEY_WORDS: [keywords separated by commas]`,
 
       const correctedMatch = response.match(/CORRECTED:\s*([\s\S]*?)(?:\nSUMMARY:|$)/);
       const summaryMatch = response.match(/SUMMARY:\s*([\s\S]*?)(?:\nKEY_WORDS:|$)/);
-      const keywordsMatch = response.match(/KEY_WORDS:\s*(.+?)$/s);
+      const keywordsMatch = response.match(/KEY_WORDS:\s*(.+?)$/);
+      if (!keywordsMatch) response.match(/KEY_WORDS:\s*([\s\S]+)$/);
 
       const correctedText = correctedMatch ? correctedMatch[1].trim() : text;
       const summary = summaryMatch ? summaryMatch[1].trim() : "";
