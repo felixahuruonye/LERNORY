@@ -152,13 +152,13 @@ export default function LiveAI() {
   // Initialize Whisper voice listening
   const initializeContinuousListening = async () => {
     try {
-      // Request microphone permission with echo cancellation
+      // Request microphone permission with MAXIMUM sensitivity and clarity
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        } 
+          noiseSuppression: false, // Disable to hear all frequencies
+          autoGainControl: true, // Enable to boost quiet voices
+        } as any
       });
       
       const mediaRecorder = new MediaRecorder(stream);
@@ -354,15 +354,16 @@ export default function LiveAI() {
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.maxAlternatives = 1;
-
-    // IMPROVED MIC SENSITIVITY - Lower threshold to hear normal speaking volume
-    recognition.interimResults = true;
-    recognition.continuous = true;
-
+    
+    // AGGRESSIVE MIC SENSITIVITY SETTINGS
+    // These settings make the browser hear you at normal speaking volume
+    (recognition as any).maxSpeech = 300000; // 5 minutes max speech time
+    
     let isProcessingMessage = false;
+    let lastTranscriptTime = 0;
 
     recognition.onstart = () => {
-      console.log("🎤 Browser Speech Recognition started");
+      console.log("🎤 Browser Speech Recognition started - LISTENING ACTIVELY");
       setIsListening(true);
     };
 
@@ -372,40 +373,73 @@ export default function LiveAI() {
         return;
       }
       
+      // Show interim results (what you're saying RIGHT NOW)
+      let interimTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
+        const transcript = event.results[i][0].transcript.toLowerCase();
         
-        if (event.results[i].isFinal && transcript.trim() && !isProcessingMessage && !isProcessing) {
-          isProcessingMessage = true;
-          console.log("📢 Browser Speech: Transcribed", transcript);
+        // Show live transcript as user is speaking
+        if (!event.results[i].isFinal) {
+          interimTranscript += transcript + " ";
+          console.log("🎙️ Interim:", transcript);
+        }
+        
+        // Process final results
+        if (event.results[i].isFinal && transcript.trim()) {
+          lastTranscriptTime = Date.now();
           
-          // Interrupt current speech if speaking
-          if (isSpeaking) {
-            window.speechSynthesis.cancel();
-            setIsSpeaking(false);
-            mouthAnimationRef.current = false;
+          if (!isProcessingMessage && !isProcessing) {
+            isProcessingMessage = true;
+            console.log("✅ Browser Speech FINAL: ", transcript);
+            
+            // Interrupt current speech if speaking
+            if (isSpeaking) {
+              window.speechSynthesis.cancel();
+              setIsSpeaking(false);
+              mouthAnimationRef.current = false;
+            }
+            
+            handleSendMessage(transcript.trim());
+            setTimeout(() => { isProcessingMessage = false; }, 500);
           }
-          
-          handleSendMessage(transcript.trim());
-          setTimeout(() => { isProcessingMessage = false; }, 1000);
         }
       }
     };
 
     recognition.onerror = (event: any) => {
-      if (event.error !== "no-speech" && event.error !== "aborted") {
-        console.error("Browser speech error:", event.error);
+      // Log all errors for debugging
+      console.error("🎤 Speech Recognition Error:", event.error);
+      
+      if (event.error === "no-speech") {
+        console.log("⚠️ No speech detected - keep talking!");
+      } else if (event.error === "network") {
+        console.error("❌ Network error in speech recognition");
+        if (toast) {
+          toast({ title: "Network Error", description: "Check your connection" });
+        }
+      } else if (event.error !== "aborted") {
+        console.error("🎤 Speech error:", event.error);
       }
     };
 
     recognition.onend = () => {
-      console.log("Browser speech recognition ended");
-      if (usingBrowserAPI && initRef.current) {
-        startBrowserSpeechRecognition(); // Auto-restart
+      console.log("🎤 Browser speech recognition ended - restarting...");
+      if (usingBrowserAPI && initRef.current && !isMuted && isCallActive) {
+        // Auto-restart listening
+        try {
+          recognition.start();
+        } catch (e) {
+          console.warn("Restart speech recognition:", e);
+        }
       }
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+      console.log("✅ Speech Recognition STARTED - Ready to hear you!");
+    } catch (e) {
+      console.warn("Speech Recognition already started:", e);
+    }
     recognitionRef.current = recognition;
   };
 
