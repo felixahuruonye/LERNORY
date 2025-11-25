@@ -26,6 +26,8 @@ export default function LiveAI() {
   const [messageInput, setMessageInput] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [whisperStatus, setWhisperStatus] = useState<"online" | "offline">("online");
+  const [usingBrowserAPI, setUsingBrowserAPI] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -70,7 +72,15 @@ export default function LiveAI() {
         }
       })();
 
-      initializeContinuousListening();
+      // Check if we should use Browser API (only if previously failed)
+      const previousStatus = localStorage.getItem("learnory_whisper_status");
+      if (previousStatus === "offline") {
+        setUsingBrowserAPI(true);
+        setWhisperStatus("offline");
+        startBrowserSpeechRecognition();
+      } else {
+        initializeContinuousListening();
+      }
       
       // Auto-greet
       setTimeout(() => {
@@ -213,13 +223,16 @@ export default function LiveAI() {
         body: formData,
       });
 
-      if (!response.ok) throw new Error("Transcription failed");
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || "Transcription failed");
+      }
 
       const data = await response.json();
       const transcript = data.text?.trim();
 
       if (transcript) {
-        console.log("📢 Transcribed:", transcript);
+        console.log("✓ Whisper: Transcribed", transcript);
         handleSendMessage(transcript);
       }
 
@@ -229,14 +242,112 @@ export default function LiveAI() {
       if (mediaRecorderRef.current && initRef.current) {
         startVoiceActivityDetection(mediaRecorderRef.current);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Whisper transcription error:", error);
+      
+      // Check if it's an OpenAI API quota/rate limit error
+      const errorMsg = error?.message || "";
+      const isOpenAIError = errorMsg.includes("429") || 
+                            errorMsg.includes("quota") || 
+                            errorMsg.includes("rate_limit_exceeded") ||
+                            errorMsg.includes("insufficient_quota");
+
+      if (isOpenAIError) {
+        console.warn("⚠️ OpenAI Whisper API exceeded quota - Switching to Browser Speech API");
+        setWhisperStatus("offline");
+        setUsingBrowserAPI(true);
+        
+        // Show user notification
+        toast({
+          title: "⚠️ Voice Not Available",
+          description: "Please type your question. I will notify you when voice is back online.",
+          variant: "destructive",
+        });
+
+        // Send system message to chat
+        addMessage("assistant", "I notice voice transcription is currently unavailable due to API limits. Please type your question, and I'll help you. I'll let you know when you can talk to me again.");
+        
+        // Create system notification
+        await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "system",
+            title: "Voice Transcription Unavailable",
+            message: "OpenAI Whisper API has reached its quota. Voice mode is temporarily disabled. Type your questions instead.",
+            icon: "🎤",
+          })
+        }).catch(err => console.error("Failed to create notification:", err));
+      } else {
+        toast({
+          title: "Transcription Error",
+          description: "Failed to transcribe audio",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Fallback to Browser Speech Recognition API
+  const startBrowserSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
       toast({
-        title: "Transcription Error",
-        description: "Failed to transcribe audio",
+        title: "Speech Recognition Not Supported",
+        description: "Please type your question",
         variant: "destructive",
       });
+      return;
     }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    let isProcessingMessage = false;
+
+    recognition.onstart = () => {
+      console.log("🎤 Browser Speech Recognition started");
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        
+        if (event.results[i].isFinal && transcript.trim() && !isProcessingMessage && !isProcessing) {
+          isProcessingMessage = true;
+          console.log("📢 Browser Speech: Transcribed", transcript);
+          
+          // Interrupt current speech if speaking
+          if (isSpeaking) {
+            window.speechSynthesis.cancel();
+            setIsSpeaking(false);
+            mouthAnimationRef.current = false;
+          }
+          
+          handleSendMessage(transcript.trim());
+          setTimeout(() => { isProcessingMessage = false; }, 1000);
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error !== "no-speech" && event.error !== "aborted") {
+        console.error("Browser speech error:", event.error);
+      }
+    };
+
+    recognition.onend = () => {
+      console.log("Browser speech recognition ended");
+      if (usingBrowserAPI && initRef.current) {
+        startBrowserSpeechRecognition(); // Auto-restart
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
   };
 
 
@@ -311,6 +422,31 @@ export default function LiveAI() {
     try {
       addMessage("user", text);
 
+      // If Whisper is offline and user types, auto-recover when they message
+      if (!usingBrowserAPI && whisperStatus === "offline") {
+        console.log("🔄 Attempting to re-enable Whisper API...");
+        setWhisperStatus("online");
+        setUsingBrowserAPI(false);
+        localStorage.setItem("learnory_whisper_status", "online");
+        
+        toast({
+          title: "✓ Voice Restored",
+          description: "You can now talk to me again!",
+        });
+
+        // Send notification
+        await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "system",
+            title: "Voice Transcription Restored",
+            message: "OpenAI Whisper API is now available. You can use voice again!",
+            icon: "✓",
+          })
+        }).catch(err => console.error("Failed to create notification:", err));
+      }
+
       // SAVE TO CHAT HISTORY: Use sessionId if available
       const response = await fetch("/api/chat/send", {
         method: "POST",
@@ -365,13 +501,14 @@ export default function LiveAI() {
     }
   };
 
-  // Save settings
+  // Save settings and Whisper status
   useEffect(() => {
     localStorage.setItem(
       "learnory_live_ai_settings",
       JSON.stringify({ isDarkMode })
     );
-  }, [isDarkMode]);
+    localStorage.setItem("learnory_whisper_status", whisperStatus);
+  }, [isDarkMode, whisperStatus]);
 
   // Save messages
   useEffect(() => {
