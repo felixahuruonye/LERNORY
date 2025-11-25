@@ -97,16 +97,10 @@ export default function LiveAI() {
         }
       })();
 
-      // Check if we should use Browser API (only if previously failed)
-      const previousStatus = localStorage.getItem("learnory_whisper_status");
-      if (previousStatus === "offline") {
-        setUsingBrowserAPI(true);
-        setWhisperStatus("offline");
-        // Don't auto-start - user must click Unmute button
-      } else {
-        // Don't auto-start - user must click Unmute button
-        // initializeContinuousListening();
-      }
+      // Use Browser Speech Recognition API for voice input
+      // This will be used when user clicks "Unmute to Talk"
+      setUsingBrowserAPI(true);
+      console.log("✅ Browser Speech Recognition available - waiting for user to unmute");
       
       // Auto-greet with proper persistence and audio playback
       setTimeout(async () => {
@@ -133,9 +127,9 @@ export default function LiveAI() {
         };
         checkAndSave();
         
-        // Speak the greeting
+        // Speak the greeting (but DON'T auto-unmute - wait for user to click unmute button)
         console.log("🎙️ Playing greeting...");
-        await playAudio(greeting);
+        await playAudioGreeting(greeting);
       }, 1000);
     }
 
@@ -508,7 +502,40 @@ export default function LiveAI() {
       .trim();
   };
 
+  // Play greeting audio (don't auto-unmute after - wait for user to click unmute)
+  const playAudioGreeting = async (text: string) => {
+    setIsSpeaking(true);
+    mouthAnimationRef.current = true;
+    setIsMuted(true); // Keep muted during greeting
+
+    try {
+      const cleanText = cleanTextForSpeech(text);
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 0.95;
+      utterance.pitch = voice === "female" ? 1.2 : 0.8;
+      utterance.volume = 0.7;
+      
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        mouthAnimationRef.current = false;
+        // Stay muted - user must click "Unmute to Talk" to start listening
+      };
+      
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        mouthAnimationRef.current = false;
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.error("Speech synthesis error:", e);
+      setIsSpeaking(false);
+      mouthAnimationRef.current = false;
+    }
+  };
+
   // Play audio with mouth animation (clean text, no markdown symbols)
+  // Called for AI responses AFTER user has sent a message
   const playAudio = async (text: string) => {
     setIsSpeaking(true);
     mouthAnimationRef.current = true;
@@ -516,7 +543,11 @@ export default function LiveAI() {
     // AUTO-MUTE: Mute mic while AI is speaking to prevent it from hearing itself
     setIsMuted(true);
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        // Already stopped
+      }
       console.log("🔇 Auto-muted: Stopping speech recognition while AI speaks");
     }
 
@@ -532,11 +563,11 @@ export default function LiveAI() {
         setIsSpeaking(false);
         mouthAnimationRef.current = false;
         
-        // AUTO-UNMUTE: Unmute mic when AI finishes speaking
+        // AUTO-UNMUTE: Unmute mic when AI finishes speaking (now ready for next question)
         setIsMuted(false);
         if (usingBrowserAPI && initRef.current && isCallActive) {
+          console.log("🔊 Auto-unmuted: Ready for next question - call startBrowserSpeechRecognition");
           startBrowserSpeechRecognition();
-          console.log("🔊 Auto-unmuted: Restarting speech recognition");
         }
       };
       
@@ -887,15 +918,23 @@ export default function LiveAI() {
                     if (isMuted) {
                       // User wants to unmute and start listening
                       setIsMuted(false);
-                      if (usingBrowserAPI && !isCallActive === false) {
+                      console.log("🎤 User clicked Unmute - Starting speech recognition...");
+                      console.log("usingBrowserAPI:", usingBrowserAPI, "isCallActive:", isCallActive);
+                      if (usingBrowserAPI && isCallActive) {
                         startBrowserSpeechRecognition();
+                      } else {
+                        console.warn("⚠️ Cannot start: usingBrowserAPI=", usingBrowserAPI, "isCallActive=", isCallActive);
                       }
                       toast({ title: "🎤 Unmuted", description: "Microphone is now active - speak whenever you're ready" });
                     } else {
                       // User wants to mute
                       setIsMuted(true);
                       if (recognitionRef.current) {
-                        recognitionRef.current.stop();
+                        try {
+                          recognitionRef.current.stop();
+                        } catch (e) {
+                          // Already stopped
+                        }
                       }
                       toast({ title: "🔇 Muted", description: "Microphone is now off" });
                     }
