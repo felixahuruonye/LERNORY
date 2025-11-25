@@ -176,18 +176,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map(m => m.content.substring(0, 100))
         .slice(0, 10);
       
-      // Build conversation history: prioritize recent, but include comprehensive past context
+      // Build conversation history: ONLY use current session + last 3 messages from other sessions
+      // This prevents the AI from getting stuck in apology loops from old conversations
       const history = [
         ...currentSessionMessages,
-        ...otherMessages.slice(0, 50) // Include 50 most recent messages from other sessions
+        ...otherMessages.slice(0, 3) // Only 3 most recent messages from past sessions for context
       ];
       
       // Get user memory/progress for context
       const userProgress = await storage.getUserProgressByUser(userId);
       const examResults = await storage.getExamResultsByUser(userId);
       
-      // Build personalized system message with FULL learning history
-      let systemMessage = `You are Learnory, an advanced AI tutor. You are speaking to ${userName}.`;
+      // Build personalized system message
+      let systemMessage = `You are Learnory, an advanced AI tutor. You are speaking to ${userName}. IMPORTANT: ANSWER THE USER'S CURRENT QUESTION DIRECTLY. Do NOT apologize, do NOT discuss previous conversations about identity/names unless the user asks about it. Focus 100% on answering their current question accurately and thoroughly.`;
       
       if (includeUserContext) {
         // Show ALL topics studied across all sessions
@@ -206,20 +207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           systemMessage += ` ${userName}'s recent exam: ${lastExam.examName} (${lastExam.score}%). `;
         }
         
-        // Include summary of ALL past conversations and learning journey
-        const userMessageCount = history.filter(m => m.role === "user").length;
-        if (userMessageCount > 0) {
-          systemMessage += ` You have ${userMessageCount} messages in your history with ${userName}. `;
-          
-          // Add past topics summary
-          if (pastTopics.length > 0) {
-            systemMessage += `${userName} has asked about: ${pastTopics.join(", ")}. `;
-          }
-          
-          systemMessage += `Remember ALL previous conversations, every topic discussed, every question asked, and ${userName}'s complete learning journey. `;
-        }
-        
-        systemMessage += `CRITICAL INSTRUCTION: Your PRIMARY goal is to ANSWER THE USER'S CURRENT QUESTION thoroughly and accurately. After providing a complete answer, optionally reference relevant past topics or learning context if it helps. You remember ${userName} across all sessions and can reference their learning journey when relevant, but NEVER sacrifice answering their current question to do so.`;
+        systemMessage += ` You remember ${userName} and can reference their learning journey when relevant, but your PRIMARY obligation is to thoroughly answer their current question first. NO APOLOGIES - just answer the question.`;
       }
       
       const messages = [
