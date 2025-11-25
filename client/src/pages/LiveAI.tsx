@@ -331,7 +331,7 @@ export default function LiveAI() {
     }
   };
 
-  // Fallback to Browser Speech Recognition API
+  // Fallback to Browser Speech Recognition API - SIMPLE & CLEAN
   const startBrowserSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -343,116 +343,84 @@ export default function LiveAI() {
       return;
     }
 
+    // Stop any existing recognition
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {
+        // Already stopped
+      }
+    }
+
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.continuous = false; // Stop after detecting speech
+    recognition.interimResults = false; // Don't send interim results
     recognition.lang = "en-US";
     recognition.maxAlternatives = 1;
-    
-    // AGGRESSIVE MIC SENSITIVITY SETTINGS
-    // These settings make the browser hear you at normal speaking volume
-    (recognition as any).maxSpeech = 300000; // 5 minutes max speech time
-    
-    let isProcessingMessage = false;
-    let lastTranscriptTime = 0;
-    let fullTranscript = ""; // Collect all words
-    let sendTimeout: NodeJS.Timeout | null = null;
 
     recognition.onstart = () => {
-      console.log("🎤 Browser Speech Recognition started - LISTENING ACTIVELY");
+      console.log("🎤 Listening - Please speak now...");
       setIsListening(true);
     };
 
     recognition.onresult = (event: any) => {
       // Skip if muted
-      if (isMuted) {
+      if (isMuted || isProcessing) {
         return;
       }
-      
-      // Collect final words into complete thought
+
+      // Collect ONLY new FINAL results
+      let finalTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript.trim();
-        
-        // Show live transcript as user is speaking
-        if (!event.results[i].isFinal) {
-          console.log("🎙️ Interim:", transcript);
-        }
-        
-        // Add final words to full transcript
-        if (event.results[i].isFinal && transcript) {
-          fullTranscript += (fullTranscript ? " " : "") + transcript;
-          console.log("📝 Collecting words. Full thought so far:", fullTranscript);
+        if (event.results[i].isFinal) {
+          const transcript = event.results[i][0].transcript.trim();
+          if (transcript) {
+            finalTranscript += (finalTranscript ? " " : "") + transcript;
+          }
         }
       }
-      
-      // Only send if we have a complete thought (3+ words) and user stopped speaking
-      if (fullTranscript.trim()) {
-        const wordCount = fullTranscript.trim().split(/\s+/).length;
-        console.log(`📊 Word count: ${wordCount}, Full transcript: "${fullTranscript}"`);
+
+      if (finalTranscript) {
+        console.log("✅ RECOGNIZED:", finalTranscript);
         
-        // Clear previous timeout
-        if (sendTimeout) clearTimeout(sendTimeout);
+        // Interrupt current speech if speaking
+        if (isSpeaking) {
+          window.speechSynthesis.cancel();
+          setIsSpeaking(false);
+          mouthAnimationRef.current = false;
+        }
         
-        // Wait 500ms after last speech to see if user continues
-        sendTimeout = setTimeout(() => {
-          // Only send if at least 2-3 words (complete thought)
-          if (wordCount >= 2 && fullTranscript.trim() && !isProcessingMessage && !isProcessing) {
-            isProcessingMessage = true;
-            const messageToSend = fullTranscript.trim();
-            console.log("✅ SENDING MESSAGE: ", messageToSend);
-            
-            // Reset for next message
-            fullTranscript = "";
-            
-            // Interrupt current speech if speaking
-            if (isSpeaking) {
-              window.speechSynthesis.cancel();
-              setIsSpeaking(false);
-              mouthAnimationRef.current = false;
-            }
-            
-            handleSendMessage(messageToSend);
-            setTimeout(() => { isProcessingMessage = false; }, 500);
-          } else if (wordCount < 2) {
-            console.log("⏳ Waiting for more words... (need 2+ words)");
-          }
-        }, 500);
+        // Send immediately
+        handleSendMessage(finalTranscript);
       }
     };
 
     recognition.onerror = (event: any) => {
-      // Log all errors for debugging
-      console.error("🎤 Speech Recognition Error:", event.error);
-      
-      if (event.error === "no-speech") {
-        console.log("⚠️ No speech detected - keep talking!");
-      } else if (event.error === "network") {
-        console.error("❌ Network error in speech recognition");
-        if (toast) {
-          toast({ title: "Network Error", description: "Check your connection" });
-        }
-      } else if (event.error !== "aborted") {
+      if (event.error !== "no-speech" && event.error !== "aborted") {
         console.error("🎤 Speech error:", event.error);
       }
     };
 
     recognition.onend = () => {
-      console.log("🎤 Browser speech recognition ended - restarting...");
-      if (usingBrowserAPI && initRef.current && !isMuted && isCallActive) {
-        // Auto-restart listening
+      console.log("🎤 Listening stopped");
+      setIsListening(false);
+      
+      // Auto-restart ONLY if user not muted and call is active
+      if (usingBrowserAPI && initRef.current && !isMuted && isCallActive && !isProcessing) {
         try {
+          console.log("🔄 Restarting listener...");
           recognition.start();
         } catch (e) {
-          console.warn("Restart speech recognition:", e);
+          console.warn("Could not restart:", e);
         }
       }
     };
 
     try {
       recognition.start();
-      console.log("✅ Speech Recognition STARTED - Ready to hear you!");
+      console.log("✅ Speech Recognition STARTED");
     } catch (e) {
-      console.warn("Speech Recognition already started:", e);
+      console.warn("Speech already started:", e);
     }
     recognitionRef.current = recognition;
   };
