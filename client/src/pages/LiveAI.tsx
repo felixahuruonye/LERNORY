@@ -355,6 +355,8 @@ export default function LiveAI() {
     
     let isProcessingMessage = false;
     let lastTranscriptTime = 0;
+    let fullTranscript = ""; // Collect all words
+    let sendTimeout: NodeJS.Timeout | null = null;
 
     recognition.onstart = () => {
       console.log("🎤 Browser Speech Recognition started - LISTENING ACTIVELY");
@@ -367,24 +369,40 @@ export default function LiveAI() {
         return;
       }
       
-      // Show interim results (what you're saying RIGHT NOW)
-      let interimTranscript = "";
+      // Collect final words into complete thought
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript.toLowerCase();
+        const transcript = event.results[i][0].transcript.trim();
         
         // Show live transcript as user is speaking
         if (!event.results[i].isFinal) {
-          interimTranscript += transcript + " ";
           console.log("🎙️ Interim:", transcript);
         }
         
-        // Process final results
-        if (event.results[i].isFinal && transcript.trim()) {
-          lastTranscriptTime = Date.now();
-          
-          if (!isProcessingMessage && !isProcessing) {
+        // Add final words to full transcript
+        if (event.results[i].isFinal && transcript) {
+          fullTranscript += (fullTranscript ? " " : "") + transcript;
+          console.log("📝 Collecting words. Full thought so far:", fullTranscript);
+        }
+      }
+      
+      // Only send if we have a complete thought (3+ words) and user stopped speaking
+      if (fullTranscript.trim()) {
+        const wordCount = fullTranscript.trim().split(/\s+/).length;
+        console.log(`📊 Word count: ${wordCount}, Full transcript: "${fullTranscript}"`);
+        
+        // Clear previous timeout
+        if (sendTimeout) clearTimeout(sendTimeout);
+        
+        // Wait 500ms after last speech to see if user continues
+        sendTimeout = setTimeout(() => {
+          // Only send if at least 2-3 words (complete thought)
+          if (wordCount >= 2 && fullTranscript.trim() && !isProcessingMessage && !isProcessing) {
             isProcessingMessage = true;
-            console.log("✅ Browser Speech FINAL: ", transcript);
+            const messageToSend = fullTranscript.trim();
+            console.log("✅ SENDING MESSAGE: ", messageToSend);
+            
+            // Reset for next message
+            fullTranscript = "";
             
             // Interrupt current speech if speaking
             if (isSpeaking) {
@@ -393,10 +411,12 @@ export default function LiveAI() {
               mouthAnimationRef.current = false;
             }
             
-            handleSendMessage(transcript.trim());
+            handleSendMessage(messageToSend);
             setTimeout(() => { isProcessingMessage = false; }, 500);
+          } else if (wordCount < 2) {
+            console.log("⏳ Waiting for more words... (need 2+ words)");
           }
-        }
+        }, 500);
       }
     };
 
