@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,8 +34,9 @@ export default function LiveAI() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [fileDescription, setFileDescription] = useState("");
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true); // Start MUTED - user must unmute to talk
   const [isCallActive, setIsCallActive] = useState(true);
+  const [, setLocation] = useLocation(); // For redirecting to chat page
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -100,9 +102,10 @@ export default function LiveAI() {
       if (previousStatus === "offline") {
         setUsingBrowserAPI(true);
         setWhisperStatus("offline");
-        startBrowserSpeechRecognition();
+        // Don't auto-start - user must click Unmute button
       } else {
-        initializeContinuousListening();
+        // Don't auto-start - user must click Unmute button
+        // initializeContinuousListening();
       }
       
       // Auto-greet with proper persistence and audio playback
@@ -351,6 +354,10 @@ export default function LiveAI() {
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.maxAlternatives = 1;
+
+    // IMPROVED MIC SENSITIVITY - Lower threshold to hear normal speaking volume
+    recognition.interimResults = true;
+    recognition.continuous = true;
 
     let isProcessingMessage = false;
 
@@ -639,7 +646,7 @@ export default function LiveAI() {
     localStorage.setItem("learnory_chat_messages", JSON.stringify(messages));
   }, [messages]);
 
-  // End call - stop microphone and session
+  // End call - stop microphone and redirect to chat page
   const handleEndCall = () => {
     console.log("📞 Ending call...");
     
@@ -660,15 +667,17 @@ export default function LiveAI() {
     
     setIsCallActive(false);
     setIsListening(false);
-    setIsMuted(false);
-    
-    // Add end call message
-    addMessage("assistant", "Call ended. Thanks for using LEARNORY! See you next time. 👋");
+    setIsMuted(true);
     
     toast({
       title: "📞 Call Ended",
       description: "Microphone disabled. Your conversation has been saved.",
     });
+    
+    // Redirect to chat page after a short delay
+    setTimeout(() => {
+      setLocation("/");
+    }, 1000);
   };
 
   // Handle file selection - just set file and show prompt input
@@ -792,10 +801,10 @@ export default function LiveAI() {
               <div className={`text-sm font-medium ${
                 isDarkMode ? "text-slate-300" : "text-slate-700"
               }`}>
-                {isListening && "🎤 Listening..."}
-                {isSpeaking && "🔊 Speaking..."}
+                {isMuted && !isProcessing && !isSpeaking && "🔇 Muted - Click Unmute to talk"}
+                {isListening && !isMuted && "🎤 Listening..."}
+                {isSpeaking && "🔊 LEARNORY Speaking..."}
                 {isProcessing && "⏳ Thinking..."}
-                {!isListening && !isSpeaking && !isProcessing && "Ready to listen"}
               </div>
 
               {/* Action Buttons */}
@@ -840,17 +849,33 @@ export default function LiveAI() {
               {/* Control Buttons - Mute/Unmute and End Call */}
               <div className="w-full max-w-sm flex gap-2">
                 <Button
-                  onClick={() => setIsMuted(!isMuted)}
-                  variant={isMuted ? "destructive" : "outline"}
+                  onClick={() => {
+                    if (isMuted) {
+                      // User wants to unmute and start listening
+                      setIsMuted(false);
+                      if (usingBrowserAPI && !isCallActive === false) {
+                        startBrowserSpeechRecognition();
+                      }
+                      toast({ title: "🎤 Unmuted", description: "Microphone is now active - speak whenever you're ready" });
+                    } else {
+                      // User wants to mute
+                      setIsMuted(true);
+                      if (recognitionRef.current) {
+                        recognitionRef.current.stop();
+                      }
+                      toast({ title: "🔇 Muted", description: "Microphone is now off" });
+                    }
+                  }}
+                  variant={isMuted ? "default" : "outline"}
                   size="sm"
                   className="flex-1 gap-2"
                   data-testid="button-toggle-mute"
-                  title={isMuted ? "Unmute microphone" : "Mute microphone"}
+                  title={isMuted ? "Click to unmute and start talking" : "Click to mute microphone"}
                 >
                   {isMuted ? (
                     <>
                       <MicOff className="w-4 h-4" />
-                      Unmute
+                      Unmute to Talk
                     </>
                   ) : (
                     <>
