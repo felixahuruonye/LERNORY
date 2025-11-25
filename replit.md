@@ -60,3 +60,88 @@ A three-tier fallback system is implemented for AI:
 -   **shadcn/ui**: Pre-built components
 -   **Lucide React**: Icons
 -   **Recharts**: Data visualization
+## Recent Updates (Nov 25, 2025)
+
+### Phase 5: ASCII Diagrams in Homework Explanations - COMPLETED ✅
+
+**ASCII DIAGRAM SYSTEM ENHANCEMENT:**
+- ✅ Added ASCII diagram guidelines to core tutor system (tutorSystem.ts)
+- ✅ Added subject-specific ASCII diagram examples for all 6 tutors
+- ✅ Enhanced content structure to include visual ASCII art
+
+**DIAGRAM TYPES BY SUBJECT:**
+
+**Mathematics**: Geometry shapes, graphs, Venn diagrams, set operations
+```
+Parabola:        Triangle:
+   /\              *
+  /  \            /|\
+_/____\          / | \  60°
+```
+
+**Physics**: Force diagrams, motion, circuits, electric fields
+```
+Force diagram:       Circuit:
+    ↑ F1            ┌─[R1]─[R2]─┐
+    |                │           │
+← ──┼─ →     or     └─[Battery]─┘
+    |
+    ↓ F2
+```
+
+**Chemistry**: Molecular structures, reactions, electron movement
+```
+Methane:        Bonding:
+    H           Na : Cl⁻ (ionic)
+    |           H : H (covalent)
+ H—C—H
+    |
+    H
+```
+
+**Biology**: Cells, processes, food chains, DNA
+```
+DNA:              Cell:
+5'—A—T—3'        ┌─────────┐
+  | |             │ Nucleus │
+3'—T—A—5'        └─────────┘
+```
+
+**English**: Essay structure, narrative arc, character maps
+```
+Story Arc:          Essay:
+Climax              ├─ Intro
+  /\               ├─ Body 1
+ /  \              ├─ Body 2
+/____\            └─ Conclusion
+```
+
+**Government**: Institutional structures, processes, hierarchies
+```
+3 Arms:           Democratic Flow:
+  Federal         Citizens → Vote → Laws
+     |               ↑                ↓
+  ┌─┼─┐         Accountability Loop ─┘
+ Exec Leg Jud
+```
+
+**CONTENT STRUCTURE ENHANCED:**
+- 📌 SIMPLE EXPLANATION
+- 📐 ASCII DIAGRAMS ← NEW!
+- 📚 DETAILED BREAKDOWN
+- 💡 REAL-WORLD EXAMPLES
+- 📊 FORMULAS & CONCEPTS
+- 🎯 APPLICATIONS
+- ⚠️ COMMON MISTAKES
+- ✅ PRACTICE QUESTIONS
+- 🔗 RELATED TOPICS
+
+**BENEFITS:**
+- Visual learning support with text-based diagrams
+- Makes abstract concepts concrete and memorable
+- Improves homework explanations for academic grading
+- Supports all learning styles
+- Helps students understand structural relationships
+- Perfect for explaining complex systems and flows
+
+All "Explain My Homework" responses now include ASCII diagrams where relevant!
