@@ -262,47 +262,24 @@ export default function LiveAI() {
       }
     } catch (error: any) {
       console.error("Whisper transcription error:", error);
+      console.warn("⚠️ OpenAI Whisper failed - Switching to Browser Speech API + Gemini");
       
-      // Check if it's an OpenAI API quota/rate limit error
-      const errorMsg = error?.message || "";
-      const isOpenAIError = errorMsg.includes("429") || 
-                            errorMsg.includes("quota") || 
-                            errorMsg.includes("rate_limit_exceeded") ||
-                            errorMsg.includes("insufficient_quota");
+      // Switch to Browser Speech Recognition on ANY Whisper error
+      setWhisperStatus("offline");
+      setUsingBrowserAPI(true);
+      
+      // Show user notification
+      toast({
+        title: "🎤 Switched to Browser Voice",
+        description: "Using backup voice recognition - Gemini will generate responses",
+        variant: "default",
+      });
 
-      if (isOpenAIError) {
-        console.warn("⚠️ OpenAI Whisper API exceeded quota - Switching to Browser Speech API");
-        setWhisperStatus("offline");
-        setUsingBrowserAPI(true);
-        
-        // Show user notification
-        toast({
-          title: "⚠️ Voice Not Available",
-          description: "Please type your question. I will notify you when voice is back online.",
-          variant: "destructive",
-        });
-
-        // Send system message to chat
-        addMessage("assistant", "I notice voice transcription is currently unavailable due to API limits. Please type your question, and I'll help you. I'll let you know when you can talk to me again.");
-        
-        // Create system notification
-        await fetch("/api/notifications", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "system",
-            title: "Voice Transcription Unavailable",
-            message: "OpenAI Whisper API has reached its quota. Voice mode is temporarily disabled. Type your questions instead.",
-            icon: "🎤",
-          })
-        }).catch(err => console.error("Failed to create notification:", err));
-      } else {
-        toast({
-          title: "Transcription Error",
-          description: "Failed to transcribe audio",
-          variant: "destructive",
-        });
-      }
+      // Send system message to chat
+      addMessage("assistant", "Whisper transcription is temporarily unavailable. I'm switching to browser voice recognition with Gemini for responses. Please speak your question again!");
+      
+      // Automatically start Browser Speech Recognition as fallback
+      startBrowserSpeechRecognition();
     }
   };
 
