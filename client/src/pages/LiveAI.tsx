@@ -632,7 +632,39 @@ export default function LiveAI() {
 
               {/* Action Buttons */}
               <div className="w-full max-w-sm">
-                <QuickActions onModeSelect={setCurrentMode} />
+                <QuickActions 
+                  onModeSelect={(mode, prompt = "") => {
+                    setCurrentMode(mode);
+                    // Handle special modes
+                    if (mode === "ask-question") {
+                      // Focus on input for direct questioning
+                      const textarea = document.querySelector('[data-testid="textarea-message"]') as HTMLTextAreaElement;
+                      textarea?.focus();
+                    } else if (mode === "voice-tutor") {
+                      // Activate voice mode
+                      setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: "assistant",
+                        content: "Voice mode activated! I'm ready to have a voice conversation with you. Speak naturally!",
+                        timestamp: Date.now()
+                      }]);
+                      toast({ title: "🎤 Voice Mode", description: "Start speaking to begin conversation" });
+                    } else if (mode === "scan-image" || mode === "summarize") {
+                      // Trigger file upload
+                      toast({ title: "📁 " + (mode === "scan-image" ? "Upload Image" : "Upload PDF"), description: "Use the input area to paste the content or describe what you need help with" });
+                      setMessageInput(prompt);
+                    } else {
+                      // For other modes, pre-fill the message input
+                      setMessageInput(prompt);
+                      // Auto-focus to prompt user to complete the thought
+                      setTimeout(() => {
+                        const textarea = document.querySelector('[data-testid="textarea-message"]') as HTMLTextAreaElement;
+                        textarea?.focus();
+                      }, 100);
+                    }
+                  }}
+                  isDarkMode={isDarkMode}
+                />
               </div>
 
               {/* Theme Toggle */}
