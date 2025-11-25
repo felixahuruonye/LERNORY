@@ -407,28 +407,52 @@ If they ask about similar topics or reference past conversations, remind them wh
       const { description } = req.body;
       
       let analysis = "";
-      let usedApi = "learnory";
+      let extractedText = "";
+      let usedApi = "gemini-vision";
       
-      // Build context for AI with user's description
-      const userContext = description ? `\n\nUser's Request: ${description}` : "";
-      const fileContext = `File: ${originalname} (${mimetype})${userContext}`;
+      console.log(`🔍 Analyzing file: ${originalname} (${mimetype})`);
       
-      // Try Gemini first
+      // Use Gemini Vision to extract content from file
       try {
-        const geminiResult = await explainTopicWithLEARNORY(fileContext, fileContext);
-        analysis = (geminiResult?.simpleExplanation || geminiResult?.detailedBreakdown || JSON.stringify(geminiResult)) || "File analyzed with LEARNORY";
-      } catch (geminiErr) {
-        console.error("LEARNORY (Gemini) API failed:", geminiErr);
+        const visionResult = await analyzeFileWithGeminiVision(buffer, mimetype, originalname);
+        extractedText = visionResult.extractedText;
+        
+        // Build analysis response combining extracted content with user's request
+        const userRequest = description ? `\n\nUser's specific request: ${description}` : "";
+        
+        // Now use the extracted text with LLM to answer the user's specific question
+        if (description && description.trim()) {
+          try {
+            const llmAnalysis = await chatWithAI([
+              {
+                role: "user",
+                content: `I've extracted the following content from a file:\n\n${extractedText.substring(0, 2000)}\n\nPlease help me with this request about the file:\n${description}`
+              }
+            ]);
+            analysis = llmAnalysis || "File analyzed successfully";
+          } catch (llmErr) {
+            console.error("LLM analysis failed, using extracted content:", llmErr);
+            analysis = `Extracted Content:\n\n${extractedText.substring(0, 1000)}...`;
+          }
+        } else {
+          // If no specific request, just return extracted content
+          analysis = extractedText || "File content extracted successfully";
+        }
+        
+        console.log(`✅ File analyzed successfully - extracted ${extractedText.length} chars`);
+      } catch (visionErr) {
+        console.error("Gemini Vision analysis failed:", visionErr);
         usedApi = "learnory-fallback";
         
-        // Fallback to OpenAI
+        // Fallback to LLM only (less capable but still works)
         try {
+          const fileContext = `Analyzing file: ${originalname} (${mimetype})${description ? `\n\nUser request: ${description}` : ""}`;
           analysis = await chatWithAI([
-            { role: "user", content: `Please analyze this file: ${fileContext}` }
+            { role: "user", content: `Please help analyze this file: ${fileContext}` }
           ]);
-          analysis = analysis || "File analyzed with LEARNORY backup system";
-        } catch (openaiErr) {
-          console.error("LEARNORY backup system also failed:", openaiErr);
+          analysis = analysis || "File analyzed with LEARNORY";
+        } catch (fallbackErr) {
+          console.error("Fallback analysis failed:", fallbackErr);
           usedApi = "failed";
           analysis = "Unable to analyze file - please try again";
         }
@@ -442,10 +466,10 @@ If they ask about similar topics or reference past conversations, remind them wh
         fileSize: buffer.length,
         fileUrl: `/api/uploads/${userId}/${nanoid()}`,
         processingStatus: "completed",
-        extractedText: analysis,
+        extractedText: extractedText || analysis,
       });
       
-      res.json({ fileRecord, analysis, usedApi });
+      res.json({ fileRecord, analysis, extractedText, usedApi });
     } catch (error) {
       console.error("File upload error:", error);
       res.status(500).json({ message: "Failed to process file" });
