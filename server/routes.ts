@@ -1510,6 +1510,34 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Simple transcribe endpoint for Live AI (Whisper)
+  app.post('/api/transcribe', upload.single('audio'), async (req: any, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No audio file provided" });
+      }
+
+      const tempFile = path.join(os.tmpdir(), `voice_${Date.now()}.wav`);
+      fs.writeFileSync(tempFile, req.file.buffer);
+
+      try {
+        const { text } = await transcribeAudio(tempFile);
+        console.log("✓ Transcribed:", text);
+        res.json({ text, success: true });
+      } finally {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      }
+    } catch (error: any) {
+      console.error("Transcription error:", error);
+      res.status(500).json({ 
+        message: error?.message || "Transcription failed",
+        text: ""
+      });
+    }
+  });
+
   // Real-time Audio API: Convert text to speech
   app.post('/api/audio/speak', isAuthenticated, async (req: any, res: Response) => {
     try {

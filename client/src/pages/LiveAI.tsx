@@ -95,10 +95,10 @@ export default function LiveAI() {
     };
   }, []);
 
-  // Continuous voice listening with Whisper
+  // Initialize Whisper voice listening
   const initializeContinuousListening = async () => {
     try {
-      // Request microphone permission with explicit settings
+      // Request microphone permission with echo cancellation
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -108,6 +108,7 @@ export default function LiveAI() {
       });
       
       const mediaRecorder = new MediaRecorder(stream);
+      audioChunksRef.current = []; // Reset audio chunks
       
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -116,112 +117,128 @@ export default function LiveAI() {
       };
 
       mediaRecorderRef.current = mediaRecorder;
-      
-      // Start continuous recording
-      mediaRecorder.start(100); // Collect data every 100ms
       setIsListening(true);
-
-      // Start listening for speech
-      startSpeechDetection();
       
       toast({ 
         title: "✓ Voice Ready", 
-        description: "Listening continuously... Speak naturally!" 
+        description: "Listening... Speak naturally!" 
       });
-      console.log("✓ Microphone access granted - Voice recognition ready");
+      console.log("✓ Microphone ready - Waiting for speech");
+      
+      // Start voice activity detection
+      startVoiceActivityDetection(mediaRecorder);
     } catch (error: any) {
       console.error("Microphone access error:", error);
-      const errorMsg = error?.name === "NotAllowedError" 
-        ? "Please grant microphone permission in your browser settings"
-        : error?.name === "NotFoundError"
-        ? "No microphone found on this device"
-        : "Failed to access microphone";
-      
       toast({
         title: "Microphone Error",
-        description: errorMsg,
+        description: "Please grant microphone permission",
         variant: "destructive",
       });
-      
-      // Still try to start speech detection even without recording
-      console.log("Attempting speech recognition without recording...");
-      startSpeechDetection();
     }
   };
 
-  // Speech detection using browser's Speech Recognition API with proper continuous listening
-  const startSpeechDetection = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast({
-        title: "Speech Recognition Not Supported",
-        description: "Use type message instead",
-        variant: "destructive",
-      });
+  // Voice activity detection and Whisper transcription
+  const startVoiceActivityDetection = (mediaRecorder: MediaRecorder) => {
+    let isRecording = false;
+    let silenceTimer: NodeJS.Timeout | null = null;
+    const SILENCE_THRESHOLD = 1500; // 1.5 seconds of silence = end of speech
+
+    // Create audio context from the mediaRecorder's stream
+    const stream = mediaRecorder.stream as MediaStream;
+    const audioContext = new (window as any).AudioContext();
+    const analyser = audioContext.createAnalyser();
+    const microphone = audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const checkVoiceActivity = () => {
+      analyser.getByteFrequencyData(dataArray);
+      const sum = dataArray.reduce((a, b) => a + b, 0);
+      const average = sum / dataArray.length;
+      const hasVoice = average > 30; // Threshold for voice detection
+
+      if (hasVoice && !isRecording) {
+        // Start recording when voice detected
+        isRecording = true;
+        audioChunksRef.current = [];
+        mediaRecorder.start();
+        setIsListening(true);
+        console.log("🎤 Recording started");
+        
+        if (silenceTimer) clearTimeout(silenceTimer);
+      } else if (!hasVoice && isRecording) {
+        // Start silence timer
+        if (!silenceTimer) {
+          silenceTimer = setTimeout(() => {
+            // End recording after silence threshold
+            isRecording = false;
+            mediaRecorder.stop();
+            setIsListening(false);
+            console.log("🎤 Recording stopped - Processing with Whisper");
+            
+            // Send to Whisper for transcription
+            setTimeout(() => transcribeWithWhisper(), 100);
+            silenceTimer = null;
+          }, SILENCE_THRESHOLD);
+        }
+      } else if (hasVoice && isRecording && silenceTimer) {
+        // Clear silence timer if voice continues
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+      }
+
+      requestAnimationFrame(checkVoiceActivity);
+    };
+
+    checkVoiceActivity();
+  };
+
+  // Transcribe audio with OpenAI Whisper API
+  const transcribeWithWhisper = async () => {
+    if (audioChunksRef.current.length === 0) {
+      console.log("No audio to transcribe");
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false; // FIXED: Don't use continuous, restart on end
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
+    try {
+      // Create audio blob from chunks
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.wav");
 
-    let interimTranscript = "";
-    let isProcessingMessage = false;
+      // Send to backend Whisper endpoint
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
 
-    recognition.onstart = () => {
-      console.log("✓ Voice recognition actively listening");
-      setIsListening(true);
-    };
+      if (!response.ok) throw new Error("Transcription failed");
 
-    recognition.onresult = (event: any) => {
-      interimTranscript = "";
+      const data = await response.json();
+      const transcript = data.text?.trim();
+
+      if (transcript) {
+        console.log("📢 Transcribed:", transcript);
+        handleSendMessage(transcript);
+      }
+
+      audioChunksRef.current = [];
       
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        
-        if (event.results[i].isFinal) {
-          // Final result - send to AI (only if not already processing)
-          if (transcript.trim() && !isProcessingMessage && !isProcessing) {
-            isProcessingMessage = true;
-            console.log("📢 Transcribed:", transcript);
-            handleSendMessage(transcript.trim());
-            // Reset after message is sent
-            setTimeout(() => { isProcessingMessage = false; }, 1000);
-          }
-        } else {
-          interimTranscript += transcript;
-        }
+      // Restart listening
+      if (mediaRecorderRef.current && initRef.current) {
+        startVoiceActivityDetection(mediaRecorderRef.current);
       }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error);
-      setIsListening(false);
-      // Only show toast for real errors, not "no-speech" or "aborted"
-      if (event.error !== "no-speech" && event.error !== "aborted" && event.error !== "not-allowed") {
-        toast({
-          title: "Speech Error",
-          description: `Error: ${event.error}`,
-          variant: "destructive",
-        });
-      }
-    };
-
-    recognition.onend = () => {
-      console.log("Speech recognition session ended, restarting...");
-      setIsListening(false);
-      // FIXED: Auto-restart listening so it's continuous
-      setTimeout(() => {
-        if (initRef.current) {
-          startSpeechDetection();
-        }
-      }, 100);
-    };
-
-    recognition.start();
-    recognitionRef.current = recognition;
+    } catch (error) {
+      console.error("Whisper transcription error:", error);
+      toast({
+        title: "Transcription Error",
+        description: "Failed to transcribe audio",
+        variant: "destructive",
+      });
+    }
   };
+
 
   const addMessage = (role: "user" | "assistant", content: string) => {
     const msg: Message = {
@@ -233,23 +250,33 @@ export default function LiveAI() {
     setMessages((prev) => [...prev, msg]);
   };
 
-  // Play audio with mouth animation
+  // Clean text for speech (remove all markdown, special characters)
+  const cleanTextForSpeech = (text: string): string => {
+    return text
+      .replace(/LEARNORY/g, "Learnory")
+      .replace(/\*\*(.+?)\*\*/g, "$1")  // Remove bold markers, keep text
+      .replace(/\*(.+?)\*/g, "$1")      // Remove italic markers
+      .replace(/`(.+?)`/g, "$1")        // Remove code markers
+      .replace(/#{1,6}\s+/g, "")        // Remove headers
+      .replace(/[-•*]\s+/g, ". ")       // Convert bullet points to periods
+      .replace(/\n\n+/g, ". ")          // Replace multiple newlines with periods
+      .replace(/\n/g, " ")              // Replace newlines with spaces
+      .replace(/\[(.+?)\]\(.+?\)/g, "$1") // Remove links, keep text
+      .trim();
+  };
+
+  // Play audio with mouth animation (clean text, no markdown symbols)
   const playAudio = async (text: string) => {
     setIsSpeaking(true);
     mouthAnimationRef.current = true;
 
     try {
-      // Clean up text for speech
-      let cleanText = text
-        .replace(/LEARNORY/g, "Learnory")  // Make it sound natural
-        .replace(/\*\*/g, "")  // Remove markdown bold markers
-        .replace(/###/g, "")   // Remove markdown headers
-        .replace(/\n\n+/g, ". "); // Replace multiple newlines with periods
+      const cleanText = cleanTextForSpeech(text);
       
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 0.95;  // Slightly slower for clarity
+      utterance.rate = 0.95;
       utterance.pitch = voice === "female" ? 1.2 : 0.8;
-      utterance.volume = 0.7; // Reduce volume to minimize noise
+      utterance.volume = 0.7;
       
       utterance.onend = () => {
         setIsSpeaking(false);
