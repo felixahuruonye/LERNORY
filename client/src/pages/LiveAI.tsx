@@ -268,6 +268,33 @@ export default function LiveAI() {
       const data = await response.json();
       const transcript = data.text?.trim();
 
+      // Check if transcript is an error message from the backend (Whisper quota exceeded)
+      const isErrorMessage = transcript && (
+        transcript.includes("Transcription unavailable") || 
+        transcript.includes("quota exceeded") ||
+        transcript.includes("OpenAI") ||
+        transcript.startsWith("[")
+      );
+
+      if (isErrorMessage) {
+        // Treat quota/error messages as failed transcription - fallback to Browser API
+        console.warn("⚠️ Whisper error message received - Switching to Browser Speech API");
+        setWhisperStatus("offline");
+        setUsingBrowserAPI(true);
+        
+        // Show user notification
+        toast({
+          title: "🎤 Switched to Browser Voice",
+          description: "Using backup voice recognition - please speak again",
+          variant: "default",
+        });
+
+        // Automatically start Browser Speech Recognition as fallback
+        startBrowserSpeechRecognition();
+        audioChunksRef.current = [];
+        return;
+      }
+
       if (transcript) {
         console.log("✓ Whisper: Transcribed", transcript);
         handleSendMessage(transcript);
@@ -281,7 +308,7 @@ export default function LiveAI() {
       }
     } catch (error: any) {
       console.error("Whisper transcription error:", error);
-      console.warn("⚠️ OpenAI Whisper failed - Switching to Browser Speech API + Gemini");
+      console.warn("⚠️ OpenAI Whisper failed - Switching to Browser Speech API");
       
       // Switch to Browser Speech Recognition on ANY Whisper error
       setWhisperStatus("offline");
@@ -290,13 +317,10 @@ export default function LiveAI() {
       // Show user notification
       toast({
         title: "🎤 Switched to Browser Voice",
-        description: "Using backup voice recognition - Gemini will generate responses",
+        description: "Using backup voice recognition - please speak again",
         variant: "default",
       });
 
-      // Send system message to chat
-      addMessage("assistant", "Whisper transcription is temporarily unavailable. I'm switching to browser voice recognition with Gemini for responses. Please speak your question again!");
-      
       // Automatically start Browser Speech Recognition as fallback
       startBrowserSpeechRecognition();
     }
