@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Volume2, VolumeX, Upload, X } from "lucide-react";
+import { Send, Volume2, VolumeX, Upload, X, Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
@@ -33,6 +33,8 @@ export default function LiveAI() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [fileDescription, setFileDescription] = useState("");
+  const [isMuted, setIsMuted] = useState(false);
+  const [isCallActive, setIsCallActive] = useState(true);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -348,6 +350,7 @@ export default function LiveAI() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
 
     let isProcessingMessage = false;
 
@@ -357,6 +360,11 @@ export default function LiveAI() {
     };
 
     recognition.onresult = (event: any) => {
+      // Skip if muted
+      if (isMuted) {
+        return;
+      }
+      
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         
@@ -463,6 +471,13 @@ export default function LiveAI() {
   const playAudio = async (text: string) => {
     setIsSpeaking(true);
     mouthAnimationRef.current = true;
+    
+    // AUTO-MUTE: Mute mic while AI is speaking to prevent it from hearing itself
+    setIsMuted(true);
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      console.log("🔇 Auto-muted: Stopping speech recognition while AI speaks");
+    }
 
     try {
       const cleanText = cleanTextForSpeech(text);
@@ -475,11 +490,24 @@ export default function LiveAI() {
       utterance.onend = () => {
         setIsSpeaking(false);
         mouthAnimationRef.current = false;
+        
+        // AUTO-UNMUTE: Unmute mic when AI finishes speaking
+        setIsMuted(false);
+        if (usingBrowserAPI && initRef.current && isCallActive) {
+          startBrowserSpeechRecognition();
+          console.log("🔊 Auto-unmuted: Restarting speech recognition");
+        }
       };
       
       utterance.onerror = () => {
         setIsSpeaking(false);
         mouthAnimationRef.current = false;
+        
+        // AUTO-UNMUTE on error too
+        setIsMuted(false);
+        if (usingBrowserAPI && initRef.current && isCallActive) {
+          startBrowserSpeechRecognition();
+        }
       };
 
       window.speechSynthesis.speak(utterance);
@@ -487,6 +515,12 @@ export default function LiveAI() {
       console.error("Speech synthesis error:", e);
       setIsSpeaking(false);
       mouthAnimationRef.current = false;
+      
+      // AUTO-UNMUTE on error
+      setIsMuted(false);
+      if (usingBrowserAPI && initRef.current && isCallActive) {
+        startBrowserSpeechRecognition();
+      }
     }
   };
 
@@ -604,6 +638,38 @@ export default function LiveAI() {
   useEffect(() => {
     localStorage.setItem("learnory_chat_messages", JSON.stringify(messages));
   }, [messages]);
+
+  // End call - stop microphone and session
+  const handleEndCall = () => {
+    console.log("📞 Ending call...");
+    
+    // Stop speech synthesis
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    mouthAnimationRef.current = false;
+    
+    // Stop speech recognition
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    
+    // Close media recorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    
+    setIsCallActive(false);
+    setIsListening(false);
+    setIsMuted(false);
+    
+    // Add end call message
+    addMessage("assistant", "Call ended. Thanks for using LEARNORY! See you next time. 👋");
+    
+    toast({
+      title: "📞 Call Ended",
+      description: "Microphone disabled. Your conversation has been saved.",
+    });
+  };
 
   // Handle file selection - just set file and show prompt input
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -769,6 +835,42 @@ export default function LiveAI() {
                   }}
                   isDarkMode={isDarkMode}
                 />
+              </div>
+
+              {/* Control Buttons - Mute/Unmute and End Call */}
+              <div className="w-full max-w-sm flex gap-2">
+                <Button
+                  onClick={() => setIsMuted(!isMuted)}
+                  variant={isMuted ? "destructive" : "outline"}
+                  size="sm"
+                  className="flex-1 gap-2"
+                  data-testid="button-toggle-mute"
+                  title={isMuted ? "Unmute microphone" : "Mute microphone"}
+                >
+                  {isMuted ? (
+                    <>
+                      <MicOff className="w-4 h-4" />
+                      Unmute
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-4 h-4" />
+                      Mute
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  onClick={handleEndCall}
+                  variant="destructive"
+                  size="sm"
+                  className="flex-1 gap-2"
+                  data-testid="button-end-call"
+                  title="End the call and stop microphone"
+                >
+                  <PhoneOff className="w-4 h-4" />
+                  End Call
+                </Button>
               </div>
 
               {/* Theme Toggle */}
