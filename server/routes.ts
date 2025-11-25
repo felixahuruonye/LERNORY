@@ -157,9 +157,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attachments: null,
       });
 
-      // Get FULL conversation history across ALL sessions for context (not just current session)
+      // Get FULL conversation history across ALL sessions for context
       // This allows the AI to remember everything the user has studied and asked about
-      const allUserMessages = await storage.getChatMessagesByUser(userId, 300);
+      const allUserMessages = await storage.getChatMessagesByUser(userId, 500);
       
       // Get current session messages to prioritize recent context
       const currentSessionMessages = sessionId 
@@ -167,15 +167,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : [];
       
       // Smart memory strategy:
-      // 1. Include all current session messages (most recent)
-      // 2. Include older messages but extract key topics
+      // 1. Use current session messages as main conversation (prevents greeting loops)
+      // 2. Extract key learning topics from OTHER previous sessions
       const otherMessages = allUserMessages.filter(m => !currentSessionMessages.find(sm => sm.id === m.id));
-      
-      // Extract past topics from user's previous questions
-      const pastTopics = otherMessages
-        .filter(m => m.role === "user")
-        .map(m => m.content.substring(0, 100))
-        .slice(0, 10);
       
       // Build conversation history: ONLY use current session messages
       // DO NOT mix with other sessions - this causes the AI to respond to old patterns instead of current questions
@@ -186,8 +180,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get user memory/progress for context
       const userProgress = await storage.getUserProgressByUser(userId);
       const examResults = await storage.getExamResultsByUser(userId);
+      const userMemories = await storage.getMemoryEntriesByUser(userId);
       
-      // Build personalized system message with MEMORY INSTRUCTIONS
+      // Extract comprehensive learning history from past sessions
+      const extractCrossSesssionMemory = () => {
+        const pastUserQuestions = otherMessages
+          .filter(m => m.role === "user")
+          .map(m => m.content)
+          .slice(0, 20); // Get up to 20 past questions
+        
+        if (pastUserQuestions.length === 0) return "";
+        
+        // Group questions by length (longer = more specific topics)
+        const importantTopics = pastUserQuestions
+          .filter(q => q.length > 30 && q.length < 500)
+          .slice(0, 10);
+        
+        if (importantTopics.length === 0) return "";
+        
+        return `
+## LEARNING HISTORY FROM PREVIOUS SESSIONS:
+The following topics have been discussed before. If the user asks about any of these or related topics, reference what was previously learned:
+
+${importantTopics.map((topic, i) => `${i + 1}. "${topic.substring(0, 150)}${topic.length > 150 ? '...' : ''}"`).join('\n')}`;
+      };
+      
+      const crossSessionMemory = extractCrossSesssionMemory();
+      
+      // Build personalized system message with CROSS-SESSION MEMORY INSTRUCTIONS
       let systemMessage = `You are LEARNORY, an advanced AI tutor. You are speaking with ${userName}.
 
 ## MEMORY & CONTEXT:
@@ -196,31 +216,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 - When the user asks a follow-up, ALWAYS refer back to what was previously discussed.
 - Build knowledge progressively within this session.
 
+## CROSS-SESSION LEARNING MEMORY:
+${userName} has been learning across multiple sessions. Below is what they have studied in previous sessions.
+If they ask about similar topics or reference past conversations, remind them what they learned before and build upon it:
+- Subjects studied: ${userProgress.map(p => p.subject).join(", ") || "No specific subjects yet"}
+- Topics covered: ${userProgress.flatMap(p => p.topicsStudied || []).slice(0, 15).join(", ") || "Various"}${userProgress.some(p => p.weakTopics?.length) ? '\n- Known weak areas: ' + userProgress.flatMap(p => p.weakTopics || []).slice(0, 10).join(", ") : ''}
+
 ## HOW TO RESPOND:
 1. READ the entire conversation history above carefully
 2. REMEMBER everything discussed so far in THIS session
-3. If user references previous topics, acknowledge and build on them
-4. ANSWER the current question thoroughly using previous context
-5. Do NOT apologize for past interactions - just answer the question
-6. Do NOT repeat yourself if already explained in this conversation`;
+3. Check if the user is asking about something from their LEARNING HISTORY above - if yes, reference what they learned before
+4. If user references previous topics, acknowledge what they learned and build on it
+5. ANSWER the current question thoroughly using both session context AND past learning
+6. Do NOT apologize for past interactions - just answer the question
+7. Do NOT repeat yourself if already explained in this conversation`;
       
-      if (userProgress.length > 0) {
-        const topicsSummary = userProgress.map(p => `${p.subject}: ${p.topicsStudied?.join(", ") || "Started"}`).join(" | ");
-        systemMessage += `\n\n## ${userName}'s Learning Profile:
-- Studied: ${topicsSummary}`;
-        
-        if (userProgress.some(p => p.weakTopics?.length)) {
-          const weakTopics = userProgress.flatMap(p => p.weakTopics || []);
-          systemMessage += `\n- Areas to focus on: ${weakTopics.join(", ")}`;
-        }
+      if (crossSessionMemory) {
+        systemMessage += crossSessionMemory;
       }
       
       if (examResults.length > 0) {
         const lastExam = examResults[0];
-        systemMessage += `\n- Recent exam: ${lastExam.examName} (${lastExam.score}%)`;
+        systemMessage += `\n\n## Recent Performance:
+- Last exam: ${lastExam.examName} (${lastExam.score}%)
+- Focus on weak areas identified in exams`;
       }
       
-      systemMessage += `\n\nYour PRIMARY goal: Answer the current question thoroughly while remembering context from this entire conversation.`;
+      systemMessage += `\n\nYour PRIMARY goal: Answer the current question thoroughly while remembering EVERYTHING from this session AND relevant learning from previous sessions.`;
       
       const messages = [
         { role: "system" as const, content: systemMessage },
@@ -231,12 +253,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
 
       console.log("Getting AI response with", messages.length, "messages (including user context)");
-      console.log("📝 CONVERSATION MEMORY:", {
+      
+      // Enhanced memory logging showing cross-session context
+      const crossSessionTopics = otherMessages
+        .filter(m => m.role === "user")
+        .map(m => m.content.substring(0, 80))
+        .slice(0, 8);
+      
+      console.log("🧠 CROSS-SESSION MEMORY SYSTEM:", {
         "Session ID": sessionId,
-        "Messages in this session": history.length,
+        "Current session messages": history.length,
         "User": userName,
-        "User Studied": userProgress.map(p => p.subject).join(", ") || "Nothing yet",
-        "Weak Topics": userProgress.flatMap(p => p.weakTopics || []).join(", ") || "None identified"
+        "All previous questions available": otherMessages.filter(m => m.role === "user").length,
+        "Subjects previously studied": userProgress.map(p => p.subject).join(", ") || "None yet",
+        "Topics covered in previous sessions": userProgress.flatMap(p => p.topicsStudied || []).slice(0, 8).join(", ") || "None",
+        "Identified weak areas across all sessions": userProgress.flatMap(p => p.weakTopics || []).join(", ") || "None identified",
+        "AI will reference": crossSessionTopics.length > 0 ? "✓ Past questions from other sessions" : "Only current session"
       });
 
       // Get AI response with smart fallback (Gemini → OpenRouter → OpenAI)
