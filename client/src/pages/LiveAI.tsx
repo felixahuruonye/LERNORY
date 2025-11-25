@@ -36,6 +36,7 @@ export default function LiveAI() {
   const recognitionRef = useRef<any>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mouthAnimationRef = useRef<boolean>(false);
+  const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Load saved settings
@@ -55,20 +56,34 @@ export default function LiveAI() {
       // Create a new chat session for this Live AI conversation
       (async () => {
         try {
+          console.log("🔄 Creating chat session...");
           const response = await fetch("/api/chat/sessions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({
               title: "Live AI Session - " + new Date().toLocaleString(),
               mode: "live-ai",
               summary: "Interactive voice-based learning session"
             })
           });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
           const session = await response.json();
-          setSessionId(session.id);
-          console.log("✓ Created chat session:", session.id);
+          console.log("📊 Session response:", session);
+          
+          if (session.id) {
+            setSessionId(session.id);
+            sessionIdRef.current = session.id;
+            console.log("✓ Created chat session:", session.id);
+          } else {
+            console.error("❌ No session ID in response:", session);
+          }
         } catch (err) {
-          console.error("Failed to create session:", err);
+          console.error("❌ Failed to create session:", err);
         }
       })();
 
@@ -190,7 +205,9 @@ export default function LiveAI() {
         // Start recording when voice detected
         isRecording = true;
         audioChunksRef.current = [];
-        mediaRecorder.start();
+        if (mediaRecorder.state === "inactive") {
+          mediaRecorder.start();
+        }
         setIsListening(true);
         console.log("🎤 Recording started");
         
@@ -201,7 +218,9 @@ export default function LiveAI() {
           silenceTimer = setTimeout(() => {
             // End recording after silence threshold
             isRecording = false;
-            mediaRecorder.stop();
+            if (mediaRecorder.state === "recording") {
+              mediaRecorder.stop();
+            }
             setIsListening(false);
             console.log("🎤 Recording stopped - Processing with Whisper");
             
@@ -256,8 +275,8 @@ export default function LiveAI() {
 
       audioChunksRef.current = [];
       
-      // Restart listening
-      if (mediaRecorderRef.current && initRef.current) {
+      // Restart listening - ensure media recorder is ready
+      if (mediaRecorderRef.current && initRef.current && mediaRecorderRef.current.state === "inactive") {
         startVoiceActivityDetection(mediaRecorderRef.current);
       }
     } catch (error: any) {
@@ -360,7 +379,20 @@ export default function LiveAI() {
   // Save assistant message to database for permanent transcript
   const saveMessageToDatabase = async (role: "user" | "assistant", content: string) => {
     try {
-      if (!sessionId) {
+      // Use ref first, then state
+      let currentSessionId = sessionIdRef.current || sessionId;
+      
+      // Wait a bit for session to be created if not available yet
+      if (!currentSessionId) {
+        let attempts = 0;
+        while (!currentSessionId && attempts < 30) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          currentSessionId = sessionIdRef.current || sessionId;
+          attempts++;
+        }
+      }
+
+      if (!currentSessionId) {
         console.warn("No session ID - message not persisted to database");
         return;
       }
@@ -368,8 +400,9 @@ export default function LiveAI() {
       await fetch("/api/chat/save-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
-          sessionId,
+          sessionId: currentSessionId,
           role,
           content,
           timestamp: new Date().toISOString(),
@@ -474,6 +507,7 @@ export default function LiveAI() {
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ 
           content: text, 
           sessionId: sessionId, // Save to database with session
