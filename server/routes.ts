@@ -177,11 +177,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map(m => m.content.substring(0, 100))
         .slice(0, 10);
       
-      // Build conversation history: ONLY use current session + last 3 messages from other sessions
-      // This prevents the AI from getting stuck in apology loops from old conversations
+      // Build conversation history: ONLY use current session messages
+      // DO NOT mix with other sessions - this causes the AI to respond to old patterns instead of current questions
       const history = [
-        ...currentSessionMessages,
-        ...otherMessages.slice(0, 3) // Only 3 most recent messages from past sessions for context
+        ...currentSessionMessages
       ];
       
       // Get user memory/progress for context
