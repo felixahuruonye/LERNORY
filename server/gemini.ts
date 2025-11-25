@@ -382,3 +382,114 @@ Return ONLY the title text, nothing else. No quotes, no explanation.`;
     return "New Conversation";
   }
 }
+
+/**
+ * Analyze file with Gemini vision API - Extract text and content from images, PDFs, handwritten notes
+ */
+export async function analyzeFileWithGeminiVision(
+  fileBuffer: Buffer,
+  fileType: string,
+  fileName: string
+): Promise<{ extractedText: string; analysis: any }> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log(`📷 LEARNORY AI: Analyzing ${fileType} file: ${fileName}`);
+
+    // Convert buffer to base64
+    const base64Data = fileBuffer.toString('base64');
+
+    // Determine MIME type based on file extension
+    let mimeType = 'application/octet-stream';
+    if (fileType.includes('pdf')) {
+      mimeType = 'application/pdf';
+    } else if (fileType.includes('image') || fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+      mimeType = 'image/jpeg'; // Default to JPEG for images
+      if (fileName.match(/\.png$/i)) mimeType = 'image/png';
+      if (fileName.match(/\.webp$/i)) mimeType = 'image/webp';
+      if (fileName.match(/\.gif$/i)) mimeType = 'image/gif';
+    } else if (fileType.includes('document') || fileName.match(/\.(docx|doc|txt)$/i)) {
+      mimeType = 'application/pdf'; // Treat documents as PDF for analysis
+    }
+
+    console.log(`📄 MIME type: ${mimeType}`);
+
+    // Send to Gemini with vision capability
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Data,
+              },
+            },
+            {
+              text: `You are an expert document analyzer. Carefully analyze this ${fileType} file and provide:
+
+1. EXTRACTED_TEXT: All readable text content from the file
+2. CONTENT_SUMMARY: A brief summary of what this document contains
+3. KEY_TOPICS: Main topics, subjects, or themes covered
+4. STRUCTURE: The organization/structure of the content
+5. EDUCATIONAL_VALUE: How useful this is for learning (rate: high/medium/low)
+6. RECOMMENDATIONS: How LEARNORY should use this for personalized learning
+
+Format your response as JSON with these exact keys:
+{
+  "extractedText": "all text content here",
+  "summary": "brief summary",
+  "keyTopics": ["topic1", "topic2", "topic3"],
+  "structure": "description of how content is organized",
+  "educationalValue": "high/medium/low",
+  "recommendations": "how to use this for learning",
+  "fileDescription": "what type of document this is"
+}
+
+Be thorough and extract ALL visible text.`,
+            },
+          ],
+        },
+      ],
+    });
+
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error("Empty response from Gemini vision analysis");
+    }
+
+    console.log("✅ Gemini vision analysis received");
+
+    // Parse JSON response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("Could not extract JSON from vision response");
+      throw new Error("Failed to parse vision analysis response");
+    }
+
+    const analysis = JSON.parse(jsonMatch[0]);
+    const extractedText = analysis.extractedText || '';
+
+    console.log(`✅ Extracted ${extractedText.length} characters of text from ${fileType}`);
+
+    return {
+      extractedText,
+      analysis: {
+        summary: analysis.summary,
+        keyTopics: analysis.keyTopics,
+        structure: analysis.structure,
+        educationalValue: analysis.educationalValue,
+        recommendations: analysis.recommendations,
+        fileDescription: analysis.fileDescription,
+      },
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error analyzing file with Gemini vision:", errorMsg);
+    throw error;
+  }
+}

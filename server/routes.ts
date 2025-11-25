@@ -22,7 +22,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1496,21 +1496,71 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/live-ai/document-upload', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/live-ai/document-upload', isAuthenticated, upload.single('file'), async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
-      const { fileName, fileType, fileUrl, fileSize } = req.body;
+      const { fileName: bodyFileName, fileType: bodyFileType } = req.body;
 
+      // Get file from upload
+      if (!req.file) {
+        return res.status(400).json({ message: "No file provided" });
+      }
+
+      const fileName = bodyFileName || req.file.originalname || 'document';
+      const fileType = bodyFileType || req.file.mimetype || 'application/octet-stream';
+      const fileSize = req.file.size;
+
+      // Create document record initially with isProcessing=true
       const doc = await storage.createDocumentUpload({
         userId,
         fileName,
         fileType,
-        fileUrl,
+        fileUrl: `file://${nanoid()}`,
         fileSize,
         isProcessing: true,
+        extractedText: '',
+        aiAnalysis: null,
       });
 
-      res.status(201).json(doc);
+      // Analyze file with Gemini vision in background (non-blocking)
+      (async () => {
+        try {
+          console.log(`🔍 Starting Gemini vision analysis for: ${fileName}`);
+          const { extractedText, analysis } = await analyzeFileWithGeminiVision(
+            req.file.buffer,
+            fileType,
+            fileName
+          );
+
+          // Update document with extracted content
+          console.log(`✅ Updating document with extracted content (${extractedText.length} chars)`);
+          await storage.updateDocumentUpload(doc.id, {
+            extractedText,
+            aiAnalysis: analysis,
+            isProcessing: false,
+          });
+
+          console.log(`✅ Gemini vision analysis completed for: ${fileName}`);
+        } catch (error) {
+          console.error(`❌ Error analyzing file with Gemini vision:`, error);
+          // Update to mark processing as failed but keep document
+          try {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            await storage.updateDocumentUpload(doc.id, {
+              isProcessing: false,
+              extractedText: 'Analysis failed - please try again',
+              aiAnalysis: { error: errorMsg },
+            });
+          } catch (e) {
+            console.error("Could not update document status:", e);
+          }
+        }
+      })();
+
+      res.status(201).json({
+        ...doc,
+        message: "File uploaded successfully. Analyzing content with Gemini...",
+      });
     } catch (error) {
       console.error("Error uploading document:", error);
       res.status(500).json({ message: "Failed to upload document" });

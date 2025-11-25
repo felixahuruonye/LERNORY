@@ -215,6 +215,7 @@ export interface IStorage {
   createVoiceConversation(conversation: InsertVoiceConversation): Promise<VoiceConversation>;
   getVoiceConversationsByUser(userId: string): Promise<VoiceConversation[]>;
   createDocumentUpload(doc: InsertDocumentUpload): Promise<DocumentUpload>;
+  updateDocumentUpload(id: string, updates: Partial<DocumentUpload>): Promise<DocumentUpload | undefined>;
   getDocumentUploadsByUser(userId: string): Promise<DocumentUpload[]>;
   createLiveAiFeature(feature: InsertLiveAiFeature): Promise<LiveAiFeature>;
   getLiveAiFeaturesByUser(userId: string): Promise<LiveAiFeature[]>;
@@ -670,6 +671,11 @@ export class DatabaseStorage implements IStorage {
   async createDocumentUpload(doc: InsertDocumentUpload): Promise<DocumentUpload> {
     const [newDoc] = await db.insert(documentUploads).values(doc).returning();
     return newDoc;
+  }
+
+  async updateDocumentUpload(id: string, updates: Partial<DocumentUpload>): Promise<DocumentUpload | undefined> {
+    const [updated] = await db.update(documentUploads).set(updates).where(eq(documentUploads.id, id)).returning();
+    return updated;
   }
 
   async getDocumentUploadsByUser(userId: string): Promise<DocumentUpload[]> {
