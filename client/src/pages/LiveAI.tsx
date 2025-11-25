@@ -25,6 +25,7 @@ export default function LiveAI() {
   const [currentMode, setCurrentMode] = useState("explain");
   const [messageInput, setMessageInput] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -46,12 +47,29 @@ export default function LiveAI() {
       }
     }
 
-    // Don't load old messages - start fresh each session
-    // This prevents confusion where old history interferes with new questions
-    localStorage.removeItem("learnory_chat_messages");
-
     if (!initRef.current) {
       initRef.current = true;
+      
+      // Create a new chat session for this Live AI conversation
+      (async () => {
+        try {
+          const response = await fetch("/api/chat/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: "Live AI Session - " + new Date().toLocaleString(),
+              mode: "live-ai",
+              summary: "Interactive voice-based learning session"
+            })
+          });
+          const session = await response.json();
+          setSessionId(session.id);
+          console.log("✓ Created chat session:", session.id);
+        } catch (err) {
+          console.error("Failed to create session:", err);
+        }
+      })();
+
       initializeContinuousListening();
       
       // Auto-greet
@@ -144,7 +162,7 @@ export default function LiveAI() {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
+    recognition.continuous = false; // FIXED: Don't use continuous, restart on end
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
@@ -166,6 +184,7 @@ export default function LiveAI() {
           // Final result - send to AI (only if not already processing)
           if (transcript.trim() && !isProcessingMessage && !isProcessing) {
             isProcessingMessage = true;
+            console.log("📢 Transcribed:", transcript);
             handleSendMessage(transcript.trim());
             // Reset after message is sent
             setTimeout(() => { isProcessingMessage = false; }, 1000);
@@ -190,10 +209,14 @@ export default function LiveAI() {
     };
 
     recognition.onend = () => {
-      console.log("Speech recognition session ended");
+      console.log("Speech recognition session ended, restarting...");
       setIsListening(false);
-      // DO NOT RESTART - Let it end naturally and user can speak again when ready
-      // This prevents the constant restart loop
+      // FIXED: Auto-restart listening so it's continuous
+      setTimeout(() => {
+        if (initRef.current) {
+          startSpeechDetection();
+        }
+      }, 100);
     };
 
     recognition.start();
@@ -261,12 +284,13 @@ export default function LiveAI() {
     try {
       addMessage("user", text);
 
+      // SAVE TO CHAT HISTORY: Use sessionId if available
       const response = await fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           content: text, 
-          sessionId: null,
+          sessionId: sessionId, // Save to database with session
           includeUserContext: true,
           autoLearn: true // Enable auto-learning from this message
         }),
