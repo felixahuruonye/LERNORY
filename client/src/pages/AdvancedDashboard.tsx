@@ -30,6 +30,7 @@ import {
   Lightbulb,
   Users,
   Bell,
+  Monitor,
 } from "lucide-react";
 
 export default function AdvancedDashboard() {
@@ -54,6 +55,7 @@ export default function AdvancedDashboard() {
     { id: "live", name: "Live Session", icon: Mic, description: "Real-time transcription & recording", color: "from-rose-500 to-pink-500", href: "/live-session" },
     { id: "image", name: "Image Generation", icon: ImageIcon, description: "DALL-E & image tools", color: "from-orange-500 to-red-500", href: "/image-gen" },
     { id: "memory", name: "Memory Panel", icon: Brain, description: "Learning memory system", color: "from-teal-500 to-cyan-500", href: "/memory" },
+    { id: "cbt", name: "CBT Mode", icon: Monitor, description: "Exam simulation (JAMB/WAEC/NECO)", color: "from-amber-500 to-yellow-500", href: "/cbt-mode" },
     { id: "workspace", name: "Project Workspace", icon: FolderOpen, description: "Organize your projects", color: "from-purple-500 to-pink-500", href: "/workspace" },
     { id: "settings", name: "Settings", icon: Settings, description: "Customize your experience", color: "from-indigo-500 to-blue-500", href: "/settings" },
   ];
