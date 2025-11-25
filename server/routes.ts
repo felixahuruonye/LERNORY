@@ -156,19 +156,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attachments: null,
       });
 
-      // Get conversation history (last 20 messages for context - includes user's new message)
-      const history = sessionId 
+      // Get FULL conversation history across ALL sessions for context (not just current session)
+      // This allows the AI to remember everything the user has studied and asked about
+      const allUserMessages = await storage.getChatMessagesByUser(userId, 300);
+      
+      // Get current session messages to prioritize recent context
+      const currentSessionMessages = sessionId 
         ? await storage.getChatMessagesBySession(sessionId)
-        : await storage.getChatMessagesByUser(userId, 20);
+        : [];
+      
+      // Smart memory strategy:
+      // 1. Include all current session messages (most recent)
+      // 2. Include older messages but extract key topics
+      const otherMessages = allUserMessages.filter(m => !currentSessionMessages.find(sm => sm.id === m.id));
+      
+      // Extract past topics from user's previous questions
+      const pastTopics = otherMessages
+        .filter(m => m.role === "user")
+        .map(m => m.content.substring(0, 100))
+        .slice(0, 10);
+      
+      // Build conversation history: prioritize recent, but include comprehensive past context
+      const history = [
+        ...currentSessionMessages,
+        ...otherMessages.slice(0, 50) // Include 50 most recent messages from other sessions
+      ];
       
       // Get user memory/progress for context
       const userProgress = await storage.getUserProgressByUser(userId);
       const examResults = await storage.getExamResultsByUser(userId);
       
-      // Build personalized system message
+      // Build personalized system message with FULL learning history
       let systemMessage = `You are Learnory, an advanced AI tutor. You are speaking to ${userName}.`;
       
       if (includeUserContext) {
+        // Show ALL topics studied across all sessions
         if (userProgress.length > 0) {
           const topicsSummary = userProgress.map(p => `${p.subject}: ${p.topicsStudied?.join(", ") || "Started"}`).join(" | ");
           systemMessage += ` ${userName} has been studying: ${topicsSummary}.`;
@@ -184,7 +206,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           systemMessage += ` ${userName}'s recent exam: ${lastExam.examName} (${lastExam.score}%). `;
         }
         
-        systemMessage += ` Remember this user across conversations and refer to them as ${userName}. Be personalized, encouraging, and track their learning progress.`;
+        // Include summary of ALL past conversations and learning journey
+        const userMessageCount = history.filter(m => m.role === "user").length;
+        if (userMessageCount > 0) {
+          systemMessage += ` You have ${userMessageCount} messages in your history with ${userName}. `;
+          
+          // Add past topics summary
+          if (pastTopics.length > 0) {
+            systemMessage += `${userName} has asked about: ${pastTopics.join(", ")}. `;
+          }
+          
+          systemMessage += `Remember ALL previous conversations, every topic discussed, every question asked, and ${userName}'s complete learning journey. `;
+        }
+        
+        systemMessage += `CRITICAL INSTRUCTION: You MUST remember ${userName} across ALL sessions and conversations. Always reference past topics, previous questions, and learning progress. This is ${userName}, and you remember EVERYTHING about their learning - their struggles, their strengths, their curiosity. Be proactive in remembering and referencing their learning history, not just answering what they ask.`;
       }
       
       const messages = [
