@@ -145,3 +145,51 @@ Climax              ├─ Intro
 - Perfect for explaining complex systems and flows
 
 All "Explain My Homework" responses now include ASCII diagrams where relevant!
+
+### Phase 6: CBT Mode - Computer-Based Testing Simulation - IN PROGRESS 🚀
+
+**CBT MODE FEATURE:**
+- ✅ Real exam type selection: JAMB, WAEC, NECO
+- ✅ Subject selection for customized testing
+- ✅ Flexible time durations (30 min, 1 hour, 2 hours, 3 hours)
+- ✅ Auto-logout on timer expiration
+- ✅ Realistic computer monitor display
+- ✅ Interactive keyboard and mouse simulation
+- ✅ Question navigation (Previous/Next)
+- ✅ Live timer countdown
+- ✅ Exam submission handling
+
+**FRONTEND COMPONENTS:**
+- `CBTMode.tsx`: Main exam interface with:
+  - Dashboard for exam configuration
+  - Subject and time selection UI
+  - Realistic monitor frame with exam questions
+  - Keyboard and mouse visual indicators
+  - Navigation controls and exam timer
+  - Real-time countdown to auto-logout
+
+**BACKEND INFRASTRUCTURE:**
+- `GET /api/cbt/exams`: Fetch all available CBT exams
+- `POST /api/cbt/sessions`: Create new exam session
+- `GET /api/cbt/sessions/:sessionId`: Get session status
+- `GET /api/cbt/questions/:examId`: Fetch questions for exam
+- `POST /api/cbt/answers`: Save user answer
+- `PATCH /api/cbt/sessions/:sessionId`: Update session status and scores
+
+**DATABASE SCHEMA:**
+- `cbtExams`: Stores exam metadata (type, subjects, duration)
+- `cbtQuestions`: Question bank for exams
+- `cbtSessions`: User exam attempt tracking
+- `cbtAnswers`: User answers with correctness tracking
+
+**FEATURES:**
+- Real-time timer with automatic submission on expiration
+- Multiple exam formats (JAMB, WAEC, NECO)
+- Subject-based question filtering
+- Realistic testing environment with computer interface
+- Question flagging and review capabilities
+- Performance tracking and scoring
+- Session history for user review
+
+**ROUTING:**
+- `/cbt-mode`: Main CBT Mode dashboard and exam interface

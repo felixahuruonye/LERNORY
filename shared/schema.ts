@@ -394,18 +394,16 @@ export const insertGeneratedWebsiteSchema = createInsertSchema(generatedWebsites
 export type InsertGeneratedWebsite = z.infer<typeof insertGeneratedWebsiteSchema>;
 export type GeneratedWebsite = typeof generatedWebsites.$inferSelect;
 
-// Learning History - Track user's learning activities
+// Learning History
 export const learningHistory = pgTable("learning_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   subject: varchar("subject", { length: 100 }).notNull(),
   topic: varchar("topic", { length: 255 }).notNull(),
-  difficulty: varchar("difficulty", { length: 50 }),
+  mode: varchar("mode", { length: 50 }), // learning, exam, revision
   duration: integer("duration"), // in minutes
-  completed: boolean("completed").default(false),
+  performance: varchar("performance", { length: 20 }), // excellent, good, fair, poor
   notes: text("notes"),
-  rating: integer("rating"), // 1-5 user satisfaction rating
-  tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -413,15 +411,14 @@ export const insertLearningHistorySchema = createInsertSchema(learningHistory).o
 export type InsertLearningHistory = z.infer<typeof insertLearningHistorySchema>;
 export type LearningHistory = typeof learningHistory.$inferSelect;
 
-// Generated Images - Store AI-generated images with metadata
+// Generated Images
 export const generatedImages = pgTable("generated_images", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   prompt: text("prompt").notNull(),
   imageUrl: text("image_url").notNull(),
-  context: varchar("context", { length: 100 }), // 'explain', 'course', 'custom'
   relatedTopic: varchar("related_topic", { length: 255 }),
-  imageData: jsonb("image_data"), // base64 or image metadata
+  tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -429,145 +426,43 @@ export const insertGeneratedImageSchema = createInsertSchema(generatedImages).om
 export type InsertGeneratedImage = z.infer<typeof insertGeneratedImageSchema>;
 export type GeneratedImage = typeof generatedImages.$inferSelect;
 
-// Topic Explanations - Store detailed topic explanations for reference
+// Topic Explanations
 export const topicExplanations = pgTable("topic_explanations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   subject: varchar("subject", { length: 100 }).notNull(),
   topic: varchar("topic", { length: 255 }).notNull(),
-  simpleExplanation: text("simple_explanation"),
-  detailedBreakdown: text("detailed_breakdown"),
-  examples: jsonb("examples"), // Array of examples
-  formulas: jsonb("formulas"), // Array of formulas
-  realLifeApplications: jsonb("real_life_applications"), // Array of applications
-  commonMistakes: jsonb("common_mistakes"), // Array of mistakes
-  practiceQuestions: jsonb("practice_questions"), // Array of questions
-  imageUrl: text("image_url"),
-  difficulty: varchar("difficulty", { length: 50 }),
-  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  explanation: text("explanation").notNull(),
+  examples: jsonb("examples"),
+  relatedTopics: text("related_topics").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertTopicExplanationSchema = createInsertSchema(topicExplanations).omit({ id: true, generatedAt: true });
+export const insertTopicExplanationSchema = createInsertSchema(topicExplanations).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertTopicExplanation = z.infer<typeof insertTopicExplanationSchema>;
 export type TopicExplanation = typeof topicExplanations.$inferSelect;
 
-// Relations
-export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => ({
-  user: one(users, {
-    fields: [chatSessions.userId],
-    references: [users.id],
-  }),
-}));
-
-export const usersRelations = relations(users, ({ one, many }) => ({
-  school: one(schools, {
-    fields: [users.schoolId],
-    references: [schools.id],
-  }),
-  studentProfile: one(studentProfiles, {
-    fields: [users.id],
-    references: [studentProfiles.userId],
-  }),
-  courses: many(courses),
-  chatMessages: many(chatMessages),
-  chatSessions: many(chatSessions),
-  memoryEntries: many(memoryEntries),
-  purchases: many(purchases),
-}));
-
-export const coursesRelations = relations(courses, ({ one, many }) => ({
-  teacher: one(users, {
-    fields: [courses.teacherId],
-    references: [users.id],
-  }),
-  lessons: many(lessons),
-  quizzes: many(quizzes),
-  purchases: many(purchases),
-}));
-
-export const lessonsRelations = relations(lessons, ({ one }) => ({
-  course: one(courses, {
-    fields: [lessons.courseId],
-    references: [courses.id],
-  }),
-  createdBy: one(users, {
-    fields: [lessons.createdById],
-    references: [users.id],
-  }),
-}));
-
-export const liveSessionsRelations = relations(liveSessions, ({ one, many }) => ({
-  host: one(users, {
-    fields: [liveSessions.hostId],
-    references: [users.id],
-  }),
-  transcripts: many(transcripts),
-}));
-
-export const transcriptsRelations = relations(transcripts, ({ one }) => ({
-  session: one(liveSessions, {
-    fields: [transcripts.sessionId],
-    references: [liveSessions.id],
-  }),
-  createdBy: one(users, {
-    fields: [transcripts.createdById],
-    references: [users.id],
-  }),
-}));
-
-export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
-  course: one(courses, {
-    fields: [quizzes.courseId],
-    references: [courses.id],
-  }),
-  createdBy: one(users, {
-    fields: [quizzes.createdById],
-    references: [users.id],
-  }),
-  attempts: many(quizAttempts),
-}));
-
-export const quizAttemptsRelations = relations(quizAttempts, ({ one }) => ({
-  quiz: one(quizzes, {
-    fields: [quizAttempts.quizId],
-    references: [quizzes.id],
-  }),
-  student: one(users, {
-    fields: [quizAttempts.studentId],
-    references: [users.id],
-  }),
-}));
-
-export const purchasesRelations = relations(purchases, ({ one }) => ({
-  buyer: one(users, {
-    fields: [purchases.buyerId],
-    references: [users.id],
-  }),
-  course: one(courses, {
-    fields: [purchases.courseId],
-    references: [courses.id],
-  }),
-}));
-
-// LEARNORY LIVE AI Tables
+// Voice Conversations (LEARNORY LIVE AI)
 export const voiceConversations = pgTable("voice_conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  vapiSessionId: varchar("vapi_session_id"),
-  title: varchar("title"),
-  mode: varchar("mode").default('conversational'), // teaching, exam, conversational
-  language: varchar("language").default('en'),
-  avatarGender: varchar("avatar_gender").default('female'), // male or female
-  recordingUrl: varchar("recording_url"),
-  transcript: text("transcript"),
-  summary: text("summary"),
-  messageCount: integer("message_count").default(0),
-  durationSeconds: integer("duration_seconds").default(0),
-  startedAt: timestamp("started_at").defaultNow(),
-  endedAt: timestamp("ended_at"),
+  subject: varchar("subject", { length: 100 }),
+  initialPrompt: text("initial_prompt"),
+  turnCount: integer("turn_count").default(0),
+  audioSegments: jsonb("audio_segments"), // Array of { role, audioUrl, transcript }
+  currentPhase: varchar("current_phase", { length: 50 }), // tutoring, practice, assessment
+  lastActivityAt: timestamp("last_activity_at"),
+  isActive: boolean("is_active").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const insertVoiceConversationSchema = createInsertSchema(voiceConversations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertVoiceConversation = z.infer<typeof insertVoiceConversationSchema>;
+export type VoiceConversation = typeof voiceConversations.$inferSelect;
+
+// Document Uploads (for Gemini Vision API)
 export const documentUploads = pgTable("document_uploads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -581,6 +476,7 @@ export const documentUploads = pgTable("document_uploads", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Live AI Features
 export const liveAiFeatures = pgTable("live_ai_features", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -591,9 +487,53 @@ export const liveAiFeatures = pgTable("live_ai_features", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertVoiceConversationSchema = createInsertSchema(voiceConversations).omit({ id: true, createdAt: true });
-export type InsertVoiceConversation = z.infer<typeof insertVoiceConversationSchema>;
-export type VoiceConversation = typeof voiceConversations.$inferSelect;
+// CBT Mode (Computer-Based Testing) - Exam Simulation
+export const cbtExams = pgTable("cbt_exams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  examType: examTypeEnum("exam_type").notNull(), // jamb, waec, neco
+  subjects: text("subjects").array().notNull(),
+  totalQuestions: integer("total_questions").notNull(),
+  totalDuration: integer("total_duration").notNull(), // in minutes
+  questionsPerSubject: jsonb("questions_per_subject"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const cbtQuestions = pgTable("cbt_questions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  examId: varchar("exam_id").notNull().references(() => cbtExams.id, { onDelete: 'cascade' }),
+  subject: varchar("subject").notNull(),
+  questionNumber: integer("question_number").notNull(),
+  questionText: text("question_text").notNull(),
+  options: jsonb("options").notNull(),
+  correctAnswer: varchar("correct_answer").notNull(),
+  explanation: text("explanation"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const cbtSessions = pgTable("cbt_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  examId: varchar("exam_id").notNull().references(() => cbtExams.id, { onDelete: 'cascade' }),
+  status: varchar("status").default('in_progress').notNull(),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  timeSpent: integer("time_spent"),
+  score: decimal("score", { precision: 5, scale: 2 }),
+  totalCorrect: integer("total_correct"),
+  totalAttempted: integer("total_attempted"),
+  sessionData: jsonb("session_data"),
+});
+
+export const cbtAnswers = pgTable("cbt_answers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => cbtSessions.id, { onDelete: 'cascade' }),
+  questionId: varchar("question_id").notNull().references(() => cbtQuestions.id, { onDelete: 'cascade' }),
+  userAnswer: varchar("user_answer"),
+  isCorrect: boolean("is_correct"),
+  timeSpent: integer("time_spent"),
+  flagged: boolean("flagged").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 export const insertDocumentUploadSchema = createInsertSchema(documentUploads).omit({ id: true, createdAt: true });
 export type InsertDocumentUpload = z.infer<typeof insertDocumentUploadSchema>;
@@ -602,3 +542,19 @@ export type DocumentUpload = typeof documentUploads.$inferSelect;
 export const insertLiveAiFeatureSchema = createInsertSchema(liveAiFeatures).omit({ id: true, createdAt: true });
 export type InsertLiveAiFeature = z.infer<typeof insertLiveAiFeatureSchema>;
 export type LiveAiFeature = typeof liveAiFeatures.$inferSelect;
+
+export const insertCbtExamSchema = createInsertSchema(cbtExams).omit({ id: true, createdAt: true });
+export type InsertCbtExam = z.infer<typeof insertCbtExamSchema>;
+export type CbtExam = typeof cbtExams.$inferSelect;
+
+export const insertCbtQuestionSchema = createInsertSchema(cbtQuestions).omit({ id: true, createdAt: true });
+export type InsertCbtQuestion = z.infer<typeof insertCbtQuestionSchema>;
+export type CbtQuestion = typeof cbtQuestions.$inferSelect;
+
+export const insertCbtSessionSchema = createInsertSchema(cbtSessions).omit({ id: true, startedAt: true, completedAt: true });
+export type InsertCbtSession = z.infer<typeof insertCbtSessionSchema>;
+export type CbtSession = typeof cbtSessions.$inferSelect;
+
+export const insertCbtAnswerSchema = createInsertSchema(cbtAnswers).omit({ id: true, createdAt: true });
+export type InsertCbtAnswer = z.infer<typeof insertCbtAnswerSchema>;
+export type CbtAnswer = typeof cbtAnswers.$inferSelect;

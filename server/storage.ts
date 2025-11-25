@@ -28,6 +28,10 @@ import {
   voiceConversations,
   documentUploads,
   liveAiFeatures,
+  cbtExams,
+  cbtQuestions,
+  cbtSessions,
+  cbtAnswers,
   type User,
   type UpsertUser,
   type Course,
@@ -82,6 +86,14 @@ import {
   type InsertDocumentUpload,
   type LiveAiFeature,
   type InsertLiveAiFeature,
+  type CbtExam,
+  type InsertCbtExam,
+  type CbtQuestion,
+  type InsertCbtQuestion,
+  type CbtSession,
+  type InsertCbtSession,
+  type CbtAnswer,
+  type InsertCbtAnswer,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -631,7 +643,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTopicExplanationsByUser(userId: string): Promise<TopicExplanation[]> {
-    return await db.select().from(topicExplanations).where(eq(topicExplanations.userId, userId)).orderBy(desc(topicExplanations.generatedAt));
+    return await db.select().from(topicExplanations).where(eq(topicExplanations.userId, userId)).orderBy(desc(topicExplanations.createdAt));
   }
 
   // Notification operations
@@ -689,6 +701,53 @@ export class DatabaseStorage implements IStorage {
 
   async getLiveAiFeaturesByUser(userId: string): Promise<LiveAiFeature[]> {
     return await db.select().from(liveAiFeatures).where(eq(liveAiFeatures.userId, userId)).orderBy(desc(liveAiFeatures.createdAt));
+  }
+
+  // CBT Mode operations
+  async getCbtExam(id: string): Promise<CbtExam | undefined> {
+    const [exam] = await db.select().from(cbtExams).where(eq(cbtExams.id, id));
+    return exam;
+  }
+
+  async getAllCbtExams(): Promise<CbtExam[]> {
+    return await db.select().from(cbtExams);
+  }
+
+  async createCbtExam(exam: InsertCbtExam): Promise<CbtExam> {
+    const [newExam] = await db.insert(cbtExams).values(exam).returning();
+    return newExam;
+  }
+
+  async getCbtQuestions(examId: string): Promise<CbtQuestion[]> {
+    return await db.select().from(cbtQuestions).where(eq(cbtQuestions.examId, examId));
+  }
+
+  async createCbtSession(session: InsertCbtSession): Promise<CbtSession> {
+    const [newSession] = await db.insert(cbtSessions).values(session).returning();
+    return newSession;
+  }
+
+  async getCbtSession(id: string): Promise<CbtSession | undefined> {
+    const [session] = await db.select().from(cbtSessions).where(eq(cbtSessions.id, id));
+    return session;
+  }
+
+  async getCbtSessionsByUser(userId: string): Promise<CbtSession[]> {
+    return await db.select().from(cbtSessions).where(eq(cbtSessions.userId, userId)).orderBy(desc(cbtSessions.startedAt));
+  }
+
+  async updateCbtSession(id: string, updates: Partial<InsertCbtSession>): Promise<CbtSession | undefined> {
+    const [updated] = await db.update(cbtSessions).set(updates).where(eq(cbtSessions.id, id)).returning();
+    return updated;
+  }
+
+  async createCbtAnswer(answer: InsertCbtAnswer): Promise<CbtAnswer> {
+    const [newAnswer] = await db.insert(cbtAnswers).values(answer).returning();
+    return newAnswer;
+  }
+
+  async getCbtAnswersBySession(sessionId: string): Promise<CbtAnswer[]> {
+    return await db.select().from(cbtAnswers).where(eq(cbtAnswers.sessionId, sessionId));
   }
 }
 
