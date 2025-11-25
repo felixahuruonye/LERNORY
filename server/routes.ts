@@ -70,6 +70,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Save message to permanent transcript (used for greetings and system messages)
+  app.post('/api/chat/save-message', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId, role, content } = req.body;
+
+      if (!sessionId) {
+        return res.status(400).json({ message: "Session ID is required" });
+      }
+
+      if (!content?.trim()) {
+        return res.status(400).json({ message: "Message content is required" });
+      }
+
+      // Verify session exists and belongs to user
+      const session = await storage.getChatSession(sessionId);
+      if (!session || session.userId !== userId) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      // Save message to database
+      const message = await storage.createChatMessage({
+        userId,
+        sessionId,
+        role: role || "assistant",
+        content,
+        attachments: null,
+      });
+
+      console.log(`✓ Message saved to transcript: ${role} - ${content.substring(0, 50)}`);
+      res.json(message);
+    } catch (error) {
+      console.error("Error saving message:", error);
+      res.status(500).json({ message: "Failed to save message" });
+    }
+  });
+
   app.post('/api/chat/send', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;

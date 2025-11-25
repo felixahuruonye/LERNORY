@@ -82,16 +82,34 @@ export default function LiveAI() {
         initializeContinuousListening();
       }
       
-      // Auto-greet
-      setTimeout(() => {
+      // Auto-greet with proper persistence and audio playback
+      setTimeout(async () => {
         const greetings = [
           "Hello! I'm your LEARNORY AI tutor. What would you like to learn today?",
           "Hi! I'm here to help you study. What topic interests you?",
           "Welcome to LEARNORY! I'm ready to assist with your learning.",
         ];
         const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+        
+        // Add to UI immediately
         addMessage("assistant", greeting);
-        playAudio(greeting);
+        
+        // Save to database for permanent transcript (wait for sessionId if needed)
+        const checkAndSave = async () => {
+          let attempts = 0;
+          while (!sessionId && attempts < 20) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+          }
+          if (sessionId) {
+            await saveMessageToDatabase("assistant", greeting);
+          }
+        };
+        checkAndSave();
+        
+        // Speak the greeting
+        console.log("🎙️ Playing greeting...");
+        await playAudio(greeting);
       }, 1000);
     }
 
@@ -351,6 +369,7 @@ export default function LiveAI() {
   };
 
 
+  // Save message to both UI and database for permanent transcript
   const addMessage = (role: "user" | "assistant", content: string) => {
     const msg: Message = {
       id: `${role}-${++messageCountRef.current}`,
@@ -359,6 +378,30 @@ export default function LiveAI() {
       timestamp: Date.now(),
     };
     setMessages((prev) => [...prev, msg]);
+  };
+
+  // Save assistant message to database for permanent transcript
+  const saveMessageToDatabase = async (role: "user" | "assistant", content: string) => {
+    try {
+      if (!sessionId) {
+        console.warn("No session ID - message not persisted to database");
+        return;
+      }
+
+      await fetch("/api/chat/save-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          role,
+          content,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+      console.log(`✓ Message saved to database: ${role}`);
+    } catch (error) {
+      console.error("Failed to save message to database:", error);
+    }
   };
 
   // Clean text for speech (remove all markdown, special characters)
@@ -421,6 +464,9 @@ export default function LiveAI() {
 
     try {
       addMessage("user", text);
+      
+      // Save user message to database for permanent transcript
+      await saveMessageToDatabase("user", text);
 
       // If Whisper is offline and user types, auto-recover when they message
       if (!usingBrowserAPI && whisperStatus === "offline") {
@@ -477,6 +523,9 @@ export default function LiveAI() {
         throw new Error("Empty response from API");
       }
       addMessage("assistant", aiMessage);
+      
+      // Save AI message to database for permanent transcript
+      await saveMessageToDatabase("assistant", aiMessage);
 
       // Speak the response with avatar lip-syncing
       await playAudio(aiMessage);
