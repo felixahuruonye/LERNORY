@@ -187,28 +187,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userProgress = await storage.getUserProgressByUser(userId);
       const examResults = await storage.getExamResultsByUser(userId);
       
-      // Build personalized system message
-      let systemMessage = `You are Learnory, an advanced AI tutor. You are speaking to ${userName}. IMPORTANT: ANSWER THE USER'S CURRENT QUESTION DIRECTLY. Do NOT apologize, do NOT discuss previous conversations about identity/names unless the user asks about it. Focus 100% on answering their current question accurately and thoroughly.`;
+      // Build personalized system message with MEMORY INSTRUCTIONS
+      let systemMessage = `You are LEARNORY, an advanced AI tutor. You are speaking with ${userName}.
+
+## MEMORY & CONTEXT:
+- THIS CONVERSATION has ${history.length} messages so far. Reference and build upon EVERYTHING discussed in this session.
+- If the user mentions something they asked about earlier, REMEMBER it and continue from there.
+- When the user asks a follow-up, ALWAYS refer back to what was previously discussed.
+- Build knowledge progressively within this session.
+
+## HOW TO RESPOND:
+1. READ the entire conversation history above carefully
+2. REMEMBER everything discussed so far in THIS session
+3. If user references previous topics, acknowledge and build on them
+4. ANSWER the current question thoroughly using previous context
+5. Do NOT apologize for past interactions - just answer the question
+6. Do NOT repeat yourself if already explained in this conversation`;
       
-      if (includeUserContext) {
-        // Show ALL topics studied across all sessions
-        if (userProgress.length > 0) {
-          const topicsSummary = userProgress.map(p => `${p.subject}: ${p.topicsStudied?.join(", ") || "Started"}`).join(" | ");
-          systemMessage += ` ${userName} has been studying: ${topicsSummary}.`;
-          
-          if (userProgress.some(p => p.weakTopics?.length)) {
-            const weakTopics = userProgress.flatMap(p => p.weakTopics || []);
-            systemMessage += ` Areas to focus on: ${weakTopics.join(", ")}.`;
-          }
-        }
+      if (userProgress.length > 0) {
+        const topicsSummary = userProgress.map(p => `${p.subject}: ${p.topicsStudied?.join(", ") || "Started"}`).join(" | ");
+        systemMessage += `\n\n## ${userName}'s Learning Profile:
+- Studied: ${topicsSummary}`;
         
-        if (examResults.length > 0) {
-          const lastExam = examResults[0];
-          systemMessage += ` ${userName}'s recent exam: ${lastExam.examName} (${lastExam.score}%). `;
+        if (userProgress.some(p => p.weakTopics?.length)) {
+          const weakTopics = userProgress.flatMap(p => p.weakTopics || []);
+          systemMessage += `\n- Areas to focus on: ${weakTopics.join(", ")}`;
         }
-        
-        systemMessage += ` You remember ${userName} and can reference their learning journey when relevant, but your PRIMARY obligation is to thoroughly answer their current question first. NO APOLOGIES - just answer the question.`;
       }
+      
+      if (examResults.length > 0) {
+        const lastExam = examResults[0];
+        systemMessage += `\n- Recent exam: ${lastExam.examName} (${lastExam.score}%)`;
+      }
+      
+      systemMessage += `\n\nYour PRIMARY goal: Answer the current question thoroughly while remembering context from this entire conversation.`;
       
       const messages = [
         { role: "system" as const, content: systemMessage },
@@ -219,6 +231,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
 
       console.log("Getting AI response with", messages.length, "messages (including user context)");
+      console.log("📝 CONVERSATION MEMORY:", {
+        "Session ID": sessionId,
+        "Messages in this session": history.length,
+        "User": userName,
+        "User Studied": userProgress.map(p => p.subject).join(", ") || "Nothing yet",
+        "Weak Topics": userProgress.flatMap(p => p.weakTopics || []).join(", ") || "None identified"
+      });
 
       // Get AI response with smart fallback (Gemini → OpenRouter → OpenAI)
       let aiResponse: string;

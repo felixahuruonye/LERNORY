@@ -186,7 +186,7 @@ Now, respond to the user with complete, intelligent, helpful guidance!`;
 }
 
 /**
- * Analyze chat message to extract learning data
+ * Analyze chat message to extract learning data AND update user progress
  */
 export async function analyzeMessageForLearning(
   userId: string,
@@ -221,6 +221,27 @@ export async function analyzeMessageForLearning(
     if (combinedText.includes("explain like i'm 5") || combinedText.includes("eli5")) difficulty = "beginner";
     if (combinedText.includes("advanced") || combinedText.includes("complex") || combinedText.includes("master")) difficulty = "advanced";
 
+    // Detect if user is struggling (asking for help, confusion indicators, requesting explanation)
+    const isStrugglingIndicators = [
+      "i don't understand",
+      "confused",
+      "help me",
+      "don't get it",
+      "can you explain",
+      "how does",
+      "why is",
+      "explain like i'm 5",
+      "what is",
+      "struggling",
+      "difficult",
+      "hard",
+      "lost",
+    ];
+    
+    const isStruggling = isStrugglingIndicators.some(indicator => 
+      userMessage.toLowerCase().includes(indicator)
+    );
+
     // Store in memory for tracking
     await storage.createMemoryEntry({
       userId,
@@ -231,12 +252,77 @@ export async function analyzeMessageForLearning(
         messageLength: userMessage.length,
         responseLength: aiResponse.length,
         timestamp: new Date().toISOString(),
+        isStruggling,
       },
     });
+
+    // Update user progress with this subject
+    const existingProgress = await storage.getUserProgress(userId, detectedSubject);
+    
+    if (existingProgress) {
+      // Update existing progress
+      const topicsStudied = existingProgress.topicsStudied || [];
+      const extractedTopic = extractTopicFromMessage(userMessage);
+      
+      if (extractedTopic && !topicsStudied.includes(extractedTopic)) {
+        topicsStudied.push(extractedTopic);
+      }
+
+      // Add to weak topics if user is struggling
+      let weakTopics = existingProgress.weakTopics || [];
+      if (isStruggling && extractedTopic && !weakTopics.includes(extractedTopic)) {
+        weakTopics.push(extractedTopic);
+      }
+
+      await storage.updateUserProgress(existingProgress.id, {
+        topicsStudied,
+        weakTopics,
+        lastStudiedAt: new Date(),
+      });
+    } else if (detectedSubject !== "general") {
+      // Create new progress entry for this subject
+      const extractedTopic = extractTopicFromMessage(userMessage);
+      const topicsStudied = extractedTopic ? [extractedTopic] : [];
+      const weakTopics = isStruggling && extractedTopic ? [extractedTopic] : [];
+
+      await storage.createUserProgress({
+        userId,
+        subject: detectedSubject,
+        topicsStudied,
+        weakTopics,
+        questionsAttempted: 0,
+        lastStudiedAt: new Date(),
+      });
+    }
+
+    console.log(`✓ Auto-learning updated: ${detectedSubject} (struggling: ${isStruggling})`);
   } catch (error) {
     console.error("Error analyzing message for learning:", error);
     // Don't throw - this is optional analysis
   }
+}
+
+/**
+ * Extract topic from user message
+ */
+function extractTopicFromMessage(message: string): string | null {
+  const topicPatterns = [
+    /(?:about|on|in|the)\s+([a-zA-Z\s]+?)(?:\?|\.|\s+(?:and|or|if)|\s*$)/i,
+    /(?:explain|understand|solve|help)\s+(?:with\s+)?([a-zA-Z\s]+?)(?:\?|\.|\s*$)/i,
+    /^([a-zA-Z\s]+?)(?:\?|\.)/i,
+  ];
+
+  for (const pattern of topicPatterns) {
+    const match = message.match(pattern);
+    if (match && match[1]) {
+      const topic = match[1].trim().split(/\s+/).slice(0, 4).join(" ");
+      if (topic.length > 2 && topic.length < 50) {
+        return topic;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
