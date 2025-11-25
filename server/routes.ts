@@ -404,28 +404,33 @@ If they ask about similar topics or reference past conversations, remind them wh
       
       const userId = req.user.claims.sub;
       const { originalname, mimetype, buffer } = req.file;
+      const { description } = req.body;
       
       let analysis = "";
-      let usedApi = "gemini";
+      let usedApi = "learnory";
+      
+      // Build context for AI with user's description
+      const userContext = description ? `\n\nUser's Request: ${description}` : "";
+      const fileContext = `File: ${originalname} (${mimetype})${userContext}`;
       
       // Try Gemini first
       try {
-        const geminiResult = await explainTopicWithLEARNORY(originalname, originalname);
-        analysis = (geminiResult?.simpleExplanation || geminiResult?.detailedBreakdown || JSON.stringify(geminiResult)) || "File analyzed with Gemini API";
+        const geminiResult = await explainTopicWithLEARNORY(fileContext, fileContext);
+        analysis = (geminiResult?.simpleExplanation || geminiResult?.detailedBreakdown || JSON.stringify(geminiResult)) || "File analyzed with LEARNORY";
       } catch (geminiErr) {
-        console.error("Gemini API failed:", geminiErr);
-        usedApi = "openai";
+        console.error("LEARNORY (Gemini) API failed:", geminiErr);
+        usedApi = "learnory-fallback";
         
         // Fallback to OpenAI
         try {
           analysis = await chatWithAI([
-            { role: "user", content: `Please analyze this file (${originalname}) of type ${mimetype}` }
+            { role: "user", content: `Please analyze this file: ${fileContext}` }
           ]);
-          analysis = analysis || "File analyzed with OpenAI";
+          analysis = analysis || "File analyzed with LEARNORY backup system";
         } catch (openaiErr) {
-          console.error("OpenAI API also failed:", openaiErr);
+          console.error("LEARNORY backup system also failed:", openaiErr);
           usedApi = "failed";
-          analysis = "Unable to analyze file - all APIs failed";
+          analysis = "Unable to analyze file - please try again";
         }
       }
       

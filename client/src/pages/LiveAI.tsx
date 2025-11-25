@@ -31,6 +31,8 @@ export default function LiveAI() {
   const [showUploadMode, setShowUploadMode] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showPromptInput, setShowPromptInput] = useState(false);
+  const [fileDescription, setFileDescription] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -603,21 +605,42 @@ export default function LiveAI() {
     localStorage.setItem("learnory_chat_messages", JSON.stringify(messages));
   }, [messages]);
 
-  // Handle file upload and analysis with Gemini
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file selection - just set file and show prompt input
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setUploadedFile(file);
+    setShowPromptInput(true);
+    setFileDescription("");
+    
+    toast({
+      title: "📁 File Selected",
+      description: `${file.name} loaded. Now describe what you need help with.`,
+    });
+  };
+
+  // Handle submission of file + description to LEARNORY API
+  const handleAnalyzeWithDescription = async () => {
+    if (!uploadedFile || !fileDescription.trim()) {
+      toast({
+        title: "⚠️ Missing Information",
+        description: "Please describe what you need help with.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadedFile);
+      formData.append("description", fileDescription);
       
       toast({
-        title: "📤 Uploading...",
-        description: `Analyzing ${file.name}...`,
+        title: "🔍 Analyzing with LEARNORY...",
+        description: `Processing ${uploadedFile.name}...`,
       });
 
       const response = await fetch("/api/chat/analyze-file", {
@@ -632,12 +655,11 @@ export default function LiveAI() {
 
       const data = await response.json();
       const analysis = data.analysis || "File analyzed successfully";
-      const usedApi = data.usedApi || "Gemini";
 
-      // Add user message showing uploaded file
-      const fileName = file.name;
-      addMessage("user", `📎 Uploaded: ${fileName}\n\n${currentMode === "scan-image" ? "Please solve this image/problem" : "Please summarize this PDF/notes"}`);
-      await saveMessageToDatabase("user", `Uploaded file: ${fileName}`);
+      // Add user message showing uploaded file + description
+      const fileName = uploadedFile.name;
+      addMessage("user", `📎 ${fileName}\n\n${fileDescription}`);
+      await saveMessageToDatabase("user", `File: ${fileName}\nRequest: ${fileDescription}`);
 
       // Add AI analysis response
       let displayResponse = analysis;
@@ -652,13 +674,15 @@ export default function LiveAI() {
       await playAudio(displayResponse);
 
       toast({
-        title: "✓ Analysis Complete",
-        description: `Used ${usedApi} API`,
+        title: "✅ LEARNORY Analysis Complete",
+        description: "Response generated and read aloud",
       });
 
       // Reset upload mode
       setShowUploadMode(false);
+      setShowPromptInput(false);
       setUploadedFile(null);
+      setFileDescription("");
       setUploadProgress(0);
       
     } catch (error) {
@@ -781,7 +805,7 @@ export default function LiveAI() {
             />
 
             {/* File Upload Interface - Shows when upload mode is active */}
-            {showUploadMode && (
+            {showUploadMode && !showPromptInput && (
               <Card className={`p-6 border-2 border-dashed ${isDarkMode ? "bg-slate-800/50 border-purple-500/50" : "bg-purple-50 border-purple-300"}`}>
                 <div className="space-y-4">
                   <div className="text-center">
@@ -822,6 +846,7 @@ export default function LiveAI() {
                     <Button
                       onClick={() => {
                         setShowUploadMode(false);
+                        setShowPromptInput(false);
                         setUploadedFile(null);
                         if (fileInputRef.current) fileInputRef.current.value = "";
                       }}
@@ -836,7 +861,7 @@ export default function LiveAI() {
                   {uploadedFile && !isProcessing && (
                     <div className={`text-xs p-3 rounded ${isDarkMode ? "bg-slate-700" : "bg-white"}`}>
                       <p className={isDarkMode ? "text-slate-300" : "text-slate-700"}>
-                        ✓ Ready to analyze: <strong>{uploadedFile.name}</strong>
+                        ✓ Ready: <strong>{uploadedFile.name}</strong>
                       </p>
                     </div>
                   )}
@@ -844,7 +869,69 @@ export default function LiveAI() {
                   {isProcessing && (
                     <div className={`text-xs p-3 rounded animate-pulse ${isDarkMode ? "bg-slate-700" : "bg-white"}`}>
                       <p className={isDarkMode ? "text-slate-300" : "text-slate-700"}>
-                        ⏳ Analyzing with Gemini API...
+                        ⏳ Analyzing with LEARNORY...
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {/* Prompt Input - Shows after file is selected */}
+            {showPromptInput && uploadedFile && (
+              <Card className={`p-6 border-2 ${isDarkMode ? "bg-slate-800/50 border-purple-500/30" : "bg-purple-50 border-purple-200"}`}>
+                <div className="space-y-4">
+                  <div>
+                    <p className={`text-sm font-medium mb-2 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      📎 File: <span className="text-purple-600 dark:text-purple-400">{uploadedFile.name}</span>
+                    </p>
+                    <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                      Now describe what you need help with. This helps LEARNORY give you better responses.
+                    </p>
+                  </div>
+
+                  <Textarea
+                    placeholder={
+                      currentMode === "scan-image" 
+                        ? "e.g., Solve this math problem step by step, explain the physics concept, or find the errors in this code..."
+                        : "e.g., Summarize the key points, extract formulas, find important concepts, or create a study guide..."
+                    }
+                    value={fileDescription}
+                    onChange={(e) => setFileDescription(e.target.value)}
+                    rows={4}
+                    className="resize-none"
+                    disabled={isProcessing}
+                    data-testid="textarea-file-description"
+                  />
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleAnalyzeWithDescription}
+                      disabled={!fileDescription.trim() || isProcessing}
+                      className="flex-1 gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                      data-testid="button-analyze-with-description"
+                    >
+                      <Send className="w-4 h-4" />
+                      {isProcessing ? "Analyzing..." : "Analyze with LEARNORY"}
+                    </Button>
+
+                    <Button
+                      onClick={() => {
+                        setShowPromptInput(false);
+                        setFileDescription("");
+                      }}
+                      variant="outline"
+                      disabled={isProcessing}
+                      data-testid="button-back-to-upload"
+                    >
+                      Back
+                    </Button>
+                  </div>
+
+                  {isProcessing && (
+                    <div className={`text-xs p-3 rounded animate-pulse ${isDarkMode ? "bg-slate-700" : "bg-white"}`}>
+                      <p className={isDarkMode ? "text-slate-300" : "text-slate-700"}>
+                        🔍 LEARNORY is analyzing your file and request...
                       </p>
                     </div>
                   )}
