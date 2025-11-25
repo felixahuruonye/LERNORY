@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Volume2, VolumeX } from "lucide-react";
+import { Send, Volume2, VolumeX, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
@@ -28,6 +28,9 @@ export default function LiveAI() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [whisperStatus, setWhisperStatus] = useState<"online" | "offline">("online");
   const [usingBrowserAPI, setUsingBrowserAPI] = useState(false);
+  const [showUploadMode, setShowUploadMode] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -37,6 +40,7 @@ export default function LiveAI() {
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mouthAnimationRef = useRef<boolean>(false);
   const sessionIdRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     // Load saved settings
@@ -599,6 +603,80 @@ export default function LiveAI() {
     localStorage.setItem("learnory_chat_messages", JSON.stringify(messages));
   }, [messages]);
 
+  // Handle file upload and analysis with Gemini
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadedFile(file);
+    setIsProcessing(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      toast({
+        title: "📤 Uploading...",
+        description: `Analyzing ${file.name}...`,
+      });
+
+      const response = await fetch("/api/chat/analyze-file", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to analyze file");
+      }
+
+      const data = await response.json();
+      const analysis = data.analysis || "File analyzed successfully";
+      const usedApi = data.usedApi || "Gemini";
+
+      // Add user message showing uploaded file
+      const fileName = file.name;
+      addMessage("user", `📎 Uploaded: ${fileName}\n\n${currentMode === "scan-image" ? "Please solve this image/problem" : "Please summarize this PDF/notes"}`);
+      await saveMessageToDatabase("user", `Uploaded file: ${fileName}`);
+
+      // Add AI analysis response
+      let displayResponse = analysis;
+      if (typeof analysis === "object") {
+        displayResponse = JSON.stringify(analysis, null, 2);
+      }
+
+      addMessage("assistant", displayResponse);
+      await saveMessageToDatabase("assistant", displayResponse);
+
+      // Speak the response
+      await playAudio(displayResponse);
+
+      toast({
+        title: "✓ Analysis Complete",
+        description: `Used ${usedApi} API`,
+      });
+
+      // Reset upload mode
+      setShowUploadMode(false);
+      setUploadedFile(null);
+      setUploadProgress(0);
+      
+    } catch (error) {
+      console.error("File analysis error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to analyze file. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   return (
     <div className={isDarkMode ? "dark" : ""}>
       <div className={`min-h-screen ${isDarkMode ? "bg-slate-900" : "bg-slate-50"}`}>
@@ -650,9 +728,11 @@ export default function LiveAI() {
                       }]);
                       toast({ title: "🎤 Voice Mode", description: "Start speaking to begin conversation" });
                     } else if (mode === "scan-image" || mode === "summarize") {
-                      // Trigger file upload
-                      toast({ title: "📁 " + (mode === "scan-image" ? "Upload Image" : "Upload PDF"), description: "Use the input area to paste the content or describe what you need help with" });
-                      setMessageInput(prompt);
+                      // Show file upload interface
+                      setShowUploadMode(true);
+                      setUploadedFile(null);
+                      toast({ title: "📁 " + (mode === "scan-image" ? "Upload Image" : "Upload PDF"), description: "Click the upload button to choose your file" });
+                      setTimeout(() => fileInputRef.current?.click(), 100);
                     } else {
                       // For other modes, pre-fill the message input
                       setMessageInput(prompt);
@@ -690,48 +770,132 @@ export default function LiveAI() {
               />
             </div>
 
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={handleFileUpload}
+              accept={currentMode === "scan-image" ? "image/*" : ".pdf,.doc,.docx,.txt"}
+              style={{ display: "none" }}
+              data-testid="input-file-upload"
+            />
+
+            {/* File Upload Interface - Shows when upload mode is active */}
+            {showUploadMode && (
+              <Card className={`p-6 border-2 border-dashed ${isDarkMode ? "bg-slate-800/50 border-purple-500/50" : "bg-purple-50 border-purple-300"}`}>
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <p className={`text-sm font-medium ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      {currentMode === "scan-image" ? "📷 Upload Image or Problem" : "📄 Upload PDF or Notes"}
+                    </p>
+                    <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                      {uploadedFile ? uploadedFile.name : "Click to upload or drag and drop"}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isProcessing}
+                      className="flex-1 gap-2"
+                      data-testid="button-upload-file"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {uploadedFile ? "Change File" : "Choose File"}
+                    </Button>
+
+                    {uploadedFile && (
+                      <Button
+                        onClick={() => {
+                          setUploadedFile(null);
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                        variant="outline"
+                        size="icon"
+                        disabled={isProcessing}
+                        data-testid="button-remove-file"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+
+                    <Button
+                      onClick={() => {
+                        setShowUploadMode(false);
+                        setUploadedFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      variant="outline"
+                      disabled={isProcessing}
+                      data-testid="button-cancel-upload"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+
+                  {uploadedFile && !isProcessing && (
+                    <div className={`text-xs p-3 rounded ${isDarkMode ? "bg-slate-700" : "bg-white"}`}>
+                      <p className={isDarkMode ? "text-slate-300" : "text-slate-700"}>
+                        ✓ Ready to analyze: <strong>{uploadedFile.name}</strong>
+                      </p>
+                    </div>
+                  )}
+
+                  {isProcessing && (
+                    <div className={`text-xs p-3 rounded animate-pulse ${isDarkMode ? "bg-slate-700" : "bg-white"}`}>
+                      <p className={isDarkMode ? "text-slate-300" : "text-slate-700"}>
+                        ⏳ Analyzing with Gemini API...
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {/* Type Message Input - Simple */}
-            <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-              <div className="space-y-3">
-                <Textarea
-                  placeholder="Type your question (press Enter to send)..."
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  rows={3}
-                  className="resize-none"
-                  disabled={isProcessing}
-                  data-testid="textarea-message"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleSendMessage()}
-                    disabled={!messageInput.trim() || isProcessing}
-                    className="flex-1 gap-2"
-                    data-testid="button-send-message"
-                  >
-                    <Send className="w-4 h-4" />
-                    {isProcessing ? "Thinking..." : "Send"}
-                  </Button>
-                  <Button
-                    onClick={() => setMessageInput("")}
-                    variant="outline"
-                    size="sm"
-                    data-testid="button-clear-input"
-                  >
-                    Clear
-                  </Button>
+            {!showUploadMode && (
+              <Card className={`p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                <div className="space-y-3">
+                  <Textarea
+                    placeholder="Type your question (press Enter to send)..."
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    rows={3}
+                    className="resize-none"
+                    disabled={isProcessing}
+                    data-testid="textarea-message"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleSendMessage()}
+                      disabled={!messageInput.trim() || isProcessing}
+                      className="flex-1 gap-2"
+                      data-testid="button-send-message"
+                    >
+                      <Send className="w-4 h-4" />
+                      {isProcessing ? "Thinking..." : "Send"}
+                    </Button>
+                    <Button
+                      onClick={() => setMessageInput("")}
+                      variant="outline"
+                      size="sm"
+                      data-testid="button-clear-input"
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                  <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                    💬 Speak naturally or type your questions • Press Enter to send • Shift+Enter for new line
+                  </div>
                 </div>
-                <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                  💬 Speak naturally or type your questions • Press Enter to send • Shift+Enter for new line
-                </div>
-              </div>
-            </Card>
+              </Card>
+            )}
           </div>
         </div>
       </div>
