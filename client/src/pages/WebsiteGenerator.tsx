@@ -137,7 +137,11 @@ export default function WebsiteGenerator() {
     if (!selectedWebsiteData || !debugPrompt.trim()) return;
     
     setIsDebugging(true);
-    setDebugMessages(["🚀 Initializing Debug Mode..."]);
+    setDebugMessages([
+      "🚀 Initializing Debug Mode...",
+      "🔍 Analyzing your code...",
+      "⏳ Processing with LEARNORY AI..."
+    ]);
     setShowDebugMode(true);
     setDebugUpdatingFile(null);
     
@@ -148,47 +152,51 @@ export default function WebsiteGenerator() {
         body: JSON.stringify({ debugPrompt }),
       });
 
-      if (!res.body) throw new Error("No response body");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Debug failed");
+      }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      const data = await res.json();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      setDebugMessages((prev) => [
+        ...prev,
+        data.changes?.htmlUpdated ? "📝 HTML structure fixed" : "",
+        data.changes?.cssUpdated ? "🎨 CSS styles updated" : "",
+        data.changes?.jsUpdated ? "⚙️ JavaScript functionality restored" : "",
+        "🚀 Saving changes...",
+        "✨ All fixes applied successfully!",
+        "📌 Your website is now ready to preview"
+      ].filter(Boolean));
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.message) {
-                setDebugMessages((prev) => [...prev, data.message]);
-              }
-              if (data.file) {
-                setDebugUpdatingFile(data.file as any);
-                setTimeout(() => setDebugUpdatingFile(null), 1000);
-              }
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-        }
+      // Show visual feedback for each file type
+      if (data.changes?.htmlUpdated) {
+        setDebugUpdatingFile("html");
+        setTimeout(() => setDebugUpdatingFile(null), 800);
+      }
+      if (data.changes?.cssUpdated) {
+        setDebugUpdatingFile("css");
+        setTimeout(() => setDebugUpdatingFile(null), 800);
+      }
+      if (data.changes?.jsUpdated) {
+        setDebugUpdatingFile("js");
+        setTimeout(() => setDebugUpdatingFile(null), 800);
       }
 
       await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
-      setIsDebugging(false);
-      setShowPreview(true);
+      
+      setTimeout(() => {
+        setIsDebugging(false);
+        setShowPreview(true);
+      }, 1000);
+
       toast({
         title: "✅ Debug Complete!",
         description: "LEARNORY AI has fixed your website. Click Preview to see the changes!",
       });
     } catch (error: any) {
       setIsDebugging(false);
+      console.error("Debug error:", error);
       toast({
         title: "Debug Error",
         description: error.message || "Failed to debug website",

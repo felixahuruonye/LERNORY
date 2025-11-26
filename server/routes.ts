@@ -680,18 +680,8 @@ If they ask about similar topics or reference past conversations, remind them wh
         return res.status(404).json({ message: "Website not found" });
       }
 
-      // Set up SSE headers for streaming
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      
-      const sendMessage = (message: string, file?: string) => {
-        res.write(`data: ${JSON.stringify({ message, file })}\n\n`);
-      };
-
-      sendMessage("🔍 Analyzing your code...");
-      
       // Get updated code from LEARNORY AI
+      console.log("🔍 Analyzing code for:", debugPrompt);
       const debugResult = await debugCodeWithLEARNORY(
         website.htmlCode,
         website.cssCode,
@@ -699,40 +689,33 @@ If they ask about similar topics or reference past conversations, remind them wh
         debugPrompt
       );
 
-      // Stream the fixes being applied
-      if (debugResult.htmlCode !== website.htmlCode) {
-        sendMessage("📝 Fixing HTML structure...", "html");
-        sendMessage("✅ HTML updated with proper structure and semantics");
-      }
-
-      if (debugResult.cssCode !== website.cssCode) {
-        sendMessage("🎨 Fixing CSS styles...", "css");
-        sendMessage("✅ CSS updated with responsive design fixes");
-      }
-
-      if ((debugResult.jsCode || "") !== (website.jsCode || "")) {
-        sendMessage("⚙️ Fixing JavaScript functionality...", "js");
-        sendMessage("✅ JavaScript updated with working event handlers");
-      }
-
-      sendMessage("🚀 Saving changes to your website...");
-
-      // Save updated code to database
+      // Update database with fixed code
       const updated = await storage.updateGeneratedWebsite(req.params.id, {
         htmlCode: debugResult.htmlCode,
         cssCode: debugResult.cssCode,
         jsCode: debugResult.jsCode,
       });
 
-      sendMessage("✨ All fixes applied successfully!");
-      sendMessage("📌 Your website is now ready to preview");
+      // Return success response with updates
+      const debugChanges = {
+        htmlUpdated: debugResult.htmlCode !== website.htmlCode,
+        cssUpdated: debugResult.cssCode !== website.cssCode,
+        jsUpdated: (debugResult.jsCode || "") !== (website.jsCode || ""),
+      };
 
-      res.write('data: {"done": true}\n\n');
-      res.end();
+      console.log("✅ Debug complete with updates:", debugChanges);
+      res.json({
+        success: true,
+        message: "Website fixed successfully!",
+        changes: debugChanges,
+        updated: true
+      });
     } catch (error) {
       console.error("Error debugging code:", error);
-      res.write(`data: ${JSON.stringify({ error: `Failed to debug: ${error instanceof Error ? error.message : "Unknown error"}` })}\n\n`);
-      res.end();
+      res.status(500).json({
+        success: false,
+        message: `Failed to debug: ${error instanceof Error ? error.message : "Unknown error"}`
+      });
     }
   });
 
