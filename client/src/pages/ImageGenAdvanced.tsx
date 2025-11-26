@@ -31,6 +31,16 @@ export default function ImageGenAdvanced() {
   const [aspectRatio, setAspectRatio] = useState("1024x1024");
   const [resolution, setResolution] = useState("1024");
 
+  const handleDeleteImage = async (imageId: string) => {
+    try {
+      await apiRequest("DELETE", `/api/generated-images/${imageId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
+      toast({ title: "Image deleted", description: "Image removed from history" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete image", variant: "destructive" });
+    }
+  };
+
   const { data: generatedImages = [], isLoading: imagesLoading } = useQuery<any[]>({
     queryKey: ["/api/generated-images"],
     enabled: !!user,
@@ -237,6 +247,7 @@ export default function ImageGenAdvanced() {
                         variant="destructive"
                         size="sm"
                         className="hover-elevate"
+                        onClick={() => handleDeleteImage(generatedImages[0].id)}
                         data-testid="button-delete-preview"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -280,7 +291,7 @@ export default function ImageGenAdvanced() {
                           <Button size="sm" variant="ghost" className="hover-elevate" data-testid={`button-edit-${img.id}`}>
                             <Edit2 className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="destructive" className="hover-elevate" data-testid={`button-delete-${img.id}`}>
+                          <Button size="sm" variant="destructive" className="hover-elevate" onClick={() => handleDeleteImage(img.id)} data-testid={`button-delete-${img.id}`}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
