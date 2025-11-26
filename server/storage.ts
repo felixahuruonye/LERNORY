@@ -636,12 +636,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGeneratedImagesByUser(userId: string): Promise<GeneratedImage[]> {
-    const images = await db.select().from(generatedImages).where(eq(generatedImages.userId, userId)).orderBy(desc(generatedImages.createdAt));
+    const images = await db.select({
+      id: generatedImages.id,
+      userId: generatedImages.userId,
+      prompt: generatedImages.prompt,
+      imageUrl: generatedImages.imageUrl,
+      relatedTopic: generatedImages.relatedTopic,
+      tags: generatedImages.tags,
+      createdAt: generatedImages.createdAt,
+    }).from(generatedImages).where(eq(generatedImages.userId, userId)).orderBy(desc(generatedImages.createdAt));
     return images;
   }
 
   async getGeneratedImagesByTopic(userId: string, topic: string): Promise<GeneratedImage[]> {
-    return await db.select().from(generatedImages).where(and(eq(generatedImages.userId, userId), eq(generatedImages.relatedTopic, topic))).orderBy(desc(generatedImages.createdAt));
+    return await db.select({
+      id: generatedImages.id,
+      userId: generatedImages.userId,
+      prompt: generatedImages.prompt,
+      imageUrl: generatedImages.imageUrl,
+      relatedTopic: generatedImages.relatedTopic,
+      tags: generatedImages.tags,
+      createdAt: generatedImages.createdAt,
+    }).from(generatedImages).where(and(eq(generatedImages.userId, userId), eq(generatedImages.relatedTopic, topic))).orderBy(desc(generatedImages.createdAt));
   }
 
   async deleteGeneratedImage(userId: string, imageId: string): Promise<void> {
