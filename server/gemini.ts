@@ -334,6 +334,10 @@ async function generateImageWithStabilityAI(prompt: string): Promise<string> {
   if (!apiKey) throw new Error("STABILITY_API_KEY not configured");
 
   try {
+    // Truncate prompt to 2000 characters (Stability AI limit)
+    const truncatedPrompt = prompt.length > 2000 ? prompt.substring(0, 2000) : prompt;
+    console.log(`📝 Prompt length: ${truncatedPrompt.length}/2000 chars`);
+
     const response = await fetch("https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image", {
       method: "POST",
       headers: {
@@ -342,7 +346,7 @@ async function generateImageWithStabilityAI(prompt: string): Promise<string> {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        text_prompts: [{ text: prompt, weight: 1 }],
+        text_prompts: [{ text: truncatedPrompt, weight: 1 }],
         cfg_scale: 7,
         height: 1024,
         width: 1024,
