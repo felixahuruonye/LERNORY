@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useTheme } from "@/components/ThemeProvider";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
   Settings,
@@ -24,12 +26,30 @@ import { useVoice, AVAILABLE_VOICES } from "@/lib/useVoice";
 export default function SettingsPanel() {
   const { user, isLoading: authLoading } = useAuth();
   const { selectedVoice, setSelectedVoice, speak } = useVoice();
-  const [theme, setTheme] = useState("dark");
-  const [notifications, setNotifications] = useState({
-    messages: true,
-    suggestions: true,
-    updates: false,
+  const { theme, setTheme } = useTheme();
+  const { toast } = useToast();
+  const [notifications, setNotifications] = useState(() => {
+    const saved = localStorage.getItem("notifications");
+    return saved ? JSON.parse(saved) : { messages: true, suggestions: true, updates: false };
   });
+  const [dataCollection, setDataCollection] = useState(() => {
+    return localStorage.getItem("dataCollection") !== "false";
+  });
+  const [sharedLearning, setSharedLearning] = useState(() => {
+    return localStorage.getItem("sharedLearning") !== "false";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("notifications", JSON.stringify(notifications));
+  }, [notifications]);
+
+  useEffect(() => {
+    localStorage.setItem("dataCollection", String(dataCollection));
+  }, [dataCollection]);
+
+  useEffect(() => {
+    localStorage.setItem("sharedLearning", String(sharedLearning));
+  }, [sharedLearning]);
 
   if (authLoading || !user) {
     return (
@@ -49,15 +69,16 @@ export default function SettingsPanel() {
           description: "Light, Dark, or Neon mode",
           component: (
             <div className="flex gap-2" data-testid="select-theme">
-              {["Light", "Dark", "Neon"].map((t) => (
+              {["light", "dark", "neon"].map((t) => (
                 <Button
                   key={t}
                   size="sm"
-                  variant={theme === t.toLowerCase() ? "default" : "outline"}
-                  onClick={() => setTheme(t.toLowerCase())}
+                  variant={theme === t ? "default" : "outline"}
+                  onClick={() => setTheme(t as "light" | "dark" | "neon")}
                   className="hover-elevate"
+                  data-testid={`button-theme-${t}`}
                 >
-                  {t}
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
                 </Button>
               ))}
             </div>
@@ -117,12 +138,24 @@ export default function SettingsPanel() {
         {
           label: "Data Collection",
           description: "Allow LERNORY to analyze learning patterns",
-          component: <Switch defaultChecked data-testid="switch-data-collection" />,
+          component: (
+            <Switch
+              checked={dataCollection}
+              onCheckedChange={(val) => setDataCollection(val)}
+              data-testid="switch-data-collection"
+            />
+          ),
         },
         {
           label: "Shared Learning",
           description: "Share insights with teachers (if student)",
-          component: <Switch defaultChecked data-testid="switch-shared-learning" />,
+          component: (
+            <Switch
+              checked={sharedLearning}
+              onCheckedChange={(val) => setSharedLearning(val)}
+              data-testid="switch-shared-learning"
+            />
+          ),
         },
       ],
     },
@@ -241,10 +274,30 @@ export default function SettingsPanel() {
             <CardTitle className="text-red-500">Danger Zone</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button variant="destructive" className="hover-elevate" data-testid="button-reset-account">
+            <Button
+              variant="destructive"
+              className="hover-elevate"
+              onClick={() => {
+                if (confirm("Reset all settings? This cannot be undone.")) {
+                  localStorage.clear();
+                  toast({ title: "Settings reset", description: "All settings have been cleared" });
+                  window.location.reload();
+                }
+              }}
+              data-testid="button-reset-account"
+            >
               Reset Account
             </Button>
-            <Button variant="destructive" className="hover-elevate" data-testid="button-delete-account">
+            <Button
+              variant="destructive"
+              className="hover-elevate"
+              onClick={() => {
+                if (confirm("Delete your account permanently? This cannot be undone.")) {
+                  toast({ title: "Account deletion requested", description: "Please contact support to complete deletion" });
+                }
+              }}
+              data-testid="button-delete-account"
+            >
               Delete Account Permanently
             </Button>
           </CardContent>

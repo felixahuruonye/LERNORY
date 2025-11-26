@@ -157,6 +157,34 @@ export default function Chat() {
     setSelectedChatsForDelete(newSelected);
   };
 
+  // Detect if user is asking to open a feature
+  const detectFeatureOpen = (text: string): string | null => {
+    const features: { [key: string]: string } = {
+      "cbt mode": "/cbt-mode",
+      "cbt": "/cbt-mode",
+      "exam": "/cbt-mode",
+      "mock exam": "/cbt-mode",
+      "study plan": "/study-plans",
+      "study plans": "/study-plans",
+      "dashboard": "/dashboard",
+      "8d dashboard": "/dashboard",
+      "gamification": "/gamification",
+      "memory": "/memory",
+      "learning memory": "/memory",
+      "settings": "/settings",
+      "live ai": "/live-ai",
+      "voice": "/live-ai",
+    };
+
+    const lowerText = text.toLowerCase();
+    for (const [keyword, route] of Object.entries(features)) {
+      if (lowerText.includes("open") && lowerText.includes(keyword) || lowerText.includes("show") && lowerText.includes(keyword)) {
+        return route;
+      }
+    }
+    return null;
+  };
+
   // Detect if user is asking for internet search
   const detectSearchQuery = (text: string): string | null => {
     const searchKeywords = [
@@ -207,6 +235,13 @@ export default function Chat() {
   // Send message
   const handleSendMessage = async () => {
     if (!message.trim() || !currentSessionId || isLoading) return;
+
+    // Check if user is asking to open a feature
+    const featureRoute = detectFeatureOpen(message);
+    if (featureRoute) {
+      window.location.href = featureRoute;
+      return;
+    }
 
     // Check if user is asking for internet search
     const searchQuery = detectSearchQuery(message);

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "light" | "dark";
+type Theme = "light" | "dark" | "neon";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -26,9 +26,14 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove("light", "dark");
+    root.classList.remove("light", "dark", "neon");
     root.classList.add(theme);
     localStorage.setItem("theme", theme);
+    if (theme === "neon") {
+      root.style.setProperty("--neon-glow", "1");
+    } else {
+      root.style.removeProperty("--neon-glow");
+    }
   }, [theme]);
 
   return (
