@@ -504,7 +504,7 @@ export default function LiveSession() {
     });
   };
 
-  const addManualTranscript = () => {
+  const addManualTranscript = async () => {
     if (!manualTranscriptInput.trim()) {
       toast({
         title: "Empty text",
@@ -514,37 +514,66 @@ export default function LiveSession() {
       return;
     }
 
-    // Update the last recording with manual transcript
-    setRecordings((prev) => {
-      if (prev.length === 0) return prev;
-      
-      const updated = [...prev];
-      updated[0] = {
-        ...updated[0],
-        transcript: [
-          ...updated[0].transcript,
-          {
-            speaker: "Manual Entry",
-            text: manualTranscriptInput,
-            timestamp: Date.now(),
-          },
-        ],
-      };
-      return updated;
-    });
-
-    setManualTranscriptInput("");
-    setShowManualTranscriptModal(false);
-    setTranscript((prev) => [...prev, {
-      speaker: "Manual Entry",
-      text: manualTranscriptInput,
-      timestamp: Date.now(),
-    }]);
-
+    setIsProcessing(true);
     toast({
-      title: "Text added",
-      description: "Manual transcript has been added to your recording",
+      title: "Generating lesson",
+      description: "Gemini AI is processing your text and creating a lesson...",
     });
+
+    try {
+      // Use Gemini to generate lesson from manual text
+      const response = await apiRequest("POST", "/api/generate-lesson-from-text", {
+        text: manualTranscriptInput,
+        recordingId: recordings.length > 0 ? recordings[0].id : null,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate lesson");
+      }
+
+      const lesson = await response.json();
+
+      // Update the last recording with manual transcript
+      setRecordings((prev) => {
+        if (prev.length === 0) return prev;
+        
+        const updated = [...prev];
+        updated[0] = {
+          ...updated[0],
+          transcript: [
+            ...updated[0].transcript,
+            {
+              speaker: "Manual Entry",
+              text: manualTranscriptInput,
+              timestamp: Date.now(),
+            },
+          ],
+        };
+        return updated;
+      });
+
+      setManualTranscriptInput("");
+      setShowManualTranscriptModal(false);
+      setTranscript((prev) => [...prev, {
+        speaker: "Manual Entry",
+        text: manualTranscriptInput,
+        timestamp: Date.now(),
+      }]);
+
+      toast({
+        title: "Lesson created!",
+        description: "Your text has been converted into a structured lesson and saved",
+      });
+    } catch (error) {
+      console.error("Error generating lesson from text:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate lesson from text",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const playHistoryRecording = (recording: Recording) => {

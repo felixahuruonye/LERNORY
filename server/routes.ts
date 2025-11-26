@@ -22,7 +22,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1187,6 +1187,36 @@ If they ask about similar topics or reference past conversations, remind them wh
       res.json(lesson);
     } catch (error) {
       console.error("Error generating lesson:", error);
+      res.status(500).json({ message: "Failed to generate lesson" });
+    }
+  });
+
+  // Generate lesson from text using Gemini (for manual text entries)
+  app.post('/api/generate-lesson-from-text', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { text, recordingId } = req.body;
+      
+      if (!text?.trim()) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+
+      console.log("📚 Generating lesson from manual text with Gemini...");
+      const geminiData = await generateLessonFromTextWithGemini(text);
+
+      const lesson = await storage.createGeneratedLesson({
+        userId,
+        recordingId: recordingId || null,
+        title: geminiData.title,
+        objectives: geminiData.objectives,
+        keyPoints: geminiData.keyPoints,
+        summary: geminiData.summary,
+      });
+
+      console.log("✅ Lesson created and saved:", lesson.id);
+      res.json(lesson);
+    } catch (error) {
+      console.error("Error generating lesson from text:", error);
       res.status(500).json({ message: "Failed to generate lesson" });
     }
   });
