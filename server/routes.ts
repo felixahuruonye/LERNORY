@@ -1379,8 +1379,7 @@ KEY_WORDS: [keywords separated by commas]`,
       const stored = await storage.createGeneratedImage({
         userId,
         prompt,
-        imageUrl: image.imageUrl,
-        context: 'custom',
+        imageUrl: image.url,
         relatedTopic
       });
 
@@ -1498,8 +1497,8 @@ KEY_WORDS: [keywords separated by commas]`,
         topicExplanations: explanations.map(e => ({
           subject: e.subject,
           topic: e.topic,
-          explanation: e.simpleExplanation,
-          generatedAt: e.generatedAt
+          explanation: e.explanation,
+          generatedAt: e.createdAt
         }))
       };
 
@@ -1590,13 +1589,9 @@ KEY_WORDS: [keywords separated by commas]`,
   app.post('/api/live-ai/voice-start', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
-      const { title, mode, language } = req.body;
 
       const conversation = await storage.createVoiceConversation({
         userId,
-        title: title || "Voice Conversation",
-        mode: mode || "conversational",
-        language: language || "en",
       });
 
       res.status(201).json(conversation);
@@ -1636,17 +1631,18 @@ KEY_WORDS: [keywords separated by commas]`,
       (async () => {
         try {
           console.log(`🔍 Starting Gemini vision analysis for: ${fileName}`);
-          const { extractedText, analysis } = await analyzeFileWithGeminiVision(
+          const result = await analyzeFileWithGeminiVision(
             req.file.buffer,
             fileType,
             fileName
           );
+          const extractedText = result.extractedText;
 
           // Update document with extracted content
           console.log(`✅ Updating document with extracted content (${extractedText.length} chars)`);
           await storage.updateDocumentUpload(doc.id, {
             extractedText,
-            aiAnalysis: analysis,
+            aiAnalysis: result,
             isProcessing: false,
           });
 

@@ -204,7 +204,7 @@ Analyze the request and provide ONLY a raw JSON response with NO markdown, NO co
       contents: prompt,
     });
 
-    const responseText = (response.text || "").trim();
+    let responseText = (response.text || "").trim();
     if (!responseText) throw new Error("Empty response from Gemini");
 
     console.log("📝 Raw Gemini response (first 300 chars):", responseText.substring(0, 300));
