@@ -23,8 +23,60 @@ interface WebSearchResponse {
   summary: string;
 }
 
-// Grade answers with Gemini AI - Provides AI-powered analysis and explanations
-export async function gradeAnswersWithGemini(
+// Generate exam questions with LEARNORY (Gemini AI) - 50 questions per subject
+export async function generateQuestionsWithLEARNORY(
+  examType: string,
+  subject: string,
+  count: number = 50
+): Promise<
+  Array<{ id: string; question: string; options: string[]; correct: string; explanation: string }>
+> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY not configured");
+    }
+
+    console.log(`📚 LEARNORY generating ${count} ${subject} questions for ${examType}...`);
+
+    const prompt = `You are an expert exam question generator for ${examType} exams. Generate exactly ${count} high-quality multiple-choice questions for ${subject}.
+
+Return ONLY valid JSON array (no other text):
+[
+  {"id": "1", "question": "Question text here?", "options": ["Option A", "Option B", "Option C", "Option D"], "correct": "A", "explanation": "Detailed explanation of why A is correct..."},
+  {"id": "2", "question": "Another question?", "options": ["A", "B", "C", "D"], "correct": "B", "explanation": "Explanation..."}
+]
+
+Requirements:
+- Each question must have exactly 4 options (A, B, C, D)
+- Mark correct answer as single letter (A, B, C, or D)
+- Include detailed explanations
+- Vary difficulty levels
+- Cover key topics in ${subject}
+- Make questions educational and realistic for ${examType}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const responseText = response.text;
+    if (!responseText) throw new Error("Empty response from LEARNORY");
+
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error("Could not extract questions from LEARNORY");
+
+    const questionsData = JSON.parse(jsonMatch[0]);
+    console.log(`✅ LEARNORY generated ${questionsData.length} questions for ${subject}`);
+
+    return questionsData;
+  } catch (error) {
+    console.error("LEARNORY question generation error:", error);
+    throw error;
+  }
+}
+
+// Grade answers with LEARNORY (Gemini AI) - Provides AI-powered analysis and explanations
+export async function gradeAnswersWithLEARNORY(
   questions: Array<{ id: string; question: string; options: string[]; correct: string; explanation?: string }>,
   answers: Record<string, string>
 ): Promise<{
@@ -53,7 +105,7 @@ export async function gradeAnswersWithGemini(
       .map((q) => JSON.stringify(q))
       .join('\n\n');
 
-    const prompt = `You are an expert educational AI tutor. Grade these exam answers and provide detailed feedback.
+    const prompt = `You are LEARNORY - an expert educational AI tutor. Grade these exam answers and provide detailed, personalized feedback.
 
 QUESTIONS AND ANSWERS:
 ${questionsData}
@@ -65,7 +117,7 @@ Analyze the answers and return ONLY valid JSON (no other text):
     {"questionId": "1", "isCorrect": true, "explanation": "Well done...", "keyLearning": "Key insight..."},
     {"questionId": "2", "isCorrect": false, "explanation": "The correct answer is...", "keyLearning": "Important concept..."}
   ],
-  "summary": "Overall performance summary with personalized insights",
+  "summary": "Overall performance summary with personalized insights from LEARNORY",
   "strongTopics": ["Topic 1", "Topic 2"],
   "weakTopics": ["Topic 3"],
   "recommendations": ["Study recommendation 1", "Study recommendation 2", "Study recommendation 3"]
@@ -80,14 +132,14 @@ Analyze the answers and return ONLY valid JSON (no other text):
     if (!responseText) throw new Error("Empty grading response");
 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Could not extract JSON from grading response");
+    if (!jsonMatch) throw new Error("Could not extract JSON from LEARNORY grading");
 
     const gradingData = JSON.parse(jsonMatch[0]);
-    console.log(`✅ Grading complete: ${gradingData.score}%`);
+    console.log(`✅ LEARNORY grading complete: ${gradingData.score}%`);
 
     return gradingData;
   } catch (error) {
-    console.error("Grading error:", error);
+    console.error("LEARNORY grading error:", error);
     throw error;
   }
 }
