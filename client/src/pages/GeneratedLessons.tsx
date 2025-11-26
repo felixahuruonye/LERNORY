@@ -54,31 +54,44 @@ export default function GeneratedLessons() {
     }
   };
 
-  const handleReadAudio = async (lesson: GeneratedLesson) => {
+  const handleReadAudio = (lesson: GeneratedLesson) => {
+    if (!('speechSynthesis' in window)) {
+      toast({
+        title: "Not supported",
+        description: "Text-to-speech is not supported on this device",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // If already reading, stop it
+    if (isReadingAudio) {
+      window.speechSynthesis.cancel();
+      setIsReadingAudio(false);
+      return;
+    }
+
     try {
-      setIsReadingAudio(true);
       const textToRead = lesson.originalText || lesson.summary;
-      
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(textToRead);
-        utterance.rate = 1;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-        window.speechSynthesis.speak(utterance);
-      } else {
-        toast({
-          title: "Not supported",
-          description: "Text-to-speech is not supported on this device",
-          variant: "destructive",
-        });
-      }
+      const utterance = new SpeechSynthesisUtterance(textToRead);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      // Set state to reading when speech starts
+      utterance.onstart = () => setIsReadingAudio(true);
+
+      // Reset state when speech ends or is interrupted
+      utterance.onend = () => setIsReadingAudio(false);
+      utterance.onerror = () => setIsReadingAudio(false);
+
+      window.speechSynthesis.speak(utterance);
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to read audio",
         variant: "destructive",
       });
-    } finally {
       setIsReadingAudio(false);
     }
   };
@@ -332,9 +345,8 @@ export default function GeneratedLessons() {
                   <Button
                     onClick={() => handleReadAudio(lesson)}
                     size="sm"
-                    variant="outline"
+                    variant={isReadingAudio && selectedLesson?.id === lesson.id ? "default" : "outline"}
                     data-testid={`button-listen-${lesson.id}`}
-                    disabled={isReadingAudio}
                   >
                     <Volume2 className="h-4 w-4" />
                   </Button>
@@ -444,11 +456,11 @@ export default function GeneratedLessons() {
               <div className="flex gap-2 flex-wrap pt-4 border-t">
                 <Button
                   onClick={() => handleReadAudio(selectedLesson)}
-                  disabled={isReadingAudio}
+                  variant={isReadingAudio ? "default" : "outline"}
                   data-testid="button-read-audio"
                 >
                   <Volume2 className="h-4 w-4 mr-2" />
-                  {isReadingAudio ? "Reading..." : "Read Aloud"}
+                  {isReadingAudio ? "Stop Reading" : "Read Aloud"}
                 </Button>
                 <Button
                   onClick={() => handleAIFix(selectedLesson)}
