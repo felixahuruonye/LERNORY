@@ -122,14 +122,18 @@ export default function LiveSession() {
     const loadRecordings = async () => {
       try {
         const res = await apiRequest("GET", "/api/recordings");
+        if (!res.ok) {
+          console.error("Failed to fetch recordings:", res.status);
+          return;
+        }
         const dbRecordings = await res.json();
         // Convert database format to client format
-        const formattedRecordings: Recording[] = dbRecordings.map((rec: any) => ({
+        const formattedRecordings: Recording[] = (dbRecordings || []).map((rec: any) => ({
           id: rec.id,
           title: rec.title,
-          transcript: rec.transcript || [],
+          transcript: Array.isArray(rec.transcript) ? rec.transcript : [],
           audioBlob: new Blob(),
-          duration: rec.duration,
+          duration: rec.duration || 0,
           createdAt: new Date(rec.createdAt).getTime(),
         }));
         setRecordings(formattedRecordings);
@@ -291,6 +295,14 @@ export default function LiveSession() {
       
       // Convert audio to base64 for storage
       const reader = new FileReader();
+      reader.onerror = () => {
+        console.error("Error reading audio file");
+        toast({
+          title: "Error",
+          description: "Failed to process recording audio",
+          variant: "destructive",
+        });
+      };
       reader.onload = async () => {
         const audioData = reader.result as string;
         const newRecording: Recording = {
@@ -304,17 +316,35 @@ export default function LiveSession() {
         
         // Save to database
         try {
-          await apiRequest("POST", "/api/recordings", {
+          const res = await apiRequest("POST", "/api/recordings", {
             title: newRecording.title,
             audioData,
             transcript: newRecording.transcript,
             duration: newRecording.duration,
             sessionId,
           });
+          
+          if (!res.ok) {
+            const errorData = await res.json();
+            console.error("API Error saving recording:", res.status, errorData);
+            toast({
+              title: "Warning",
+              description: "Recording saved locally but failed to sync to database",
+              variant: "destructive",
+            });
+          } else {
+            console.log("Recording saved successfully to database");
+          }
         } catch (error) {
           console.error("Error saving recording to database:", error);
+          toast({
+            title: "Warning",
+            description: "Recording saved locally but failed to sync",
+            variant: "destructive",
+          });
         }
         
+        // Always update local state even if DB save fails
         setRecordings((prev) => [newRecording, ...prev]);
       };
       reader.readAsDataURL(audioBlob);
