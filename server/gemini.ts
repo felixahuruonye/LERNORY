@@ -287,32 +287,37 @@ export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGe
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log("🎨 LEARNORY: Generating image with Gemini for:", prompt);
+    console.log("🎨 LEARNORY: Generating image with Stability AI for:", prompt);
     
     // Use Gemini to enhance and refine the image prompt
     const enhancedPromptResponse = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `You are an expert image prompt engineer. Take this simple image description and expand it into a detailed, vivid, and specific image prompt that would result in a high-quality AI-generated image.
+      contents: `You are an expert image prompt engineer. Take this simple image description and expand it into a detailed, vivid, and specific image prompt for Stability AI.
 
 Original prompt: "${prompt}"
 
-Provide ONLY the enhanced prompt without any additional text or explanation. Make it detailed, specific, and creative.`,
+Provide ONLY the enhanced prompt without any additional text or explanation.`,
     });
 
     const enhancedPrompt = enhancedPromptResponse.text?.trim() || prompt;
     console.log("✅ Enhanced prompt:", enhancedPrompt);
 
-    // Generate a high-quality visual using multiple placeholder services
-    const colors = generateColorPaletteFromPrompt(enhancedPrompt);
-    const bgColor = colors[0].replace('#', '');
-    const accentColor = colors[1].replace('#', '');
+    // Try to generate with Stability AI, fallback to placeholder if API key missing
+    let imageUrl = "";
     
-    // Create a visually appealing placeholder image
-    // Using dummyimage.com for better reliability
-    const shortPrompt = prompt.substring(0, 25).replace(/\s+/g, ' ');
-    const imageUrl = `https://dummyimage.com/1024x1024/${bgColor}/${accentColor}&text=${encodeURIComponent(shortPrompt)}`;
+    if (process.env.STABILITY_API_KEY) {
+      try {
+        imageUrl = await generateImageWithStabilityAI(enhancedPrompt);
+        console.log("✅ Image generated with Stability AI");
+      } catch (stabilityError) {
+        console.warn("Stability AI generation failed, using placeholder:", stabilityError);
+        imageUrl = generatePlaceholderImage(prompt);
+      }
+    } else {
+      console.warn("STABILITY_API_KEY not set, using placeholder image");
+      imageUrl = generatePlaceholderImage(prompt);
+    }
 
-    console.log("✅ Image generated successfully:", imageUrl);
     return {
       url: imageUrl,
       prompt: enhancedPrompt
@@ -322,6 +327,56 @@ Provide ONLY the enhanced prompt without any additional text or explanation. Mak
     console.error("Error generating image with Gemini:", errorMsg);
     throw error;
   }
+}
+
+async function generateImageWithStabilityAI(prompt: string): Promise<string> {
+  const apiKey = process.env.STABILITY_API_KEY;
+  if (!apiKey) throw new Error("STABILITY_API_KEY not configured");
+
+  try {
+    const response = await fetch("https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        text_prompts: [{ text: prompt, weight: 1 }],
+        cfg_scale: 7,
+        height: 1024,
+        width: 1024,
+        samples: 1,
+        steps: 30,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Stability AI error: ${response.status} - ${error}`);
+    }
+
+    const data = (await response.json()) as any;
+    const base64Image = data.artifacts?.[0]?.base64;
+    
+    if (!base64Image) throw new Error("No image data in response");
+
+    const imageUrl = `data:image/png;base64,${base64Image}`;
+    console.log("✅ Stability AI image generated successfully");
+    return imageUrl;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Stability AI error:", errorMsg);
+    throw error;
+  }
+}
+
+function generatePlaceholderImage(prompt: string): string {
+  const colors = generateColorPaletteFromPrompt(prompt);
+  const bgColor = colors[0].replace('#', '');
+  const accentColor = colors[1].replace('#', '');
+  const shortPrompt = prompt.substring(0, 25).replace(/\s+/g, '+');
+  return `https://via.placeholder.com/1024x1024/${bgColor}/${accentColor}.png?text=${encodeURIComponent(shortPrompt)}`;
 }
 
 function generateColorPaletteFromPrompt(prompt: string): [string, string, string] {
