@@ -22,7 +22,7 @@ const SUBJECTS: Record<string, string[]> = {
 export default function CBTModeEnhanced() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [view, setView] = useState<'dashboard' | 'config' | 'exam' | 'results' | 'history' | 'analytics'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'config' | 'loading' | 'exam' | 'results' | 'history' | 'analytics'>('dashboard');
   
   // Exam configuration
   const [selectedExamType, setSelectedExamType] = useState<string>('');
@@ -37,6 +37,8 @@ export default function CBTModeEnhanced() {
   const [examResult, setExamResult] = useState<any>(null);
   const [timeRemaining, setTimeRemaining] = useState(30 * 60);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
 
   // Fetch exam history
   const { data: examHistory = [] } = useQuery<any[]>({
@@ -118,7 +120,10 @@ export default function CBTModeEnhanced() {
       return;
     }
 
-    setIsLoadingQuestions(true);
+    setView('loading');
+    setLoadingStartTime(Date.now());
+    setLoadingProgress(0);
+
     try {
       const questions: Record<string, any[]> = {};
       for (const subject of selectedSubjects) {
@@ -128,23 +133,43 @@ export default function CBTModeEnhanced() {
           count: 50,
         });
         const data = await res.json();
-        questions[subject] = data.questions;
+        questions[subject] = data.questions || [];
+        setLoadingProgress((prev) => Math.min(prev + Math.floor(100 / selectedSubjects.length), 90));
       }
+
       setQuestionsBySubject(questions);
       setAnswers({});
       setCurrentQuestionIndex(0);
       setCurrentSubjectIndex(0);
       setTimeRemaining(30 * 60);
       setIsExamActive(true);
-      setView('exam');
-      toast({ description: 'Exam started with LEARNORY. Press A/B/C/D to answer.' });
+      setLoadingProgress(100);
+      
+      setTimeout(() => {
+        setView('exam');
+        toast({ title: '✅ Exam Started!', description: 'Press A/B/C/D to answer. ESC to submit.' });
+      }, 500);
     } catch (error) {
+      setView('config');
       toast({ description: 'Failed to generate exam questions. Try again.' });
       console.error('Question generation error:', error);
-    } finally {
-      setIsLoadingQuestions(false);
     }
   };
+
+  // Loading timer effect
+  useEffect(() => {
+    if (view !== 'loading' || !loadingStartTime) return;
+    
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - loadingStartTime;
+      // Estimate: ~5-30 seconds to generate 50-250 questions
+      const estimatedTotal = selectedSubjects.length * 5000; // 5 sec per subject estimate
+      const progress = Math.min(Math.floor((elapsed / estimatedTotal) * 100), 95);
+      setLoadingProgress(progress);
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [view, loadingStartTime, selectedSubjects.length]);
 
   const handleSubmitExam = async () => {
     if (Object.keys(answers).length === 0) {
