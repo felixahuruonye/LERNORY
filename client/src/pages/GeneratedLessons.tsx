@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ChevronLeft, Trash2, BookOpen, Eye, Volume2, Wand2, Download, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import jsPDF from "jspdf";
 
 interface GeneratedLesson {
@@ -23,10 +23,10 @@ export default function GeneratedLessons() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedLesson, setSelectedLesson] = useState<GeneratedLesson | null>(null);
-  const [showViewText, setShowViewText] = useState(false);
-  const [isReadingAudio, setIsReadingAudio] = useState(false);
+  const [playingLessonId, setPlayingLessonId] = useState<string | null>(null);
   const [fixedText, setFixedText] = useState<{ correctedText: string; explanation: string } | null>(null);
   const [isFixing, setIsFixing] = useState(false);
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Fetch all generated lessons
   const { data: lessons = [], isLoading, refetch } = useQuery({
@@ -64,11 +64,17 @@ export default function GeneratedLessons() {
       return;
     }
 
-    // If already reading, stop it
-    if (isReadingAudio) {
+    // If this lesson is already playing, stop it
+    if (playingLessonId === lesson.id) {
       window.speechSynthesis.cancel();
-      setIsReadingAudio(false);
+      setPlayingLessonId(null);
+      currentUtteranceRef.current = null;
       return;
+    }
+
+    // Stop any currently playing audio
+    if (playingLessonId) {
+      window.speechSynthesis.cancel();
     }
 
     try {
@@ -78,13 +84,21 @@ export default function GeneratedLessons() {
       utterance.pitch = 1;
       utterance.volume = 1;
 
-      // Set state to reading when speech starts
-      utterance.onstart = () => setIsReadingAudio(true);
+      // Update state when speech starts
+      utterance.onstart = () => setPlayingLessonId(lesson.id);
 
       // Reset state when speech ends or is interrupted
-      utterance.onend = () => setIsReadingAudio(false);
-      utterance.onerror = () => setIsReadingAudio(false);
+      utterance.onend = () => {
+        setPlayingLessonId(null);
+        currentUtteranceRef.current = null;
+      };
+      
+      utterance.onerror = () => {
+        setPlayingLessonId(null);
+        currentUtteranceRef.current = null;
+      };
 
+      currentUtteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     } catch (error) {
       toast({
@@ -92,7 +106,8 @@ export default function GeneratedLessons() {
         description: "Failed to read audio",
         variant: "destructive",
       });
-      setIsReadingAudio(false);
+      setPlayingLessonId(null);
+      currentUtteranceRef.current = null;
     }
   };
 
@@ -345,7 +360,7 @@ export default function GeneratedLessons() {
                   <Button
                     onClick={() => handleReadAudio(lesson)}
                     size="sm"
-                    variant={isReadingAudio && selectedLesson?.id === lesson.id ? "default" : "outline"}
+                    variant={playingLessonId === lesson.id ? "default" : "outline"}
                     data-testid={`button-listen-${lesson.id}`}
                   >
                     <Volume2 className="h-4 w-4" />
@@ -456,11 +471,11 @@ export default function GeneratedLessons() {
               <div className="flex gap-2 flex-wrap pt-4 border-t">
                 <Button
                   onClick={() => handleReadAudio(selectedLesson)}
-                  variant={isReadingAudio ? "default" : "outline"}
+                  variant={playingLessonId === selectedLesson.id ? "default" : "outline"}
                   data-testid="button-read-audio"
                 >
                   <Volume2 className="h-4 w-4 mr-2" />
-                  {isReadingAudio ? "Stop Reading" : "Read Aloud"}
+                  {playingLessonId === selectedLesson.id ? "Stop Reading" : "Read Aloud"}
                 </Button>
                 <Button
                   onClick={() => handleAIFix(selectedLesson)}
