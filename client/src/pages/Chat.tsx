@@ -21,6 +21,8 @@ import {
   Zap,
   CheckSquare,
   Square,
+  Search,
+  ExternalLink,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +42,8 @@ export default function Chat() {
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [historyTab, setHistoryTab] = useState("all"); // "all" or "manage"
   const [selectedChatsForDelete, setSelectedChatsForDelete] = useState<Set<string>>(new Set());
+  const [searchResults, setSearchResults] = useState<any>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load chat sessions
@@ -153,9 +157,64 @@ export default function Chat() {
     setSelectedChatsForDelete(newSelected);
   };
 
+  // Detect if user is asking for internet search
+  const detectSearchQuery = (text: string): string | null => {
+    const searchKeywords = [
+      "search for",
+      "find",
+      "look up",
+      "what is",
+      "who is",
+      "latest",
+      "current",
+      "today",
+      "news about",
+      "recent",
+      "internet search",
+      "google",
+      "web search",
+    ];
+
+    const lowerText = text.toLowerCase();
+    for (const keyword of searchKeywords) {
+      if (lowerText.includes(keyword)) {
+        return text.replace(new RegExp(keyword, "gi"), "").trim();
+      }
+    }
+    return null;
+  };
+
+  // Perform internet search
+  const performSearch = async (query: string) => {
+    try {
+      setIsSearching(true);
+      setSearchResults(null);
+      const res = await apiRequest("POST", "/api/chat/search", { query });
+      const data = await res.json();
+      setSearchResults(data);
+      toast({ title: "Search complete", description: `Found ${data.results?.length || 0} results` });
+    } catch (error) {
+      toast({
+        title: "Search failed",
+        description: "Could not search the internet",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   // Send message
   const handleSendMessage = async () => {
     if (!message.trim() || !currentSessionId || isLoading) return;
+
+    // Check if user is asking for internet search
+    const searchQuery = detectSearchQuery(message);
+    if (searchQuery) {
+      await performSearch(searchQuery);
+      setMessage("");
+      return;
+    }
 
     try {
       setIsLoading(true);
@@ -387,15 +446,78 @@ export default function Chat() {
 
         {/* Messages Container */}
         <div className="flex-1 overflow-y-auto p-4">
-          {messages.length === 0 ? (
+          {/* Search Results Display */}
+          {searchResults && (
+            <div className="max-w-4xl mx-auto mb-6">
+              <div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 border border-blue-700/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Search className="w-5 h-5 text-blue-400" />
+                  <h3 className="text-lg font-semibold text-white">Search Results</h3>
+                  <span className="ml-auto text-sm text-blue-300">{searchResults.results?.length || 0} results</span>
+                </div>
+
+                {searchResults.summary && (
+                  <p className="text-sm text-slate-300 mb-4 p-3 bg-slate-800/50 rounded">
+                    <strong>Summary:</strong> {searchResults.summary}
+                  </p>
+                )}
+
+                {searchResults.results && searchResults.results.length > 0 ? (
+                  <div className="space-y-3">
+                    {searchResults.results.map((result: any, idx: number) => (
+                      <a
+                        key={idx}
+                        href={result.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-3 bg-slate-800/50 hover:bg-slate-700/50 rounded border border-slate-700 transition-colors group"
+                        data-testid={`search-result-${idx}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <ExternalLink className="w-4 h-4 text-blue-400 flex-shrink-0 mt-1" />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-white group-hover:text-blue-300 truncate">
+                              {result.title}
+                            </h4>
+                            <p className="text-xs text-blue-400 mb-1">{result.source}</p>
+                            <p className="text-sm text-slate-300 line-clamp-2">
+                              {result.snippet}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-2 truncate">
+                              {result.link}
+                            </p>
+                          </div>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-sm">No results found</p>
+                )}
+
+                <button
+                  onClick={() => setSearchResults(null)}
+                  className="mt-4 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                  data-testid="button-close-search"
+                >
+                  Clear search
+                </button>
+              </div>
+            </div>
+          )}
+
+          {messages.length === 0 && !searchResults ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Bot className="w-16 h-16 text-muted-foreground/30 mb-4" />
               <h2 className="text-2xl font-semibold mb-2">Start a conversation</h2>
-              <p className="text-muted-foreground max-w-md">
+              <p className="text-muted-foreground max-w-md mb-4">
                 Ask me anything about your studies. I can help with explanations, problem-solving, exam prep, and more.
               </p>
+              <p className="text-sm text-muted-foreground max-w-md">
+                💡 Try saying "search for..." to find information on the internet!
+              </p>
             </div>
-          ) : (
+          ) : searchResults ? null : (
             <div className="space-y-4 max-w-4xl mx-auto">
               {messages.map((msg) => (
                 <div
@@ -482,12 +604,12 @@ export default function Chat() {
             />
             <Button
               onClick={handleSendMessage}
-              disabled={!message.trim() || isLoading}
+              disabled={!message.trim() || isLoading || isSearching}
               size="icon"
               className="self-end"
               data-testid="button-send"
             >
-              {isLoading ? (
+              {isLoading || isSearching ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <Send className="w-5 h-5" />
