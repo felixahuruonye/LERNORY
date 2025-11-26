@@ -22,7 +22,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini, fixTextWithLEARNORY } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini, fixTextWithLEARNORY, gradeAnswersWithGemini } from "./gemini";
 import { nanoid } from "nanoid";
 import { learnFromUserMessage, mergePreferences } from "./memoryLearner";
 
@@ -2274,6 +2274,135 @@ KEY_WORDS: [keywords separated by commas]`,
     } catch (error: any) {
       console.error("Error deleting lesson:", error);
       res.status(500).json({ message: error?.message || 'Failed to delete lesson' });
+    }
+  });
+
+  // CBT Grading with Gemini - Feature 1: AI-powered grading and explanations
+  app.post('/api/cbt/grade', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { questions, answers, sessionId } = req.body;
+      const userId = req.user.claims.sub;
+
+      if (!questions || !answers) {
+        return res.status(400).json({ message: 'Questions and answers required' });
+      }
+
+      // Grade with Gemini AI
+      const gradingResult = await gradeAnswersWithGemini(questions, answers);
+
+      // Save exam history - Feature 2: Exam history database
+      const examHistory = await storage.createCbtExamHistory({
+        userId,
+        sessionId: sessionId || 'temp',
+        examType: 'custom',
+        subjects: [],
+        score: gradingResult.score,
+        totalQuestions: questions.length,
+        correctAnswers: Math.round((gradingResult.score / 100) * questions.length),
+        timeSpent: 0,
+        summary: gradingResult.summary,
+        aiAnalysis: gradingResult,
+      });
+
+      // Create notification - Feature 6: Notifications
+      await storage.createNotification({
+        userId,
+        type: 'exam',
+        title: `Exam Complete: ${gradingResult.score}%`,
+        message: gradingResult.summary,
+        icon: 'CheckCircle2',
+      });
+
+      // Update analytics - Feature 5: Advanced analytics
+      for (const topic of gradingResult.strongTopics) {
+        await storage.updateCbtAnalytics(userId, topic, true);
+      }
+      for (const topic of gradingResult.weakTopics) {
+        await storage.updateCbtAnalytics(userId, topic, false);
+      }
+
+      res.json({
+        gradingResult,
+        examHistory,
+        recommendations: gradingResult.recommendations,
+      });
+    } catch (error: any) {
+      console.error("Grading error:", error);
+      res.status(500).json({ message: error?.message || 'Grading failed' });
+    }
+  });
+
+  // Exam History - Feature 2: Retrieve past exam attempts
+  app.get('/api/cbt/history', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const history = await storage.getCbtExamHistoryByUser(userId);
+      res.json(history);
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || 'Failed to fetch history' });
+    }
+  });
+
+  // Analytics Dashboard - Feature 5: Performance tracking per topic
+  app.get('/api/cbt/analytics', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const analytics = await storage.getCbtAnalyticsByUser(userId);
+      res.json(analytics);
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || 'Failed to fetch analytics' });
+    }
+  });
+
+  // Admin Content Management - Feature 3: Upload and manage question banks
+  app.post('/api/admin/cbt/import-questions', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { examId, subject, questions } = req.body;
+
+      if (!examId || !subject || !Array.isArray(questions)) {
+        return res.status(400).json({ message: 'Invalid import data' });
+      }
+
+      const imported = [];
+      for (const q of questions) {
+        const question = await storage.createCbtQuestion({
+          examId,
+          subject,
+          questionNumber: q.number || 1,
+          questionText: q.question,
+          options: q.options || [],
+          correctAnswer: q.correct || 'A',
+          explanation: q.explanation || '',
+        });
+
+        // Add licensing metadata - Feature 4: Question licensing
+        if (q.source) {
+          await storage.createCbtQuestionLicensing({
+            questionId: question.id,
+            source: q.source, // 'licensed', 'public', 'simulated'
+            licenseId: q.licenseId,
+            licenseProvider: q.provider,
+            year: q.year,
+            copyright: q.copyright,
+          });
+        }
+
+        imported.push(question);
+      }
+
+      res.json({ message: `Imported ${imported.length} questions`, questions: imported });
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || 'Import failed' });
+    }
+  });
+
+  // Question Licensing Info - Feature 4: Retrieve licensing metadata
+  app.get('/api/cbt/licensing/:questionId', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const licensing = await storage.getCbtQuestionLicensing(req.params.questionId);
+      res.json(licensing);
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || 'Failed to fetch licensing info' });
     }
   });
 

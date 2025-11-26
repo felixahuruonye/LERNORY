@@ -608,3 +608,58 @@ export type CbtSession = typeof cbtSessions.$inferSelect;
 export const insertCbtAnswerSchema = createInsertSchema(cbtAnswers).omit({ id: true, createdAt: true });
 export type InsertCbtAnswer = z.infer<typeof insertCbtAnswerSchema>;
 export type CbtAnswer = typeof cbtAnswers.$inferSelect;
+
+// CBT Exam History - Track all exam attempts with analytics
+export const cbtExamHistory = pgTable("cbt_exam_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: varchar("session_id").notNull().references(() => cbtSessions.id, { onDelete: 'cascade' }),
+  examType: varchar("exam_type").notNull(),
+  subjects: text("subjects").array().notNull(),
+  score: decimal("score", { precision: 5, scale: 2 }).notNull(),
+  totalQuestions: integer("total_questions").notNull(),
+  correctAnswers: integer("correct_answers").notNull(),
+  timeSpent: integer("time_spent").notNull(),
+  summary: text("summary"),
+  aiAnalysis: jsonb("ai_analysis"), // Gemini-powered insights
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// CBT Analytics - Per-topic performance tracking
+export const cbtAnalytics = pgTable("cbt_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  subject: varchar("subject").notNull(),
+  topic: varchar("topic").notNull(),
+  attemptCount: integer("attempt_count").default(0),
+  correctCount: integer("correct_count").default(0),
+  averageScore: decimal("average_score", { precision: 5, scale: 2 }).default('0'),
+  strengthLevel: varchar("strength_level").default('beginner'), // beginner, intermediate, advanced
+  lastAttempt: timestamp("last_attempt"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// CBT Question Licensing - Track question sources and metadata
+export const cbtQuestionLicensing = pgTable("cbt_question_licensing", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  questionId: varchar("question_id").notNull().references(() => cbtQuestions.id, { onDelete: 'cascade' }),
+  source: varchar("source").notNull(), // 'licensed', 'public', 'simulated'
+  licenseId: varchar("license_id"),
+  licenseProvider: varchar("license_provider"), // WAEC, JAMB, Cambridge, etc
+  year: integer("year"),
+  copyright: varchar("copyright"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCbtExamHistorySchema = createInsertSchema(cbtExamHistory).omit({ id: true, createdAt: true });
+export type InsertCbtExamHistory = z.infer<typeof insertCbtExamHistorySchema>;
+export type CbtExamHistory = typeof cbtExamHistory.$inferSelect;
+
+export const insertCbtAnalyticsSchema = createInsertSchema(cbtAnalytics).omit({ id: true, updatedAt: true });
+export type InsertCbtAnalytics = z.infer<typeof insertCbtAnalyticsSchema>;
+export type CbtAnalytics = typeof cbtAnalytics.$inferSelect;
+
+export const insertCbtQuestionLicensingSchema = createInsertSchema(cbtQuestionLicensing).omit({ id: true, createdAt: true });
+export type InsertCbtQuestionLicensing = z.infer<typeof insertCbtQuestionLicensingSchema>;
+export type CbtQuestionLicensing = typeof cbtQuestionLicensing.$inferSelect;

@@ -32,6 +32,9 @@ import {
   cbtQuestions,
   cbtSessions,
   cbtAnswers,
+  cbtExamHistory,
+  cbtAnalytics,
+  cbtQuestionLicensing,
   recordings,
   generatedLessons,
   type User,
@@ -96,6 +99,12 @@ import {
   type InsertCbtSession,
   type CbtAnswer,
   type InsertCbtAnswer,
+  type CbtExamHistory,
+  type InsertCbtExamHistory,
+  type CbtAnalytics,
+  type InsertCbtAnalytics,
+  type CbtQuestionLicensing,
+  type InsertCbtQuestionLicensing,
   type Recording,
   type InsertRecording,
   type GeneratedLesson,
@@ -991,6 +1000,12 @@ class MemoryStorage implements IStorage {
   async updateCbtSession() { return undefined; }
   async getCbtAnswer() { return undefined; }
   async createCbtAnswer(a: any) { return a as CbtAnswer; }
+  async createCbtExamHistory(h: any) { return h as CbtExamHistory; }
+  async getCbtExamHistoryByUser() { return []; }
+  async getCbtAnalyticsByUser() { return []; }
+  async updateCbtAnalytics() { return undefined; }
+  async createCbtQuestionLicensing(l: any) { return l as CbtQuestionLicensing; }
+  async getCbtQuestionLicensing() { return undefined; }
   async getRecordingsByUser() { return []; }
   async createRecording(r: any) { return r as Recording; }
   async deleteRecording() { }

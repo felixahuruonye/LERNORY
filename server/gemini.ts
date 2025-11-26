@@ -23,6 +23,75 @@ interface WebSearchResponse {
   summary: string;
 }
 
+// Grade answers with Gemini AI - Provides AI-powered analysis and explanations
+export async function gradeAnswersWithGemini(
+  questions: Array<{ id: string; question: string; options: string[]; correct: string; explanation?: string }>,
+  answers: Record<string, string>
+): Promise<{
+  score: number;
+  detailedFeedback: Array<{ questionId: string; isCorrect: boolean; explanation: string; keyLearning: string }>;
+  summary: string;
+  strongTopics: string[];
+  weakTopics: string[];
+  recommendations: string[];
+}> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY not configured");
+    }
+
+    const questionsData = questions
+      .map((q, idx) => ({
+        number: idx + 1,
+        question: q.question,
+        options: q.options,
+        correct: q.correct,
+        userAnswer: answers[q.id] || 'Not answered',
+        isCorrect: answers[q.id] === q.correct,
+        explanation: q.explanation || '',
+      }))
+      .map((q) => JSON.stringify(q))
+      .join('\n\n');
+
+    const prompt = `You are an expert educational AI tutor. Grade these exam answers and provide detailed feedback.
+
+QUESTIONS AND ANSWERS:
+${questionsData}
+
+Analyze the answers and return ONLY valid JSON (no other text):
+{
+  "score": 75,
+  "detailedFeedback": [
+    {"questionId": "1", "isCorrect": true, "explanation": "Well done...", "keyLearning": "Key insight..."},
+    {"questionId": "2", "isCorrect": false, "explanation": "The correct answer is...", "keyLearning": "Important concept..."}
+  ],
+  "summary": "Overall performance summary with personalized insights",
+  "strongTopics": ["Topic 1", "Topic 2"],
+  "weakTopics": ["Topic 3"],
+  "recommendations": ["Study recommendation 1", "Study recommendation 2", "Study recommendation 3"]
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const responseText = response.text;
+    if (!responseText) throw new Error("Empty grading response");
+
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("Could not extract JSON from grading response");
+
+    const gradingData = JSON.parse(jsonMatch[0]);
+    console.log(`✅ Grading complete: ${gradingData.score}%`);
+
+    return gradingData;
+  } catch (error) {
+    console.error("Grading error:", error);
+    throw error;
+  }
+}
+
 // Internet search with Gemini (returns web search results with sources)
 export async function searchInternetWithGemini(query: string): Promise<WebSearchResponse> {
   try {
