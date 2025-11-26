@@ -548,7 +548,7 @@ export default function LiveSession() {
         const text = `[${timestamp}] ${segment.speaker}: ${segment.text}`;
         const lines = doc.splitTextToSize(text, 190);
 
-        lines.forEach((line) => {
+        lines.forEach((line: string) => {
           if (yPosition > 280) {
             doc.addPage();
             yPosition = 10;
@@ -740,7 +740,7 @@ export default function LiveSession() {
         const text = `[${timestamp}] ${segment.speaker}: ${segment.text}`;
         const lines = doc.splitTextToSize(text, 190);
 
-        lines.forEach((line) => {
+        lines.forEach((line: string) => {
           if (yPosition > 280) {
             doc.addPage();
             yPosition = 10;
