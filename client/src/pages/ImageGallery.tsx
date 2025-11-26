@@ -18,41 +18,17 @@ export default function ImageGallery() {
     queryKey: ["/api/generated-images"],
   });
 
-  const deleteImageMutation = useMutation({
-    mutationFn: async (imageId: string) => {
-      console.log("🗑️ Starting delete for image:", imageId);
-      try {
-        const response = await fetch(`/api/generated-images/${imageId}`, {
-          method: "DELETE",
-          credentials: "include",
-        });
-        
-        console.log("Delete response status:", response.status);
-        
-        if (!response.ok) {
-          const error = await response.text();
-          throw new Error(`Delete failed: ${response.status} - ${error}`);
-        }
-        
-        const data = await response.json();
-        console.log("✅ Delete successful:", data);
-        return data;
-      } catch (error) {
-        console.error("❌ Delete error:", error);
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      console.log("Invalidating query cache...");
+  const handleDeleteImage = async (imageId: string) => {
+    try {
+      const response = await apiRequest("DELETE", `/api/generated-images/${imageId}`);
+      await response.json();
       queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
       setSelectedImage(null);
-      toast({ title: "✅ Image deleted", description: "Image removed from gallery" });
-    },
-    onError: (error) => {
-      console.error("Delete mutation error:", error);
-      toast({ title: "❌ Error", description: `Failed to delete: ${error}`, variant: "destructive" });
-    },
-  });
+      toast({ title: "Image deleted", description: "Image removed from gallery" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete image", variant: "destructive" });
+    }
+  };
 
   const downloadImage = async (imageUrl: string, prompt: string) => {
     try {
@@ -174,8 +150,7 @@ export default function ImageGallery() {
                   </Button>
                   <Button
                     variant="destructive"
-                    onClick={() => deleteImageMutation.mutate(selectedImage.id)}
-                    disabled={deleteImageMutation.isPending}
+                    onClick={() => handleDeleteImage(selectedImage.id)}
                     className="hover-elevate active-elevate-2"
                     data-testid="button-delete-image"
                   >
@@ -209,9 +184,8 @@ export default function ImageGallery() {
                         size="icon"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteImageMutation.mutate(image.id);
+                          handleDeleteImage(image.id);
                         }}
-                        disabled={deleteImageMutation.isPending}
                         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity hover-elevate"
                         data-testid={`button-delete-${image.id}`}
                       >
@@ -233,7 +207,7 @@ export default function ImageGallery() {
                   variant="destructive"
                   onClick={() => {
                     if (confirm("Are you sure you want to delete all images?")) {
-                      images.forEach(img => deleteImageMutation.mutate(img.id));
+                      images.forEach(img => handleDeleteImage(img.id));
                     }
                   }}
                   className="hover-elevate active-elevate-2"
