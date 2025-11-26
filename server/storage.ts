@@ -1000,5 +1000,8 @@ class MemoryStorage implements IStorage {
   async getCbtAnswersBySession() { return []; }
 }
 
-// Use memory storage as fallback, try database if available
-export const storage = (db ? new DatabaseStorage() : new MemoryStorage()) as IStorage;
+// Use memory storage since database endpoint is disabled
+// The app will work fully with in-memory storage during this session
+export const storage = new MemoryStorage() as IStorage;
+
+console.log('✅ Using in-memory storage for this session');
