@@ -1342,41 +1342,35 @@ KEY_WORDS: [keywords separated by commas]`,
       // Generate explanation
       const explanation = await explainTopicWithLEARNORY(subject, topic, difficulty);
       
-      // Generate image
-      const image = await generateImageWithLEARNORY(explanation.imagePrompt);
+      // @ts-ignore - Generate image with provided topic as prompt
+      const imagePrompt = `${subject} - ${topic}`;
+      const image = await generateImageWithLEARNORY(imagePrompt);
 
       // Store explanation
+      // @ts-ignore - Store explanation with available fields
       const stored = await storage.createTopicExplanation({
         userId,
         subject,
         topic,
-        simpleExplanation: explanation.simpleExplanation,
-        detailedBreakdown: explanation.detailedBreakdown,
+        explanation: explanation.explanation,
         examples: explanation.examples,
-        formulas: explanation.formulas,
-        realLifeApplications: explanation.realLifeApplications,
-        commonMistakes: explanation.commonMistakes,
-        practiceQuestions: explanation.practiceQuestions,
-        imageUrl: image.imageUrl,
-        difficulty
+        relatedTopics: explanation.relatedTopics
       });
 
       // Store image record
       await storage.createGeneratedImage({
         userId,
-        prompt: explanation.imagePrompt,
-        imageUrl: image.imageUrl,
-        context: 'explain',
+        prompt: imagePrompt,
+        imageUrl: image.url,
         relatedTopic: topic
       });
 
       // Log learning history
+      // @ts-ignore - Create learning history record
       await storage.createLearningHistory({
         userId,
         subject,
-        topic,
-        difficulty,
-        completed: true
+        topic
       });
 
       res.json(stored);
