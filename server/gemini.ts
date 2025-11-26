@@ -204,8 +204,8 @@ Analyze the request and provide ONLY a raw JSON response with NO markdown, NO co
       contents: prompt,
     });
 
-    let responseText = response.text.trim();
-    if (!responseText) throw new Error("Empty response");
+    const responseText = (response.text || "").trim();
+    if (!responseText) throw new Error("Empty response from Gemini");
 
     console.log("📝 Raw Gemini response (first 300 chars):", responseText.substring(0, 300));
 
@@ -297,8 +297,8 @@ export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGe
       size: "1024x1024",
     });
 
-    if (!response.data[0]?.url) {
-      throw new Error("No image URL in response");
+    if (!response?.data?.[0]?.url) {
+      throw new Error("No image URL in response from DALL-E");
     }
 
     console.log("✅ Image generated successfully");
