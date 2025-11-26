@@ -23,7 +23,7 @@ interface WebSearchResponse {
   summary: string;
 }
 
-// Generate exam questions with LEARNORY (Gemini AI) - 50 questions per subject
+// Generate exam questions with LEARNORY (Gemini AI) - Real questions per subject
 export async function generateQuestionsWithLEARNORY(
   examType: string,
   subject: string,
@@ -36,41 +36,90 @@ export async function generateQuestionsWithLEARNORY(
       throw new Error("GEMINI_API_KEY not configured");
     }
 
-    console.log(`📚 LEARNORY generating ${count} ${subject} questions for ${examType}...`);
+    const actualCount = Math.min(count, 50); // Cap at 50 for faster generation
+    console.log(`📚 LEARNORY generating ${actualCount} ${subject} questions for ${examType}...`);
 
-    const prompt = `You are an expert exam question generator for ${examType} exams. Generate exactly ${count} high-quality multiple-choice questions for ${subject}.
+    // Specific prompts for each exam type and subject to ensure accurate questions
+    const subjectPrompts: Record<string, string> = {
+      Mathematics: `Generate ${actualCount} authentic ${examType} Mathematics exam questions. Include algebra, geometry, calculus, and trigonometry topics. Each question must be realistic and appear on actual ${examType} exams.`,
+      English: `Generate ${actualCount} authentic ${examType} English exam questions. Include reading comprehension, grammar, vocabulary, and literature topics. Each question must be realistic and appear on actual ${examType} exams.`,
+      Physics: `Generate ${actualCount} authentic ${examType} Physics exam questions. Include mechanics, electricity, waves, and thermodynamics. Each question must be realistic and appear on actual ${examType} exams.`,
+      Chemistry: `Generate ${actualCount} authentic ${examType} Chemistry exam questions. Include organic chemistry, inorganic chemistry, physical chemistry. Each question must be realistic and appear on actual ${examType} exams.`,
+      Biology: `Generate ${actualCount} authentic ${examType} Biology exam questions. Include cell biology, genetics, evolution, ecology, and human physiology. Each question must be realistic and appear on actual ${examType} exams.`,
+      'Reading and Writing': `Generate ${actualCount} authentic ${examType} Reading and Writing exam questions.`,
+      'Verbal Reasoning': `Generate ${actualCount} authentic ${examType} Verbal Reasoning exam questions.`,
+      'Quantitative Reasoning': `Generate ${actualCount} authentic ${examType} Quantitative Reasoning exam questions.`,
+      Math: `Generate ${actualCount} authentic ${examType} Math exam questions.`,
+    };
 
-Return ONLY valid JSON array (no other text):
+    const subjectPrompt = subjectPrompts[subject] || `Generate ${actualCount} authentic ${examType} ${subject} exam questions.`;
+
+    const prompt = `You are an expert ${examType} exam question generator specializing in ${subject}. ${subjectPrompt}
+
+Generate exactly ${actualCount} questions in this EXACT JSON format only:
 [
-  {"id": "1", "question": "Question text here?", "options": ["Option A", "Option B", "Option C", "Option D"], "correct": "A", "explanation": "Detailed explanation of why A is correct..."},
-  {"id": "2", "question": "Another question?", "options": ["A", "B", "C", "D"], "correct": "B", "explanation": "Explanation..."}
+  {"id": "1", "question": "Question text?", "options": ["Option A", "Option B", "Option C", "Option D"], "correct": "A", "explanation": "Why A is correct..."},
+  {"id": "2", "question": "Another question?", "options": ["Option A", "Option B", "Option C", "Option D"], "correct": "B", "explanation": "Explanation..."}
 ]
 
-Requirements:
-- Each question must have exactly 4 options (A, B, C, D)
-- Mark correct answer as single letter (A, B, C, or D)
+STRICT REQUIREMENTS:
+- ONLY output the JSON array, nothing else
+- Each question MUST have exactly 4 options
+- Correct answer MUST be A, B, C, or D
+- ID must be incrementing numbers as strings
 - Include detailed explanations
-- Vary difficulty levels
-- Cover key topics in ${subject}
-- Make questions educational and realistic for ${examType}`;
+- Make questions realistic for actual ${examType} exams`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
 
-    const responseText = response.text;
+    let responseText = response.text;
+    console.log(`[DEBUG] Raw response length: ${responseText?.length}, first 100 chars:`, responseText?.substring(0, 100));
+    
     if (!responseText) throw new Error("Empty response from LEARNORY");
 
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("Could not extract questions from LEARNORY");
+    // Extract JSON from markdown code blocks or direct JSON
+    let jsonText = responseText;
+    
+    // First try markdown code blocks (```json ... ```)
+    const markdownMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (markdownMatch) {
+      jsonText = markdownMatch[1];
+      console.log(`[DEBUG] Extracted from markdown, length: ${jsonText.length}`);
+    }
 
-    const questionsData = JSON.parse(jsonMatch[0]);
-    console.log(`✅ LEARNORY generated ${questionsData.length} questions for ${subject}`);
+    // Try to find JSON array
+    const arrayMatch = jsonText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (!arrayMatch) {
+      throw new Error("Could not extract JSON array from LEARNORY response");
+    }
 
-    return questionsData;
+    const questionsData = JSON.parse(arrayMatch[0]);
+    
+    if (!Array.isArray(questionsData)) {
+      throw new Error("LEARNORY response is not an array");
+    }
+
+    // Validate and fix question structure
+    const validQuestions = questionsData.map((q: any, idx: number) => ({
+      id: String(idx + 1),
+      question: q.question || `Question ${idx + 1}`,
+      options: q.options && Array.isArray(q.options) ? q.options : ["A", "B", "C", "D"],
+      correct: (q.correct || "A").toUpperCase(),
+      explanation: q.explanation || "See textbook for explanation."
+    })).filter(q => q.question && q.options.length === 4);
+
+    console.log(`✅ LEARNORY generated ${validQuestions.length} validated questions for ${subject}`);
+
+    if (validQuestions.length === 0) {
+      throw new Error("No valid questions generated from LEARNORY");
+    }
+
+    return validQuestions;
   } catch (error) {
-    console.error("LEARNORY question generation error:", error);
+    console.error(`❌ LEARNORY error for ${subject}:`, error);
     throw error;
   }
 }
