@@ -174,54 +174,61 @@ interface DebugResult {
 }
 
 export async function debugCodeWithLEARNORY(html: string, css: string, js: string, debugPrompt: string): Promise<DebugResult> {
-  const codeSnippet = `HTML:\n${html}\n\nCSS:\n${css}\n\nJavaScript:\n${js}`;
-  
-  const prompt = `You are an expert web developer fixing code issues.
-
-User request: ${debugPrompt}
-
-Current code:
-${codeSnippet}
-
-Fix the code and RESPOND WITH ONLY THIS JSON FORMAT (no markdown, no explanation, just pure JSON):
-{
-  "htmlCode": "<complete fixed html>",
-  "cssCode": "complete fixed css",
-  "jsCode": "complete fixed javascript",
-  "steps": ["what was fixed 1", "what was fixed 2"]
-}`;
-
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY not set");
     }
 
+    const prompt = `You are an expert web developer. The user's request: "${debugPrompt}"
+
+Current HTML code:
+${html}
+
+CSS:
+${css}
+
+JavaScript:
+${js}
+
+Analyze the request and provide ONLY a raw JSON response with NO markdown, NO code blocks, NO explanation - just pure JSON:
+{
+  "htmlCode": "<the complete fixed HTML with all improvements>",
+  "cssCode": "<the complete fixed CSS>",
+  "jsCode": "<the complete fixed JavaScript or empty string>",
+  "steps": ["fix 1", "fix 2"]
+}`;
+
+    console.log("🔄 Calling Gemini API for debug...");
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
 
-    let responseText = response.text;
-    if (!responseText) throw new Error("Empty response from Gemini");
+    let responseText = response.text.trim();
+    if (!responseText) throw new Error("Empty response");
 
-    // Remove markdown code blocks if present
+    console.log("📝 Raw Gemini response (first 300 chars):", responseText.substring(0, 300));
+
+    // Aggressively clean markdown
     responseText = responseText
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .replace(/^\s*```/gm, "")
+      .replace(/```\s*$/gm, "")
       .trim();
 
-    console.log("✅ Debug response cleaned, parsing JSON...");
-
-    // Parse JSON - try direct parse first, then fallback to extraction
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch (e) {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found in response");
-      result = JSON.parse(jsonMatch[0]);
+    // Find JSON object
+    const jsonStart = responseText.indexOf("{");
+    const jsonEnd = responseText.lastIndexOf("}");
+    
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error("No JSON object found in response");
     }
+
+    const jsonStr = responseText.substring(jsonStart, jsonEnd + 1);
+    console.log("✅ Extracted JSON, parsing...");
+
+    const result = JSON.parse(jsonStr);
 
     return {
       htmlCode: result.htmlCode || html,
@@ -230,7 +237,7 @@ Fix the code and RESPOND WITH ONLY THIS JSON FORMAT (no markdown, no explanation
       steps: Array.isArray(result.steps) ? result.steps : []
     };
   } catch (error) {
-    console.error("❌ Debug error:", error instanceof Error ? error.message : String(error));
+    console.error("❌ Gemini debug failed:", error);
     throw error;
   }
 }

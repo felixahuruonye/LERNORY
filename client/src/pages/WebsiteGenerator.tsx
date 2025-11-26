@@ -137,7 +137,7 @@ export default function WebsiteGenerator() {
     if (!selectedWebsiteData || !debugPrompt.trim()) return;
     
     setIsDebugging(true);
-    setDebugMessages(["🔍 Analyzing code with LEARNORY AI..."]);
+    setDebugMessages(["🔍 LEARNORY AI analyzing your request...", "⏳ Processing with Gemini API..."]);
     setShowDebugMode(true);
     
     try {
@@ -147,57 +147,67 @@ export default function WebsiteGenerator() {
         body: JSON.stringify({ debugPrompt }),
       });
 
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({ message: "Debug failed" }));
-        throw new Error(error.message || "Debug failed");
+      if (!res.status || res.status >= 400) {
+        const errText = await res.text();
+        throw new Error(`Server error: ${errText}`);
       }
 
       const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Debug failed on server");
+      }
 
-      // Animate messages showing what was fixed
-      const messages: string[] = [];
+      // Show what was fixed with visual feedback
+      const messages: string[] = ["✅ Analysis complete!"];
+      
       if (data.updates?.html) {
-        messages.push("📝 Fixing HTML structure...");
+        messages.push("📝 HTML structure fixed...");
         setDebugUpdatingFile("html");
-        await new Promise(r => setTimeout(r, 300));
-        messages.push("✅ HTML fixed");
+        await new Promise(r => setTimeout(r, 600));
+        messages.push("✅ HTML updated");
       }
+      
       if (data.updates?.css) {
-        messages.push("🎨 Fixing CSS styles...");
+        messages.push("🎨 CSS styles fixed...");
         setDebugUpdatingFile("css");
-        await new Promise(r => setTimeout(r, 300));
-        messages.push("✅ CSS fixed");
+        await new Promise(r => setTimeout(r, 600));
+        messages.push("✅ CSS updated");
       }
+      
       if (data.updates?.js) {
-        messages.push("⚙️ Fixing JavaScript...");
+        messages.push("⚙️ JavaScript enhanced...");
         setDebugUpdatingFile("js");
-        await new Promise(r => setTimeout(r, 300));
-        messages.push("✅ JavaScript fixed");
+        await new Promise(r => setTimeout(r, 600));
+        messages.push("✅ JavaScript updated");
       }
+      
       if (!data.updates?.html && !data.updates?.css && !data.updates?.js) {
-        messages.push("✨ Code analyzed and optimized");
+        messages.push("📊 Code analysis complete - no changes needed");
       }
-      messages.push("💾 Saving to database...");
-      messages.push("✨ Done!");
+      
+      messages.push("💾 Saving updates...");
+      await new Promise(r => setTimeout(r, 300));
+      messages.push("✨ Done! Refreshing preview...");
 
       setDebugMessages(prev => [...prev, ...messages]);
       await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
       
-      setTimeout(() => {
-        setIsDebugging(false);
-        setShowPreview(true);
-      }, 500);
+      await new Promise(r => setTimeout(r, 800));
+      setIsDebugging(false);
+      setShowPreview(true);
 
       toast({
         title: "✅ Fixed!",
-        description: "Preview your fixed website.",
+        description: "Your website has been improved. Check the preview!",
       });
     } catch (error: any) {
+      console.error("Debug error details:", error);
       setIsDebugging(false);
-      setDebugMessages(prev => [...prev, `❌ ${error.message}`]);
+      const msg = error?.message || "Failed to debug";
+      setDebugMessages(prev => [...prev, `❌ Error: ${msg}`]);
       toast({
-        title: "Error",
-        description: error?.message || "Failed to debug website",
+        title: "Debug Failed",
+        description: msg,
         variant: "destructive",
       });
     }
