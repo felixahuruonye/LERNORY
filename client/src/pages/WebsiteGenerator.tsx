@@ -137,6 +137,8 @@ export default function WebsiteGenerator() {
     if (!selectedWebsiteData || !debugPrompt.trim()) return;
     
     setIsDebugging(true);
+    setDebugMessages([]);
+    setShowDebugMode(true);
     
     try {
       const res = await fetch(`/api/websites/${selectedWebsiteData.id}/debug`, {
@@ -145,9 +147,36 @@ export default function WebsiteGenerator() {
         body: JSON.stringify({ debugPrompt }),
       });
 
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Debug failed");
+      if (!res.ok) throw new Error("Debug failed");
+      if (!res.body) throw new Error("No stream");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.done) break;
+              if (data.error) throw new Error(data.error);
+              if (data.message) {
+                setDebugMessages(prev => [...prev, data.message]);
+              }
+              if (data.file) {
+                setDebugUpdatingFile(data.file);
+              }
+            } catch (e) {}
+          }
+        }
       }
 
       await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
@@ -156,13 +185,13 @@ export default function WebsiteGenerator() {
 
       toast({
         title: "✅ Fixed!",
-        description: "Your website is ready to preview.",
+        description: "Preview your fixed website.",
       });
     } catch (error: any) {
       setIsDebugging(false);
       toast({
-        title: "Debug Error",
-        description: error.message || "Failed to debug website",
+        title: "Error",
+        description: error.message,
         variant: "destructive",
       });
     }
