@@ -122,16 +122,6 @@ export default function WebsiteMenu() {
                     <BookOpen className="h-4 w-4 mr-2" />
                     Learn Code
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start hover-elevate active-elevate-2"
-                    onClick={() => setLocation(`/website-debug/${website.id}`)}
-                    data-testid={`button-debug-${website.id}`}
-                  >
-                    <Zap className="h-4 w-4 mr-2" />
-                    Debug Mode
-                  </Button>
                 </div>
 
                 {/* Management Buttons */}
