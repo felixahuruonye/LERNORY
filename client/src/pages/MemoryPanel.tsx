@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,52 +20,108 @@ import {
   Code2,
   Lightbulb,
   Globe,
+  Download,
+  HardDrive,
+  RotateCcw,
 } from "lucide-react";
 
 export default function MemoryPanel() {
   const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const handleExportMemory = async () => {
+    setIsExporting(true);
     try {
       const response = await fetch("/api/memory/export");
-      const blob = await response.blob();
+      if (!response.ok) throw new Error("Export failed");
+      const data = await response.json();
+      
+      const jsonString = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `memory-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `lernory-memory-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Success!",
+        description: `Memory exported: ${data.messages} messages, ${data.memories} memory entries`,
+      });
     } catch (error) {
       console.error("Export failed:", error);
+      toast({
+        title: "Export Failed",
+        description: "Could not export your memory data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
 
   const handleBackup = async () => {
+    setIsBackingUp(true);
     try {
       const response = await fetch("/api/memory/backup", { method: "POST" });
+      if (!response.ok) throw new Error("Backup failed");
       const data = await response.json();
-      console.log("Backup created:", data);
+      
+      toast({
+        title: "Backup Created!",
+        description: `Backup ID: ${data.backup.backupId}\n${data.backup.messageCount} messages backed up`,
+      });
     } catch (error) {
       console.error("Backup failed:", error);
+      toast({
+        title: "Backup Failed",
+        description: "Could not create backup",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBackingUp(false);
     }
   };
 
   const handleClearMemory = async () => {
-    if (confirm("Are you sure? This will permanently delete all your memory data.")) {
-      try {
-        await fetch("/api/memory/clear", { method: "DELETE" });
-        console.log("Memory cleared");
-      } catch (error) {
-        console.error("Clear failed:", error);
-      }
+    if (!confirm("Are you sure? This will permanently delete all your chat history and memory data.")) return;
+    
+    setIsClearing(true);
+    try {
+      const response = await fetch("/api/memory/clear", { method: "DELETE" });
+      if (!response.ok) throw new Error("Clear failed");
+      
+      toast({
+        title: "Memory Cleared",
+        description: "All your learning data has been permanently deleted",
+      });
+    } catch (error) {
+      console.error("Clear failed:", error);
+      toast({
+        title: "Clear Failed",
+        description: "Could not clear memory",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClearing(false);
     }
   };
 
   const handleResetDefaults = () => {
     setMemoryEnabled(true);
-    console.log("Memory reset to defaults");
+    toast({
+      title: "Reset Complete",
+      description: "Memory settings reset to defaults",
+    });
   };
 
   const memoryCategories = [
@@ -273,21 +330,45 @@ export default function MemoryPanel() {
             <CardTitle>Data Management</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground mb-4">Download your learning data, create backups, or clear your memory.</p>
             <div className="grid md:grid-cols-2 gap-4">
-              <Button variant="outline" className="hover-elevate" data-testid="button-export-memory" onClick={handleExportMemory}>
-                <Plus className="h-4 w-4 mr-2" />
-                Export Memory Data
+              <Button 
+                variant="outline" 
+                className="hover-elevate" 
+                data-testid="button-export-memory" 
+                onClick={handleExportMemory}
+                disabled={isExporting}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {isExporting ? "Exporting..." : "Export Memory Data"}
               </Button>
-              <Button variant="outline" className="hover-elevate" data-testid="button-backup-memory" onClick={handleBackup}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Backup
+              <Button 
+                variant="outline" 
+                className="hover-elevate" 
+                data-testid="button-backup-memory" 
+                onClick={handleBackup}
+                disabled={isBackingUp}
+              >
+                <HardDrive className="h-4 w-4 mr-2" />
+                {isBackingUp ? "Backing up..." : "Create Backup"}
               </Button>
-              <Button variant="destructive" className="hover-elevate" data-testid="button-clear-memory" onClick={handleClearMemory}>
+              <Button 
+                variant="destructive" 
+                className="hover-elevate" 
+                data-testid="button-clear-memory" 
+                onClick={handleClearMemory}
+                disabled={isClearing}
+              >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Clear Memory
+                {isClearing ? "Clearing..." : "Clear Memory"}
               </Button>
-              <Button variant="outline" className="hover-elevate" data-testid="button-reset-preferences" onClick={handleResetDefaults}>
-                <Plus className="h-4 w-4 mr-2" />
+              <Button 
+                variant="outline" 
+                className="hover-elevate" 
+                data-testid="button-reset-preferences" 
+                onClick={handleResetDefaults}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
                 Reset to Defaults
               </Button>
             </div>
