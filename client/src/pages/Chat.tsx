@@ -29,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useVoice } from "@/lib/useVoice";
+import { detectFeatureOpen } from "@/lib/featureRegistry";
 import type { ChatMessage, ChatSession } from "@shared/schema";
 
 export default function Chat() {
@@ -155,34 +156,6 @@ export default function Chat() {
       newSelected.add(sessionId);
     }
     setSelectedChatsForDelete(newSelected);
-  };
-
-  // Detect if user is asking to open a feature
-  const detectFeatureOpen = (text: string): string | null => {
-    const features: { [key: string]: string } = {
-      "cbt mode": "/cbt-mode",
-      "cbt": "/cbt-mode",
-      "exam": "/cbt-mode",
-      "mock exam": "/cbt-mode",
-      "study plan": "/study-plans",
-      "study plans": "/study-plans",
-      "dashboard": "/dashboard",
-      "8d dashboard": "/dashboard",
-      "gamification": "/gamification",
-      "memory": "/memory",
-      "learning memory": "/memory",
-      "settings": "/settings",
-      "live ai": "/live-ai",
-      "voice": "/live-ai",
-    };
-
-    const lowerText = text.toLowerCase();
-    for (const [keyword, route] of Object.entries(features)) {
-      if (lowerText.includes("open") && lowerText.includes(keyword) || lowerText.includes("show") && lowerText.includes(keyword)) {
-        return route;
-      }
-    }
-    return null;
   };
 
   // Detect if user is asking for internet search
