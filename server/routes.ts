@@ -445,6 +445,47 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
+  // Memory preferences routes
+  app.post('/api/memory/preferences', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { categoryId, itemKey, value } = req.body;
+      
+      await storage.createMemoryEntry({
+        userId,
+        category: categoryId,
+        key: itemKey,
+        value: value,
+        type: 'preference'
+      });
+      
+      res.json({ success: true, message: "Preference saved" });
+    } catch (error) {
+      console.error("Save preference failed:", error);
+      res.status(500).json({ message: "Failed to save preference" });
+    }
+  });
+
+  app.post('/api/memory/preferences/add', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { categoryId, key, value } = req.body;
+      
+      await storage.createMemoryEntry({
+        userId,
+        category: categoryId,
+        key: key,
+        value: value,
+        type: 'preference_added'
+      });
+      
+      res.json({ success: true, message: "Item added" });
+    } catch (error) {
+      console.error("Add item failed:", error);
+      res.status(500).json({ message: "Failed to add item" });
+    }
+  });
+
   // Chat Session routes
   app.get('/api/chat/sessions', isAuthenticated, async (req: any, res: Response) => {
     try {

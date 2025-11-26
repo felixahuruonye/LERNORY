@@ -34,6 +34,152 @@ export default function MemoryPanel() {
   const [isExporting, setIsExporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [memoryCategories, setMemoryCategories] = useState([
+    {
+      id: "preferences",
+      title: "Learning Preferences",
+      icon: Settings,
+      color: "from-blue-500 to-cyan-500",
+      items: [
+        { key: "learningStyle", value: "Visual + Hands-on" },
+        { key: "pace", value: "Moderate" },
+        { key: "language", value: "English" },
+      ],
+    },
+    {
+      id: "goals",
+      title: "Long-Term Goals",
+      icon: Target,
+      color: "from-purple-500 to-pink-500",
+      items: [
+        { key: "careerGoal", value: "Software Engineer" },
+        { key: "examTarget", value: "JAMB 300+" },
+        { key: "timeline", value: "6 months" },
+      ],
+    },
+    {
+      id: "skills",
+      title: "Technical Skills",
+      icon: Code2,
+      color: "from-green-500 to-emerald-500",
+      items: [
+        { key: "languages", value: "Python, JavaScript, React" },
+        { key: "level", value: "Intermediate" },
+        { key: "focus", value: "Web Development" },
+      ],
+    },
+    {
+      id: "interests",
+      title: "Subjects of Interest",
+      icon: Lightbulb,
+      color: "from-orange-500 to-red-500",
+      items: [
+        { key: "primary", value: "Physics, Mathematics" },
+        { key: "secondary", value: "Chemistry, Biology" },
+        { key: "hobbies", value: "Coding, Blogging" },
+      ],
+    },
+    {
+      id: "business",
+      title: "Business & Education Details",
+      icon: Globe,
+      color: "from-teal-500 to-cyan-500",
+      items: [
+        { key: "school", value: "Not specified" },
+        { key: "course", value: "Engineering" },
+        { key: "workExperience", value: "2 years" },
+      ],
+    },
+    {
+      id: "writing",
+      title: "Writing Style",
+      icon: BookOpen,
+      color: "from-rose-500 to-pink-500",
+      items: [
+        { key: "tone", value: "Professional" },
+        { key: "formality", value: "Formal" },
+        { key: "audience", value: "Technical" },
+      ],
+    },
+  ]);
+
+  const handleSaveMemoryItem = async (categoryId: string, itemKey: string) => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/memory/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId, itemKey, value: editValue }),
+      });
+      if (!response.ok) throw new Error("Save failed");
+      
+      setMemoryCategories((prevCategories) =>
+        prevCategories.map((cat) =>
+          cat.id === categoryId
+            ? {
+                ...cat,
+                items: cat.items.map((item) =>
+                  item.key === itemKey ? { ...item, value: editValue } : item
+                ),
+              }
+            : cat
+        )
+      );
+      
+      toast({ title: "Saved!", description: "Your preference has been updated" });
+      setEditing(null);
+    } catch (error) {
+      console.error("Save failed:", error);
+      toast({
+        title: "Save Failed",
+        description: "Could not save your preference",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddItem = async (categoryId: string) => {
+    const itemKey = prompt("Enter item name (e.g., 'newSkill'):");
+    if (!itemKey) return;
+    
+    const itemValue = prompt("Enter item value:");
+    if (!itemValue) return;
+    
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/memory/preferences/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId, key: itemKey, value: itemValue }),
+      });
+      if (!response.ok) throw new Error("Add failed");
+      
+      setMemoryCategories((prevCategories) =>
+        prevCategories.map((cat) =>
+          cat.id === categoryId
+            ? {
+                ...cat,
+                items: [...cat.items, { key: itemKey, value: itemValue }],
+              }
+            : cat
+        )
+      );
+      
+      toast({ title: "Added!", description: `${itemKey} has been added` });
+    } catch (error) {
+      console.error("Add failed:", error);
+      toast({
+        title: "Add Failed",
+        description: "Could not add item",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleExportMemory = async () => {
     setIsExporting(true);
@@ -124,75 +270,6 @@ export default function MemoryPanel() {
     });
   };
 
-  const memoryCategories = [
-    {
-      id: "preferences",
-      title: "Learning Preferences",
-      icon: Settings,
-      color: "from-blue-500 to-cyan-500",
-      items: [
-        { key: "learningStyle", value: "Visual + Hands-on" },
-        { key: "pace", value: "Moderate" },
-        { key: "language", value: "English" },
-      ],
-    },
-    {
-      id: "goals",
-      title: "Long-Term Goals",
-      icon: Target,
-      color: "from-purple-500 to-pink-500",
-      items: [
-        { key: "careerGoal", value: "Software Engineer" },
-        { key: "examTarget", value: "JAMB 300+" },
-        { key: "timeline", value: "6 months" },
-      ],
-    },
-    {
-      id: "skills",
-      title: "Technical Skills",
-      icon: Code2,
-      color: "from-green-500 to-emerald-500",
-      items: [
-        { key: "languages", value: "Python, JavaScript, React" },
-        { key: "level", value: "Intermediate" },
-        { key: "focus", value: "Web Development" },
-      ],
-    },
-    {
-      id: "interests",
-      title: "Subjects of Interest",
-      icon: Lightbulb,
-      color: "from-orange-500 to-red-500",
-      items: [
-        { key: "primary", value: "Physics, Mathematics" },
-        { key: "secondary", value: "Chemistry, Biology" },
-        { key: "hobbies", value: "Coding, Blogging" },
-      ],
-    },
-    {
-      id: "business",
-      title: "Business & Education Details",
-      icon: Globe,
-      color: "from-teal-500 to-cyan-500",
-      items: [
-        { key: "school", value: "Not specified" },
-        { key: "course", value: "Engineering" },
-        { key: "workExperience", value: "2 years" },
-      ],
-    },
-    {
-      id: "writing",
-      title: "Writing Style",
-      icon: BookOpen,
-      color: "from-rose-500 to-pink-500",
-      items: [
-        { key: "tone", value: "Professional" },
-        { key: "formality", value: "Formal" },
-        { key: "audience", value: "Technical" },
-      ],
-    },
-  ];
-
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -277,17 +354,19 @@ export default function MemoryPanel() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setEditing(null)}
+                            onClick={() => handleSaveMemoryItem(category.id, item.key)}
                             className="hover-elevate"
+                            disabled={isSaving}
                             data-testid={`button-save-${category.id}-${item.key}`}
                           >
-                            Save
+                            {isSaving ? "Saving..." : "Save"}
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => setEditing(null)}
                             className="hover-elevate"
+                            disabled={isSaving}
                           >
                             Cancel
                           </Button>
@@ -314,10 +393,12 @@ export default function MemoryPanel() {
                   variant="outline"
                   size="sm"
                   className="w-full hover-elevate"
+                  onClick={() => handleAddItem(category.id)}
+                  disabled={isSaving}
                   data-testid={`button-add-${category.id}`}
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Item
+                  {isSaving ? "Adding..." : "Add Item"}
                 </Button>
               </CardContent>
             </Card>
