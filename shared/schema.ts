@@ -551,6 +551,22 @@ export const insertRecordingSchema = createInsertSchema(recordings).omit({ id: t
 export type InsertRecording = z.infer<typeof insertRecordingSchema>;
 export type Recording = typeof recordings.$inferSelect;
 
+// Generated Lessons from Recordings
+export const generatedLessons = pgTable("generated_lessons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  recordingId: varchar("recording_id").references(() => recordings.id, { onDelete: 'cascade' }),
+  title: varchar("title", { length: 255 }).notNull(),
+  objectives: text("objectives").array().notNull(),
+  keyPoints: text("key_points").array().notNull(),
+  summary: text("summary").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertGeneratedLessonSchema = createInsertSchema(generatedLessons).omit({ id: true, createdAt: true });
+export type InsertGeneratedLesson = z.infer<typeof insertGeneratedLessonSchema>;
+export type GeneratedLesson = typeof generatedLessons.$inferSelect;
+
 export const insertDocumentUploadSchema = createInsertSchema(documentUploads).omit({ id: true, createdAt: true });
 export type InsertDocumentUpload = z.infer<typeof insertDocumentUploadSchema>;
 export type DocumentUpload = typeof documentUploads.$inferSelect;

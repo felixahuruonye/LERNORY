@@ -29,6 +29,7 @@ import WebsiteDebug from "@/pages/WebsiteDebug";
 import Notifications from "@/pages/Notifications";
 import LiveAI from "@/pages/LiveAI";
 import CBTMode from "@/pages/CBTMode";
+import GeneratedLessons from "@/pages/GeneratedLessons";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -59,6 +60,7 @@ function Router() {
           <Route path="/view/:id" component={ViewWebsite} />
           <Route path="/live-session" component={LiveSession} />
           <Route path="/live-session/:id" component={LiveSession} />
+          <Route path="/generated-lessons" component={GeneratedLessons} />
           <Route path="/courses" component={Courses} />
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/exams" component={Exams} />

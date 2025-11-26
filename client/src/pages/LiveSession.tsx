@@ -26,7 +26,7 @@ import {
   BookOpen,
   X,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
@@ -64,6 +64,7 @@ interface GeneratedLesson {
 export default function LiveSession() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
@@ -1175,6 +1176,17 @@ export default function LiveSession() {
             >
               <Settings className="h-4 w-4 mr-2" />
               Session Settings
+            </Button>
+
+            {/* View Generated Lessons */}
+            <Button
+              onClick={() => setLocation("/generated-lessons")}
+              variant="outline"
+              className="w-full hover-elevate active-elevate-2"
+              data-testid="button-view-lessons"
+            >
+              <BookOpen className="h-4 w-4 mr-2" />
+              View Generated Lessons
             </Button>
           </div>
         </div>

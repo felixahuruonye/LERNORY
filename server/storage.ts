@@ -33,6 +33,7 @@ import {
   cbtSessions,
   cbtAnswers,
   recordings,
+  generatedLessons,
   type User,
   type UpsertUser,
   type Course,
@@ -97,6 +98,8 @@ import {
   type InsertCbtAnswer,
   type Recording,
   type InsertRecording,
+  type GeneratedLesson,
+  type InsertGeneratedLesson,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -239,6 +242,11 @@ export interface IStorage {
   createRecording(recording: InsertRecording): Promise<Recording>;
   getRecordingsByUser(userId: string): Promise<Recording[]>;
   deleteRecording(id: string): Promise<void>;
+
+  // Generated Lesson operations
+  createGeneratedLesson(lesson: InsertGeneratedLesson): Promise<GeneratedLesson>;
+  getGeneratedLessonsByUser(userId: string): Promise<GeneratedLesson[]>;
+  deleteGeneratedLesson(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -766,6 +774,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteRecording(id: string): Promise<void> {
     await db.delete(recordings).where(eq(recordings.id, id));
+  }
+
+  // Generated Lesson operations
+  async createGeneratedLesson(lesson: InsertGeneratedLesson): Promise<GeneratedLesson> {
+    const [newLesson] = await db.insert(generatedLessons).values(lesson).returning();
+    return newLesson;
+  }
+
+  async getGeneratedLessonsByUser(userId: string): Promise<GeneratedLesson[]> {
+    return await db.select().from(generatedLessons).where(eq(generatedLessons.userId, userId)).orderBy(desc(generatedLessons.createdAt));
+  }
+
+  async deleteGeneratedLesson(id: string): Promise<void> {
+    await db.delete(generatedLessons).where(eq(generatedLessons.id, id));
   }
 
   async getCbtAnswersBySession(sessionId: string): Promise<CbtAnswer[]> {

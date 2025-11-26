@@ -1985,5 +1985,53 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Generated Lessons API endpoints
+  app.get('/api/generated-lessons', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const lessons = await storage.getGeneratedLessonsByUser(userId);
+      res.json(lessons);
+    } catch (error: any) {
+      console.error("Error fetching lessons:", error);
+      res.status(500).json({ message: error?.message || 'Failed to fetch lessons' });
+    }
+  });
+
+  app.post('/api/generated-lessons', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { title, objectives, keyPoints, summary, recordingId } = req.body;
+
+      if (!title?.trim()) {
+        return res.status(400).json({ message: 'Title is required' });
+      }
+
+      const lesson = await storage.createGeneratedLesson({
+        userId,
+        recordingId: recordingId || null,
+        title,
+        objectives: objectives || [],
+        keyPoints: keyPoints || [],
+        summary: summary || '',
+      });
+
+      res.json(lesson);
+    } catch (error: any) {
+      console.error("Error creating lesson:", error);
+      res.status(500).json({ message: error?.message || 'Failed to save lesson' });
+    }
+  });
+
+  app.delete('/api/generated-lessons/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteGeneratedLesson(id);
+      res.json({ message: 'Lesson deleted successfully' });
+    } catch (error: any) {
+      console.error("Error deleting lesson:", error);
+      res.status(500).json({ message: error?.message || 'Failed to delete lesson' });
+    }
+  });
+
   return httpServer;
 }
