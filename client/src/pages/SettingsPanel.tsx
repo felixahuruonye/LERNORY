@@ -127,46 +127,6 @@ export default function SettingsPanel() {
       ],
     },
     {
-      title: "Data Management",
-      icon: Download,
-      items: [
-        {
-          label: "Export Data",
-          description: "Download all your data in JSON format",
-          component: (
-            <Button variant="outline" size="sm" className="hover-elevate" data-testid="button-export-data">
-              Export
-            </Button>
-          ),
-        },
-        {
-          label: "Download Backups",
-          description: "Create and download backup files",
-          component: (
-            <Button variant="outline" size="sm" className="hover-elevate" data-testid="button-download-backups">
-              Backup
-            </Button>
-          ),
-        },
-      ],
-    },
-    {
-      title: "Performance",
-      icon: Zap,
-      items: [
-        {
-          label: "Low-End Device Mode",
-          description: "Optimize for slower devices",
-          component: <Switch data-testid="switch-low-end-mode" />,
-        },
-        {
-          label: "Reduce Animations",
-          description: "Minimize motion and transitions",
-          component: <Switch data-testid="switch-reduce-animations" />,
-        },
-      ],
-    },
-    {
       title: "Voice Settings",
       icon: Volume2,
       items: [

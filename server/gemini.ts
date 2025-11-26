@@ -11,6 +11,65 @@ interface GeneratedWebsite {
   title: string;
 }
 
+interface SearchResult {
+  title: string;
+  snippet: string;
+  link: string;
+  source: string;
+}
+
+interface WebSearchResponse {
+  results: SearchResult[];
+  summary: string;
+}
+
+// Internet search with Gemini (returns web search results with sources)
+export async function searchInternetWithGemini(query: string): Promise<WebSearchResponse> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY not configured");
+    }
+
+    console.log("🔍 Searching internet for:", query);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `You are a web search assistant. Search for information about: "${query}"
+
+Return ONLY valid JSON (no other text):
+{
+  "results": [
+    {"title": "Result Title", "snippet": "Brief description", "link": "https://example.com", "source": "Website Name"},
+    {"title": "Another Result", "snippet": "Description", "link": "https://example2.com", "source": "Website Name 2"}
+  ],
+  "summary": "Brief summary of search results"
+}
+
+Find real, recent information. Include sources and links.`
+    });
+
+    const responseText = response.text;
+    if (!responseText) throw new Error("Empty search response");
+
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("Could not extract JSON from search response");
+
+    const searchData = JSON.parse(jsonMatch[0]);
+    console.log(`✅ Found ${searchData.results?.length || 0} results`);
+
+    return {
+      results: searchData.results || [],
+      summary: searchData.summary || "Search completed"
+    };
+  } catch (error) {
+    console.error("Internet search error:", error);
+    return {
+      results: [],
+      summary: "Unable to search internet. Try again later."
+    };
+  }
+}
+
 export async function generateWebsiteWithGemini(prompt: string): Promise<GeneratedWebsite> {
   const fullPrompt = `You are a web developer. Create a website based on this description: ${prompt}
 
@@ -46,7 +105,6 @@ Response format (ONLY output valid JSON, no other text):
     console.log("Response text length:", responseText.length);
     console.log("Response text preview:", responseText.substring(0, 200));
     
-    // Extract JSON from response (in case there's any surrounding text)
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("Could not extract JSON from response:", responseText.substring(0, 500));
@@ -123,52 +181,32 @@ export async function debugCodeWithLEARNORY(html: string, css: string, js: strin
 Current code:
 ${codeSnippet}
 
-IMPORTANT: Return ONLY valid JSON (no other text) with this structure:
-{
-  "htmlCode": "updated HTML code here",
-  "cssCode": "updated CSS code here",
-  "jsCode": "updated JavaScript code here",
-  "steps": ["Step 1: description", "Step 2: description", ...]
-}
+Provide:
+1. What's wrong (if anything)
+2. Step-by-step fixes
+3. Improved code
+4. Explanation
 
-Make the requested changes to the code. The "steps" array should describe what you changed in 2-3 steps.`;
+Format response as JSON:
+{"htmlCode": "...", "cssCode": "...", "jsCode": "...", "steps": ["step1", "step2"]}`;
 
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log("Calling LEARNORY AI for debugging...");
-    
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
 
-    console.log("LEARNORY AI debug response received");
-    
     const responseText = response.text;
-    
-    if (!responseText) {
-      throw new Error("Empty response from LEARNORY AI");
-    }
+    if (!responseText) throw new Error("Empty response from LEARNORY AI");
 
-    // Extract JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("Could not extract JSON from debug response:", responseText.substring(0, 500));
-      throw new Error("Failed to extract JSON from LEARNORY AI response");
-    }
+    if (!jsonMatch) throw new Error("Could not extract JSON");
 
-    const result = JSON.parse(jsonMatch[0]) as DebugResult;
-    
-    // Validate structure
-    if (!result.htmlCode || !result.cssCode || !Array.isArray(result.steps)) {
-      throw new Error("Invalid response structure from LEARNORY AI");
-    }
-
-    result.jsCode = result.jsCode || "";
-    return result;
+    return JSON.parse(jsonMatch[0]);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("Error debugging code with LEARNORY AI:", errorMsg);
@@ -177,319 +215,160 @@ Make the requested changes to the code. The "steps" array should describe what y
 }
 
 interface TopicExplanationResult {
-  simpleExplanation: string;
-  detailedBreakdown: string;
+  explanation: string;
   examples: string[];
-  formulas: string[];
-  realLifeApplications: string[];
-  commonMistakes: string[];
-  practiceQuestions: string[];
-  imagePrompt: string;
+  relatedTopics: string[];
 }
 
 export async function explainTopicWithLEARNORY(subject: string, topic: string, difficulty: string = "medium"): Promise<TopicExplanationResult> {
-  const prompt = `You are an expert educator. Explain the following topic in a ${difficulty} level way:
+  const prompt = `Explain the topic "${topic}" in ${subject} at ${difficulty} level.
 
-Subject: ${subject}
-Topic: ${topic}
-
-IMPORTANT: Return ONLY valid JSON (no other text) with this structure:
-{
-  "simpleExplanation": "A simple explanation that anyone can understand",
-  "detailedBreakdown": "A more detailed breakdown with key concepts",
-  "examples": ["Example 1", "Example 2", "Example 3"],
-  "formulas": ["Formula 1 with LaTeX", "Formula 2"],
-  "realLifeApplications": ["Real-life application 1", "Real-life application 2"],
-  "commonMistakes": ["Mistake 1 that students make", "Mistake 2"],
-  "practiceQuestions": ["Question 1?", "Question 2?"],
-  "imagePrompt": "A detailed prompt for generating an illustrative image of this topic"
-}
-
-Ensure explanations are clear, with examples and practical applications.`;
+Format: {"explanation": "...", "examples": ["ex1", "ex2"], "relatedTopics": ["topic1", "topic2"]}`;
 
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log("LEARNORY AI: Explaining topic -", subject, topic);
-    
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
 
     const responseText = response.text;
-    if (!responseText) {
-      throw new Error("Empty response from LEARNORY AI");
-    }
+    if (!responseText) throw new Error("Empty response");
 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Failed to extract JSON from response");
-    }
+    if (!jsonMatch) throw new Error("Could not extract JSON");
 
-    const result = JSON.parse(jsonMatch[0]) as TopicExplanationResult;
-    return result;
+    return JSON.parse(jsonMatch[0]);
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error explaining topic with LEARNORY AI:", errorMsg);
+    console.error("Error explaining topic:", error);
     throw error;
   }
 }
 
 interface ImageGenerationResult {
-  imageUrl: string;
-  description: string;
+  url: string;
+  prompt: string;
 }
 
 export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
-  // Use OpenAI DALL-E 3 to generate real educational images
-  console.log("LERNORY AI: Generating real image with DALL-E for:", prompt);
-  
-  try {
-    // Enhance the prompt to be more educational
-    const educationalPrompt = `Create an educational illustration for: ${prompt}. Style: clear, colorful, suitable for learning, professional quality. No text in the image.`;
-    
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: educationalPrompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "standard",
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`DALL-E error: ${JSON.stringify(error)}`);
-    }
-
-    const data = await response.json() as { data: Array<{ url: string }> };
-    const imageUrl = data.data[0].url;
-    
-    console.log("Real image generated successfully from DALL-E");
-    return {
-      imageUrl: imageUrl,
-      description: prompt
-    };
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error generating image with DALL-E:", errorMsg);
-    
-    // Fallback to a reliable placeholder image
-    return {
-      imageUrl: `https://via.placeholder.com/1024x1024/3b82f6/ffffff?text=${encodeURIComponent(prompt.substring(0, 30))}`,
-      description: prompt
-    };
-  }
-}
-
-// Chat with Gemini API as fallback for chat completion
-export async function chatWithGemini(messages: Array<{ role: string; content: string }>): Promise<string> {
-  const systemPrompt = `You are LEARNORY, the world's most comprehensive AI learning platform. You are helpful, knowledgeable, and friendly. Answer questions clearly and comprehensively.`;
-
-  const conversationText = messages
-    .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`)
-    .join("\n");
-
-  const prompt = `${systemPrompt}
-
-Conversation:
-${conversationText}
-
-Provide a helpful response to the user's latest message.`;
-
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log("Calling Gemini API for chat response...");
+    console.log("LEARNORY: Generating image with DALL-E for:", prompt);
+    
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt,
+      n: 1,
+      size: "1024x1024",
+    });
+
+    if (!response.data[0]?.url) {
+      throw new Error("No image URL in response");
+    }
+
+    console.log("✅ Image generated successfully");
+    return {
+      url: response.data[0].url,
+      prompt
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("Error generating image with DALL-E:", errorMsg);
+    throw error;
+  }
+}
+
+export async function chatWithGemini(messages: Array<{ role: string; content: string }>): Promise<string> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: messages.map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }]
+      })) as any
     });
 
-    const responseText = response.text;
-
-    if (!responseText) {
-      throw new Error("Empty response from Gemini API");
+    const result = response.text;
+    if (!result) {
+      throw new Error("Empty response from Gemini");
     }
-
-    console.log("Gemini API response received");
-    return responseText;
+    return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error with Gemini chat API:", errorMsg);
+    console.error("Error chatting with Gemini:", errorMsg);
     throw error;
   }
 }
 
 export async function generateSmartChatTitle(messages: Array<{ role: string; content: string }>): Promise<string> {
-  const prompt = `You are an expert at summarizing conversations. Read the following chat conversation and generate a SHORT, descriptive title that captures the main topic or theme.
-
-The title should:
-- Be 2-6 words maximum
-- Be concise and fit on mobile screens
-- Capture the main topic/theme of the conversation
-- Use clear, everyday language
-- NOT be generic like "Chat", "Conversation", or "Help"
-
-Conversation:
-${messages.map((m) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join('\n')}
-
-Return ONLY the title text, nothing else. No quotes, no explanation.`;
-
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log("LEARNORY AI: Generating smart chat title...");
+    const conversationSnippet = messages
+      .slice(0, 4)
+      .map(m => `${m.role}: ${m.content.substring(0, 100)}`)
+      .join("\n");
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `Create a brief, descriptive title (max 6 words) for this conversation:
+
+${conversationSnippet}
+
+Respond with ONLY the title, no quotes or extra text.`
     });
 
-    let title = response.text?.trim();
-    
-    if (!title || title.length === 0) {
-      console.warn("Empty title from Gemini, using fallback");
-      title = "New Conversation";
-    }
-
-    // Ensure title is not too long (max 50 chars)
-    if (title.length > 50) {
-      title = title.substring(0, 47) + "...";
-    }
-
-    console.log("Smart chat title generated:", title);
-    return title;
+    const title = response.text?.trim() || "Chat";
+    return title.substring(0, 50);
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error generating smart chat title:", errorMsg);
-    
-    // Fallback to a generic title if Gemini fails
-    return "New Conversation";
+    console.error("Error generating title:", error);
+    return "Chat";
   }
 }
 
-/**
- * Analyze file with Gemini vision API - Extract text and content from images, PDFs, handwritten notes
- */
-export async function analyzeFileWithGeminiVision(
-  fileBuffer: Buffer,
-  fileType: string,
-  fileName: string
-): Promise<{ extractedText: string; analysis: any }> {
+export async function analyzeFileWithGeminiVision(buffer: Buffer, mimeType: string, fileName: string): Promise<{ extractedText: string }> {
   try {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
 
-    console.log(`📷 LEARNORY AI: Analyzing ${fileType} file: ${fileName}`);
+    const base64Data = buffer.toString('base64');
+    console.log(`📄 Analyzing file with Gemini Vision: ${fileName}`);
 
-    // Convert buffer to base64
-    const base64Data = fileBuffer.toString('base64');
-
-    // Determine MIME type based on file extension
-    let mimeType = 'application/octet-stream';
-    if (fileType.includes('pdf')) {
-      mimeType = 'application/pdf';
-    } else if (fileType.includes('image') || fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-      mimeType = 'image/jpeg'; // Default to JPEG for images
-      if (fileName.match(/\.png$/i)) mimeType = 'image/png';
-      if (fileName.match(/\.webp$/i)) mimeType = 'image/webp';
-      if (fileName.match(/\.gif$/i)) mimeType = 'image/gif';
-    } else if (fileType.includes('document') || fileName.match(/\.(docx|doc|txt)$/i)) {
-      mimeType = 'application/pdf'; // Treat documents as PDF for analysis
-    }
-
-    console.log(`📄 MIME type: ${mimeType}`);
-
-    // Send to Gemini with vision capability
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
         {
-          role: "user",
-          parts: [
-            {
-              inlineData: {
-                mimeType: mimeType,
-                data: base64Data,
-              },
-            },
-            {
-              text: `You are an expert document analyzer. Carefully analyze this ${fileType} file and provide:
-
-1. EXTRACTED_TEXT: All readable text content from the file
-2. CONTENT_SUMMARY: A brief summary of what this document contains
-3. KEY_TOPICS: Main topics, subjects, or themes covered
-4. STRUCTURE: The organization/structure of the content
-5. EDUCATIONAL_VALUE: How useful this is for learning (rate: high/medium/low)
-6. RECOMMENDATIONS: How LEARNORY should use this for personalized learning
-
-Format your response as JSON with these exact keys:
-{
-  "extractedText": "all text content here",
-  "summary": "brief summary",
-  "keyTopics": ["topic1", "topic2", "topic3"],
-  "structure": "description of how content is organized",
-  "educationalValue": "high/medium/low",
-  "recommendations": "how to use this for learning",
-  "fileDescription": "what type of document this is"
-}
-
-Be thorough and extract ALL visible text.`,
-            },
-          ],
+          inlineData: {
+            mimeType: mimeType || "application/octet-stream",
+            data: base64Data
+          }
         },
-      ],
+        {
+          text: "Extract and return all text content from this file. If it's an image, describe the content. If it's a PDF or document, extract the text."
+        }
+      ] as any
     });
 
-    const responseText = response.text;
-    if (!responseText) {
-      throw new Error("Empty response from Gemini vision analysis");
-    }
+    const extractedText = response.text || "";
+    console.log(`✅ Extracted ${extractedText.length} characters`);
 
-    console.log("✅ Gemini vision analysis received");
-
-    // Parse JSON response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("Could not extract JSON from vision response");
-      throw new Error("Failed to parse vision analysis response");
-    }
-
-    const analysis = JSON.parse(jsonMatch[0]);
-    const extractedText = analysis.extractedText || '';
-
-    console.log(`✅ Extracted ${extractedText.length} characters of text from ${fileType}`);
-
-    return {
-      extractedText,
-      analysis: {
-        summary: analysis.summary,
-        keyTopics: analysis.keyTopics,
-        structure: analysis.structure,
-        educationalValue: analysis.educationalValue,
-        recommendations: analysis.recommendations,
-        fileDescription: analysis.fileDescription,
-      },
-    };
+    return { extractedText };
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error analyzing file with Gemini vision:", errorMsg);
-    throw error;
+    console.error("Gemini Vision analysis error:", error);
+    return { extractedText: "" };
   }
 }

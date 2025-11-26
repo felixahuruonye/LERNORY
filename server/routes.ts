@@ -22,7 +22,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -418,6 +418,23 @@ If they ask about similar topics or reference past conversations, remind them wh
     } catch (error) {
       console.error("Error deleting chat session:", error);
       res.status(500).json({ message: "Failed to delete chat session" });
+    }
+  });
+
+  // Internet search route
+  app.post('/api/chat/search', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { query } = req.body;
+      if (!query?.trim()) {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+
+      console.log("🔍 Processing search request:", query);
+      const searchResults = await searchInternetWithGemini(query);
+      res.json(searchResults);
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "Search failed", error: error instanceof Error ? error.message : "Unknown error" });
     }
   });
 
