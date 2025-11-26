@@ -1,4 +1,4 @@
-import { openai } from "./openai";
+import { chatWithAI } from "./openai";
 
 interface LearnedPreferences {
   subjects: string[];
@@ -33,19 +33,14 @@ export async function learnFromUserMessage(userMessage: string): Promise<Partial
       return {};
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "user",
-          content: LEARNING_PROMPT.replace("{userMessage}", userMessage.substring(0, 500)),
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 300,
-    });
+    const response = await chatWithAI([
+      {
+        role: "user",
+        content: LEARNING_PROMPT.replace("{userMessage}", userMessage.substring(0, 500)),
+      },
+    ]);
 
-    const content = response.choices[0]?.message?.content?.trim() || "";
+    const content = response?.trim() || "";
     
     if (!content) {
       return {};
