@@ -301,13 +301,47 @@ If they ask about similar topics or reference past conversations, remind them wh
         console.log("Memory auto-save skipped (non-critical)");
       }
 
+      // Check if user asked for image explanation
+      const imageKeywords = ["explain with image", "show me", "visualize", "draw", "illustrate", "with image", "with a picture", "with diagram"];
+      const shouldGenerateImage = imageKeywords.some(keyword => content.toLowerCase().includes(keyword));
+      
+      let attachments: any = null;
+      if (shouldGenerateImage) {
+        try {
+          console.log("🎨 Generating image for chat response...");
+          const imagePrompt = `Create a visual representation for: ${aiResponse.substring(0, 200)}`;
+          const image = await generateImageWithLEARNORY(imagePrompt);
+          
+          // Store generated image
+          await storage.createGeneratedImage({
+            userId,
+            prompt: imagePrompt,
+            imageUrl: image.url,
+            relatedTopic: content.substring(0, 100)
+          });
+          
+          attachments = {
+            images: [
+              {
+                url: image.url,
+                title: "Visual Explanation"
+              }
+            ]
+          };
+          console.log("✅ Image attached to response");
+        } catch (imgErr) {
+          console.error("Image generation skipped:", imgErr);
+          // Continue without image - not critical
+        }
+      }
+      
       // Save AI response
       await storage.createChatMessage({
         userId,
         sessionId: sessionId || null,
         role: "assistant",
         content: aiResponse,
-        attachments: null,
+        attachments,
       });
 
       // AUTO-LEARNING: Analyze message and automatically update user profile

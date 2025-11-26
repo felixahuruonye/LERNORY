@@ -623,6 +623,23 @@ export default function Chat() {
                     }`}
                     data-testid={`card-message-${msg.id}`}
                   >
+                    {msg.attachments?.images && msg.attachments.images.length > 0 && (
+                      <div className="mb-3 space-y-2">
+                        {msg.attachments.images.map((img: any, idx: number) => (
+                          <div key={idx} className="rounded-lg overflow-hidden" data-testid={`image-${msg.id}-${idx}`}>
+                            <img
+                              src={img.url}
+                              alt={img.title || "Generated image"}
+                              className="w-full h-auto max-h-64 object-cover rounded-lg"
+                              loading="lazy"
+                            />
+                            {img.title && (
+                              <p className="text-xs text-muted-foreground mt-1 italic">{img.title}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex justify-between items-start gap-3">
                       <p className="whitespace-pre-wrap break-words text-sm flex-1">
                         {msg.content}
