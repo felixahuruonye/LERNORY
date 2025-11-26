@@ -137,9 +137,6 @@ export default function WebsiteGenerator() {
     if (!selectedWebsiteData || !debugPrompt.trim()) return;
     
     setIsDebugging(true);
-    setDebugMessages(["🚀 Initializing Debug Mode..."]);
-    setShowDebugMode(true);
-    setDebugUpdatingFile(null);
     
     try {
       const res = await fetch(`/api/websites/${selectedWebsiteData.id}/debug`, {
@@ -148,44 +145,9 @@ export default function WebsiteGenerator() {
         body: JSON.stringify({ debugPrompt }),
       });
 
-      if (!res.ok) throw new Error("Debug request failed");
-      if (!res.body) throw new Error("No response stream");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.done) {
-                // Debug complete
-                break;
-              }
-              if (data.error) {
-                throw new Error(data.error);
-              }
-              if (data.message) {
-                setDebugMessages((prev) => [...prev, data.message]);
-              }
-              if (data.file) {
-                // Set blinking light for file being updated
-                setDebugUpdatingFile(data.file as any);
-              }
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-        }
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Debug failed");
       }
 
       await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
@@ -193,8 +155,8 @@ export default function WebsiteGenerator() {
       setShowPreview(true);
 
       toast({
-        title: "✅ Debug Complete!",
-        description: "LEARNORY AI has fixed your website. Preview the changes!",
+        title: "✅ Fixed!",
+        description: "Your website is ready to preview.",
       });
     } catch (error: any) {
       setIsDebugging(false);

@@ -680,18 +680,6 @@ If they ask about similar topics or reference past conversations, remind them wh
         return res.status(404).json({ message: "Website not found" });
       }
 
-      // Set up SSE headers for streaming
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      
-      const sendMessage = (message: string, file?: string) => {
-        res.write(`data: ${JSON.stringify({ message, file })}\n\n`);
-      };
-
-      sendMessage("🔍 Analyzing your code with LEARNORY AI...");
-      
       // Get updated code from LEARNORY AI
       const debugResult = await debugCodeWithLEARNORY(
         website.htmlCode,
@@ -700,51 +688,23 @@ If they ask about similar topics or reference past conversations, remind them wh
         debugPrompt
       );
 
-      // Stream the fixes being applied
-      const htmlUpdated = debugResult.htmlCode !== website.htmlCode;
-      const cssUpdated = debugResult.cssCode !== website.cssCode;
-      const jsUpdated = (debugResult.jsCode || "") !== (website.jsCode || "");
-
-      if (htmlUpdated) {
-        sendMessage("📝 Fixing HTML structure...", "html");
-        await new Promise(r => setTimeout(r, 800));
-        sendMessage("✅ HTML updated with proper structure and semantics");
-      }
-
-      if (cssUpdated) {
-        sendMessage("🎨 Fixing CSS styles...", "css");
-        await new Promise(r => setTimeout(r, 800));
-        sendMessage("✅ CSS updated with responsive design fixes");
-      }
-
-      if (jsUpdated) {
-        sendMessage("⚙️ Fixing JavaScript functionality...", "js");
-        await new Promise(r => setTimeout(r, 800));
-        sendMessage("✅ JavaScript updated with working event handlers");
-      }
-
-      if (!htmlUpdated && !cssUpdated && !jsUpdated) {
-        sendMessage("✨ Code analysis complete - no changes needed or all optimal");
-      }
-
-      sendMessage("🚀 Saving changes to database...");
-
       // Save updated code to database
-      const updated = await storage.updateGeneratedWebsite(req.params.id, {
+      await storage.updateGeneratedWebsite(req.params.id, {
         htmlCode: debugResult.htmlCode,
         cssCode: debugResult.cssCode,
         jsCode: debugResult.jsCode,
       });
 
-      sendMessage("✨ All fixes applied successfully!");
-      sendMessage("📌 Your website is now ready to preview");
-
-      res.write('data: {"done": true}\n\n');
-      res.end();
+      res.json({
+        success: true,
+        message: "Website fixed successfully!",
+      });
     } catch (error) {
       console.error("Error debugging code:", error);
-      res.write(`data: ${JSON.stringify({ error: `Failed to debug: ${error instanceof Error ? error.message : "Unknown error"}` })}\n\n`);
-      res.end();
+      res.status(500).json({
+        success: false,
+        message: `Failed to debug: ${error instanceof Error ? error.message : "Unknown error"}`
+      });
     }
   });
 
