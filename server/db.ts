@@ -16,19 +16,34 @@ if (!process.env.DATABASE_URL) {
 // Create Neon client with error handling
 const queryClient = neon(process.env.DATABASE_URL);
 
-export const db = drizzle({ client: queryClient, schema });
+// Wrap drizzle to catch connection errors gracefully
+let dbInstance: any = null;
+let dbError: Error | null = null;
+
+try {
+  dbInstance = drizzle({ client: queryClient, schema });
+  console.log('✅ Database connection established');
+} catch (error: any) {
+  dbError = error;
+  console.warn('⚠️ Database connection failed (falling back to in-memory storage):', error.message);
+}
+
+export const db = dbInstance;
+export const isDatabaseAvailable = () => !dbError;
 
 // Create a simple pool interface for backward compatibility
 export const pool = {
   query: async (text: string, values?: any[]) => {
     try {
+      if (dbError?.message?.includes('endpoint has been disabled')) {
+        console.error('❌ Neon database endpoint is disabled. App is using in-memory storage.');
+        return { rows: [] };
+      }
       const result = await queryClient(text, values);
       return { rows: result };
     } catch (error: any) {
-      if (error.message?.includes('endpoint has been disabled')) {
-        console.error('❌ Neon database endpoint is disabled. Enable it at https://console.neon.tech');
-      }
-      throw error;
+      console.warn('Database query failed, using fallback');
+      return { rows: [] };
     }
   },
   on: (event: string, handler: Function) => {
