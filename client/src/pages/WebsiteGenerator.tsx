@@ -139,18 +139,21 @@ export default function WebsiteGenerator() {
     setIsDebugging(true);
     setDebugMessages([
       "🚀 Initializing Debug Mode...",
-      "🔍 Analyzing your code...",
-      "⏳ Processing with LEARNORY AI..."
+      "🔍 Analyzing your code with LEARNORY AI...",
+      "⏳ This may take 10-15 seconds..."
     ]);
     setShowDebugMode(true);
     setDebugUpdatingFile(null);
     
     try {
+      console.log("📤 Sending debug request:", debugPrompt);
       const res = await fetch(`/api/websites/${selectedWebsiteData.id}/debug`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ debugPrompt }),
       });
+
+      console.log("📥 Debug response status:", res.status);
 
       if (!res.ok) {
         const error = await res.json();
@@ -158,30 +161,34 @@ export default function WebsiteGenerator() {
       }
 
       const data = await res.json();
+      console.log("✅ Debug result:", data);
 
-      setDebugMessages((prev) => [
-        ...prev,
-        data.changes?.htmlUpdated ? "📝 HTML structure fixed" : "",
-        data.changes?.cssUpdated ? "🎨 CSS styles updated" : "",
-        data.changes?.jsUpdated ? "⚙️ JavaScript functionality restored" : "",
-        "🚀 Saving changes...",
-        "✨ All fixes applied successfully!",
-        "📌 Your website is now ready to preview"
-      ].filter(Boolean));
-
-      // Show visual feedback for each file type
+      const messages: string[] = [];
       if (data.changes?.htmlUpdated) {
+        messages.push("📝 HTML structure fixed");
         setDebugUpdatingFile("html");
         setTimeout(() => setDebugUpdatingFile(null), 800);
       }
       if (data.changes?.cssUpdated) {
+        messages.push("🎨 CSS styles updated");
         setDebugUpdatingFile("css");
         setTimeout(() => setDebugUpdatingFile(null), 800);
       }
       if (data.changes?.jsUpdated) {
+        messages.push("⚙️ JavaScript functionality restored");
         setDebugUpdatingFile("js");
         setTimeout(() => setDebugUpdatingFile(null), 800);
       }
+      
+      if (messages.length === 0) {
+        messages.push("✨ Code analysis complete");
+      }
+
+      messages.push("🚀 Saving changes to database...");
+      messages.push("✨ All fixes applied successfully!");
+      messages.push("📌 Your website is now ready to preview");
+
+      setDebugMessages((prev) => [...prev, ...messages]);
 
       await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
       
@@ -196,7 +203,8 @@ export default function WebsiteGenerator() {
       });
     } catch (error: any) {
       setIsDebugging(false);
-      console.error("Debug error:", error);
+      console.error("❌ Debug error:", error);
+      setDebugMessages((prev) => [...prev, `❌ Error: ${error.message}`]);
       toast({
         title: "Debug Error",
         description: error.message || "Failed to debug website",
