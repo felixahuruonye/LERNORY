@@ -1949,8 +1949,22 @@ KEY_WORDS: [keywords separated by commas]`,
       const userId = req.user.claims.sub;
       const { title, audioData, transcript, duration, sessionId } = req.body;
 
+      console.log("Saving recording for user:", userId, "Title:", title, "Transcript length:", transcript?.length);
+
       if (!title?.trim()) {
         return res.status(400).json({ message: 'Title is required' });
+      }
+
+      // Ensure transcript is an array
+      let transcriptArray = [];
+      if (Array.isArray(transcript)) {
+        transcriptArray = transcript;
+      } else if (typeof transcript === 'string') {
+        try {
+          transcriptArray = JSON.parse(transcript);
+        } catch {
+          transcriptArray = [];
+        }
       }
 
       const recording = await storage.createRecording({
@@ -1958,10 +1972,11 @@ KEY_WORDS: [keywords separated by commas]`,
         sessionId: sessionId || null,
         title,
         audioData: audioData || '',
-        transcript: transcript || [],
+        transcript: transcriptArray,
         duration: duration || 0,
       });
 
+      console.log("Recording created successfully:", recording.id);
       res.json(recording);
     } catch (error: any) {
       console.error("Error creating recording:", error);
