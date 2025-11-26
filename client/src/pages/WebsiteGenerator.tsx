@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Heart, Trash2, Copy, ChevronLeft, Eye, Code2, BookOpen, X } from "lucide-react";
+import { Loader2, Heart, Trash2, Copy, ChevronLeft, Eye, Code2, BookOpen, X, Zap, Play } from "lucide-react";
 
 export default function WebsiteGenerator() {
   const [, setLocation] = useLocation();
@@ -17,6 +17,12 @@ export default function WebsiteGenerator() {
   const [selectedWebsite, setSelectedWebsite] = useState<string | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [explanation, setExplanation] = useState("");
+  const [showDebugMode, setShowDebugMode] = useState(false);
+  const [debugPrompt, setDebugPrompt] = useState("");
+  const [debugMessages, setDebugMessages] = useState<string[]>([]);
+  const [isDebugging, setIsDebugging] = useState(false);
+  const [debugUpdatingFile, setDebugUpdatingFile] = useState<"html" | "css" | "js" | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Fetch all websites
   const { data: websites = [], isLoading } = useQuery({
@@ -97,6 +103,99 @@ export default function WebsiteGenerator() {
       });
     },
   });
+
+  // Debug mode mutation
+  const debugMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/websites/${id}/debug`, { debugPrompt });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setDebugMessages([]);
+      setIsDebugging(false);
+      setShowPreview(true);
+      if (data.updates) {
+        queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
+        toast({
+          title: "✅ Debug Complete!",
+          description: "Your website has been fixed by LEARNORY AI. Preview the changes!",
+        });
+      }
+    },
+    onError: (error: any) => {
+      const message = error?.message || error?.error || "Debug failed";
+      toast({
+        title: "Debug Failed",
+        description: message,
+        variant: "destructive",
+      });
+      setIsDebugging(false);
+    },
+  });
+
+  const startDebug = async () => {
+    if (!selectedWebsiteData || !debugPrompt.trim()) return;
+    
+    setIsDebugging(true);
+    setDebugMessages(["🚀 Initializing Debug Mode..."]);
+    setShowDebugMode(true);
+    setDebugUpdatingFile(null);
+    
+    try {
+      const res = await fetch(`/api/websites/${selectedWebsiteData.id}/debug`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ debugPrompt }),
+      });
+
+      if (!res.body) throw new Error("No response body");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.message) {
+                setDebugMessages((prev) => [...prev, data.message]);
+              }
+              if (data.file) {
+                setDebugUpdatingFile(data.file as any);
+                setTimeout(() => setDebugUpdatingFile(null), 1000);
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
+      setIsDebugging(false);
+      setShowPreview(true);
+      toast({
+        title: "✅ Debug Complete!",
+        description: "LEARNORY AI has fixed your website. Click Preview to see the changes!",
+      });
+    } catch (error: any) {
+      setIsDebugging(false);
+      toast({
+        title: "Debug Error",
+        description: error.message || "Failed to debug website",
+        variant: "destructive",
+      });
+    }
+  };
 
   const selectedWebsiteData = websites.find((w: any) => w.id === selectedWebsite);
 
@@ -271,16 +370,26 @@ export default function WebsiteGenerator() {
 
               {/* Tabs - Preview & Code */}
               <Tabs defaultValue="preview" className="space-y-0">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="preview" data-testid="tab-preview">
                     <Eye className="h-4 w-4 mr-2" />
                     Preview
                   </TabsTrigger>
-                  <TabsTrigger value="html" data-testid="tab-html">
+                  <TabsTrigger value="html" data-testid="tab-html" className="relative">
                     HTML
+                    {debugUpdatingFile === "html" && (
+                      <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    )}
                   </TabsTrigger>
-                  <TabsTrigger value="css" data-testid="tab-css">
+                  <TabsTrigger value="css" data-testid="tab-css" className="relative">
                     CSS
+                    {debugUpdatingFile === "css" && (
+                      <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="debug" data-testid="tab-debug">
+                    <Zap className="h-4 w-4 mr-2" />
+                    Debug
                   </TabsTrigger>
                 </TabsList>
 
@@ -330,6 +439,65 @@ export default function WebsiteGenerator() {
                     <pre className="text-xs overflow-x-auto max-h-[600px] overflow-y-auto bg-muted/50 p-4 rounded">
                       <code>{selectedWebsiteData.cssCode}</code>
                     </pre>
+                  </Card>
+                </TabsContent>
+
+                {/* Debug Tab */}
+                <TabsContent value="debug" className="mt-4">
+                  <Card className="p-4 space-y-4">
+                    <div>
+                      <label className="text-sm font-semibold block mb-2">What's broken? (Tell LEARNORY AI)</label>
+                      <Textarea
+                        placeholder="e.g., 'The button doesn't respond to clicks', 'The layout breaks on mobile', 'The colors don't match the design'..."
+                        value={debugPrompt}
+                        onChange={(e) => setDebugPrompt(e.target.value)}
+                        className="resize-none min-h-[80px]"
+                        disabled={isDebugging}
+                        data-testid="input-debug-prompt"
+                      />
+                    </div>
+
+                    <Button
+                      onClick={() => startDebug()}
+                      disabled={!debugPrompt.trim() || isDebugging}
+                      className="w-full hover-elevate active-elevate-2 bg-green-600 hover:bg-green-700 text-white"
+                      data-testid="button-start-debug"
+                    >
+                      {isDebugging ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          LEARNORY AI is fixing...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4 mr-2" />
+                          Debug with LEARNORY AI
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Debug Chat Messages */}
+                    {debugMessages.length > 0 && (
+                      <div className="bg-muted/50 rounded-lg p-4 space-y-2 max-h-[300px] overflow-y-auto">
+                        {debugMessages.map((msg, idx) => (
+                          <div key={idx} className="text-sm text-foreground flex items-start gap-2">
+                            <span className="text-xs text-muted-foreground min-w-fit">→</span>
+                            <span>{msg}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {showPreview && !isDebugging && (
+                      <Button
+                        onClick={() => setLocation(`/view/${selectedWebsiteData.id}`)}
+                        className="w-full hover-elevate active-elevate-2 bg-blue-600 hover:bg-blue-700 text-white"
+                        data-testid="button-preview-debug-result"
+                      >
+                        <Play className="h-4 w-4 mr-2" />
+                        Preview Fixed Website
+                      </Button>
+                    )}
                   </Card>
                 </TabsContent>
               </Tabs>

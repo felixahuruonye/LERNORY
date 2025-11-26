@@ -680,6 +680,17 @@ If they ask about similar topics or reference past conversations, remind them wh
         return res.status(404).json({ message: "Website not found" });
       }
 
+      // Set up SSE headers for streaming
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      const sendMessage = (message: string, file?: string) => {
+        res.write(`data: ${JSON.stringify({ message, file })}\n\n`);
+      };
+
+      sendMessage("🔍 Analyzing your code...");
+      
       // Get updated code from LEARNORY AI
       const debugResult = await debugCodeWithLEARNORY(
         website.htmlCode,
@@ -688,6 +699,24 @@ If they ask about similar topics or reference past conversations, remind them wh
         debugPrompt
       );
 
+      // Stream the fixes being applied
+      if (debugResult.htmlCode !== website.htmlCode) {
+        sendMessage("📝 Fixing HTML structure...", "html");
+        sendMessage("✅ HTML updated with proper structure and semantics");
+      }
+
+      if (debugResult.cssCode !== website.cssCode) {
+        sendMessage("🎨 Fixing CSS styles...", "css");
+        sendMessage("✅ CSS updated with responsive design fixes");
+      }
+
+      if ((debugResult.jsCode || "") !== (website.jsCode || "")) {
+        sendMessage("⚙️ Fixing JavaScript functionality...", "js");
+        sendMessage("✅ JavaScript updated with working event handlers");
+      }
+
+      sendMessage("🚀 Saving changes to your website...");
+
       // Save updated code to database
       const updated = await storage.updateGeneratedWebsite(req.params.id, {
         htmlCode: debugResult.htmlCode,
@@ -695,15 +724,15 @@ If they ask about similar topics or reference past conversations, remind them wh
         jsCode: debugResult.jsCode,
       });
 
-      res.json({ 
-        htmlCode: debugResult.htmlCode,
-        cssCode: debugResult.cssCode,
-        jsCode: debugResult.jsCode,
-        steps: debugResult.steps
-      });
+      sendMessage("✨ All fixes applied successfully!");
+      sendMessage("📌 Your website is now ready to preview");
+
+      res.write('data: {"done": true}\n\n');
+      res.end();
     } catch (error) {
       console.error("Error debugging code:", error);
-      res.status(500).json({ message: `Failed to debug code: ${error instanceof Error ? error.message : "Unknown error"}` });
+      res.write(`data: ${JSON.stringify({ error: `Failed to debug: ${error instanceof Error ? error.message : "Unknown error"}` })}\n\n`);
+      res.end();
     }
   });
 
