@@ -1462,8 +1462,10 @@ KEY_WORDS: [keywords separated by commas]`,
         return res.status(400).json({ message: "Image ID is required" });
       }
 
+      console.log(`🗑️ Deleting image ${imageId} for user ${userId}`);
       await storage.deleteGeneratedImage(userId, imageId);
-      res.json({ message: "Image deleted successfully" });
+      console.log(`✅ Image ${imageId} deleted successfully`);
+      res.json({ message: "Image deleted successfully", id: imageId });
     } catch (error) {
       console.error("Error deleting image:", error);
       res.status(500).json({ message: "Failed to delete image" });

@@ -20,16 +20,25 @@ export default function ImageGallery() {
 
   const deleteImageMutation = useMutation({
     mutationFn: async (imageId: string) => {
-      const response = await apiRequest("DELETE", `/api/generated-images/${imageId}`, {});
-      return response.json();
+      try {
+        const response = await apiRequest("DELETE", `/api/generated-images/${imageId}`, {});
+        if (!response.ok) {
+          throw new Error(`Delete failed with status ${response.status}`);
+        }
+        return response.json();
+      } catch (error) {
+        console.error("Delete error:", error);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
       setSelectedImage(null);
-      toast({ title: "Image deleted", description: "Image removed from gallery" });
+      toast({ title: "✅ Image deleted", description: "Image removed from gallery" });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete image", variant: "destructive" });
+    onError: (error) => {
+      console.error("Delete mutation error:", error);
+      toast({ title: "❌ Error", description: "Failed to delete image", variant: "destructive" });
     },
   });
 
