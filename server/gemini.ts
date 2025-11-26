@@ -400,3 +400,66 @@ export async function analyzeFileWithGeminiVision(buffer: Buffer, mimeType: stri
     return { extractedText: "" };
   }
 }
+
+interface GeneratedLessonData {
+  title: string;
+  objectives: string[];
+  keyPoints: string[];
+  summary: string;
+}
+
+export async function generateLessonFromTextWithGemini(text: string): Promise<GeneratedLessonData> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY environment variable is not set");
+    }
+
+    console.log("🎓 Generating lesson from text with Gemini...");
+
+    const prompt = `You are an expert educational content creator. Analyze the following text and create a structured lesson.
+
+Text to analyze:
+${text}
+
+Generate ONLY valid JSON (no other text, no markdown):
+{
+  "title": "Lesson Title (concise, max 10 words)",
+  "objectives": ["Objective 1", "Objective 2", "Objective 3"],
+  "keyPoints": ["Key point 1", "Key point 2", "Key point 3", "Key point 4"],
+  "summary": "A comprehensive summary of the entire lesson (2-3 sentences)"
+}
+
+Make the objectives, key points, and summary educational, clear, and useful for students.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error("Empty response from Gemini");
+    }
+
+    console.log("📝 Raw Gemini response (first 300 chars):", responseText.substring(0, 300));
+
+    // Extract JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Could not extract JSON from Gemini response");
+    }
+
+    const lessonData = JSON.parse(jsonMatch[0]);
+    console.log("✅ Lesson generated successfully");
+
+    return {
+      title: lessonData.title || "Generated Lesson",
+      objectives: Array.isArray(lessonData.objectives) ? lessonData.objectives : [],
+      keyPoints: Array.isArray(lessonData.keyPoints) ? lessonData.keyPoints : [],
+      summary: lessonData.summary || "",
+    };
+  } catch (error) {
+    console.error("❌ Error generating lesson from text:", error);
+    throw error;
+  }
+}
