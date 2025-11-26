@@ -187,6 +187,90 @@ export default function CBTModeEnhanced() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Loading view - LEARNORY generating questions
+  if (view === 'loading') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          {/* Anti-clockwise rotating timer circle */}
+          <div className="mb-12 relative w-48 h-48 mx-auto">
+            {/* Background circle */}
+            <svg className="w-full h-full" viewBox="0 0 200 200">
+              {/* Static background circle */}
+              <circle cx="100" cy="100" r="95" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
+              
+              {/* Rotating progress circle (anti-clockwise) */}
+              <circle
+                cx="100"
+                cy="100"
+                r="95"
+                fill="none"
+                stroke="url(#gradient)"
+                strokeWidth="3"
+                strokeDasharray={`${(loadingProgress / 100) * 597} 597`}
+                strokeLinecap="round"
+                style={{
+                  transform: 'rotate(-90deg)',
+                  transformOrigin: '100px 100px',
+                  transition: 'stroke-dasharray 0.3s ease',
+                }}
+              />
+              
+              {/* Gradient definition */}
+              <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3b82f6" />
+                  <stop offset="100%" stopColor="#8b5cf6" />
+                </linearGradient>
+              </defs>
+            </svg>
+
+            {/* Center text - percentage */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="text-5xl font-bold text-white">{Math.min(loadingProgress, 100)}%</div>
+              <div className="text-xs text-blue-300 mt-1">Preparing Exam</div>
+            </div>
+          </div>
+
+          {/* Message */}
+          <div className="space-y-4 mb-12">
+            <h2 className="text-3xl font-bold text-white">
+              LEARNORY Getting Your Questions Ready
+            </h2>
+            <p className="text-lg text-blue-200">
+              Please wait for the exam to start...
+            </p>
+            <p className="text-sm text-blue-300 mt-4">
+              Generating {selectedSubjects.length * 50} questions across {selectedSubjects.length} subject{selectedSubjects.length > 1 ? 's' : ''} for {selectedExamType}
+            </p>
+          </div>
+
+          {/* Subject indicators */}
+          <div className="space-y-2">
+            <p className="text-xs text-blue-300 uppercase tracking-widest">Subjects</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {selectedSubjects.map((subject) => (
+                <span
+                  key={subject}
+                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full animate-pulse"
+                >
+                  {subject}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Animated dots */}
+          <div className="mt-12 flex justify-center gap-2">
+            <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></span>
+            <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+            <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Results view
   if (view === 'results' && examResult) {
     return (
