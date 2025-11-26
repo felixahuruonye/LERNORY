@@ -115,8 +115,9 @@ export default function ImageGallery() {
                   <img
                     src={selectedImage.imageUrl}
                     alt={selectedImage.prompt}
-                    className="w-full h-auto"
+                    className="w-full h-auto max-h-96 object-contain"
                     data-testid={`img-detail-${selectedImage.id}`}
+                    loading="lazy"
                   />
                 </div>
 
@@ -174,12 +175,13 @@ export default function ImageGallery() {
                     onClick={() => setSelectedImage(image)}
                     data-testid={`card-image-${image.id}`}
                   >
-                    <div className="aspect-video overflow-hidden bg-muted relative">
+                    <div className="aspect-square overflow-hidden bg-muted relative">
                       <img
                         src={image.imageUrl}
                         alt={image.prompt}
                         className="w-full h-full object-cover hover:opacity-80 transition-opacity"
                         data-testid={`img-gallery-${image.id}`}
+                        loading="lazy"
                       />
                       <Button
                         variant="destructive"

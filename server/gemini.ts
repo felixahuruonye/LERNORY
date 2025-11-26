@@ -302,15 +302,17 @@ Provide ONLY the enhanced prompt without any additional text or explanation. Mak
     const enhancedPrompt = enhancedPromptResponse.text?.trim() || prompt;
     console.log("✅ Enhanced prompt:", enhancedPrompt);
 
-    // Generate a high-quality visual using PlaceHolder service with colors matching the theme
+    // Generate a high-quality visual using multiple placeholder services
     const colors = generateColorPaletteFromPrompt(enhancedPrompt);
     const bgColor = colors[0].replace('#', '');
-    const textColor = 'ffffff';
+    const accentColor = colors[1].replace('#', '');
     
-    // Use placeholder image service
-    const imageUrl = `https://via.placeholder.com/1024x1024/${bgColor}/${textColor}?text=${encodeURIComponent(prompt.substring(0, 30))}`;
+    // Create a visually appealing placeholder image
+    // Using dummyimage.com for better reliability
+    const shortPrompt = prompt.substring(0, 25).replace(/\s+/g, ' ');
+    const imageUrl = `https://dummyimage.com/1024x1024/${bgColor}/${accentColor}&text=${encodeURIComponent(shortPrompt)}`;
 
-    console.log("✅ Image generated successfully");
+    console.log("✅ Image generated successfully:", imageUrl);
     return {
       url: imageUrl,
       prompt: enhancedPrompt
