@@ -1,43 +1,36 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, Monitor, Volume2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Clock, CheckCircle2, AlertCircle, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryClient, apiRequest } from '@/lib/queryClient';
 
 const EXAM_TYPES = [
   { id: 'jamb', label: 'JAMB UTME' },
   { id: 'waec', label: 'WAEC' },
   { id: 'neco', label: 'NECO' },
+  { id: 'sat', label: 'SAT' },
+  { id: 'gre', label: 'GRE' },
+  { id: 'gmat', label: 'GMAT' },
 ];
 
-const SUBJECTS: Record<string, string[]> = {
+const SUBJECTS_BY_EXAM: Record<string, string[]> = {
   jamb: ['English', 'Mathematics', 'Chemistry', 'Physics', 'Biology', 'Government'],
   waec: ['English', 'Mathematics', 'Chemistry', 'Physics', 'Biology', 'Government'],
   neco: ['English', 'Mathematics', 'Chemistry', 'Physics', 'Biology', 'Government'],
+  sat: ['Math', 'Reading', 'Writing'],
+  gre: ['Verbal', 'Quantitative', 'Analytical'],
+  gmat: ['Verbal', 'Quantitative', 'Analytical', 'Integrated Reasoning'],
 };
-
-const DURATIONS = [
-  { id: '30', label: '30 minutes' },
-  { id: '60', label: '1 hour' },
-  { id: '120', label: '2 hours' },
-  { id: '180', label: '3 hours (Full Exam)' },
-];
-
-// Complete QWERTY keyboard layout
-const KEYBOARD_ROWS = [
-  { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'], label: 'Numbers' },
-  { keys: ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'], label: 'QWERTY' },
-  { keys: ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'], label: 'ASDFGH...' },
-  { keys: ['Z', 'X', 'C', 'V', 'B', 'N', 'M'], label: 'ZXCVBN...' },
-  { keys: ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')'], label: 'Symbols' },
-];
 
 const mockQuestions = [
   {
     id: '1',
     subject: 'English',
-    number: 1,
     question: 'Which of the following is a synonym for "ubiquitous"?',
     options: [
       { id: 'A', text: 'Rare and uncommon' },
@@ -46,11 +39,11 @@ const mockQuestions = [
       { id: 'D', text: 'Unique and special' },
     ],
     correct: 'B',
+    explanation: 'Ubiquitous means present, appearing, or found everywhere. The correct answer is B.',
   },
   {
     id: '2',
     subject: 'Mathematics',
-    number: 2,
     question: 'What is the derivative of x² + 3x + 5?',
     options: [
       { id: 'A', text: '2x + 3' },
@@ -59,24 +52,79 @@ const mockQuestions = [
       { id: 'D', text: 'x² + 3' },
     ],
     correct: 'A',
+    explanation: 'Using power rule: d/dx(x²) = 2x, d/dx(3x) = 3, d/dx(5) = 0. Result: 2x + 3',
+  },
+  {
+    id: '3',
+    subject: 'Physics',
+    question: 'What is the SI unit of force?',
+    options: [
+      { id: 'A', text: 'Kilogram' },
+      { id: 'B', text: 'Newton' },
+      { id: 'C', text: 'Pascal' },
+      { id: 'D', text: 'Joule' },
+    ],
+    correct: 'B',
+    explanation: 'The SI unit of force is Newton (N), defined as kg⋅m/s².',
+  },
+  {
+    id: '4',
+    subject: 'Chemistry',
+    question: 'What is the atomic number of Carbon?',
+    options: [
+      { id: 'A', text: '4' },
+      { id: 'B', text: '6' },
+      { id: 'C', text: '8' },
+      { id: 'D', text: '12' },
+    ],
+    correct: 'B',
+    explanation: 'Carbon has atomic number 6, with electron configuration 1s²2s²2p².',
+  },
+  {
+    id: '5',
+    subject: 'Biology',
+    question: 'Which organelle is the powerhouse of the cell?',
+    options: [
+      { id: 'A', text: 'Nucleus' },
+      { id: 'B', text: 'Ribosome' },
+      { id: 'C', text: 'Mitochondria' },
+      { id: 'D', text: 'Golgi apparatus' },
+    ],
+    correct: 'C',
+    explanation: 'Mitochondria produces ATP through cellular respiration, powering cellular functions.',
   },
 ];
 
+interface ExamResult {
+  totalQuestions: number;
+  correctAnswers: number;
+  score: number;
+  timeSpent: number;
+  answers: Array<{
+    questionId: string;
+    userAnswer: string;
+    correct: boolean;
+    explanation: string;
+  }>;
+  summary: string;
+}
+
 export default function CBTMode() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [examType, setExamType] = useState<string>('');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [duration, setDuration] = useState<string>('');
   const [isExamActive, setIsExamActive] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [lastKeyPressed, setLastKeyPressed] = useState<string>('');
-  const [keyPressedTime, setKeyPressedTime] = useState(0);
-  const monitorRef = useRef<HTMLDivElement>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [examResult, setExamResult] = useState<ExamResult | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
-  // Timer countdown
+  const startTime = new Date();
+
+  // Timer
   useEffect(() => {
     if (isExamActive && timeRemaining > 0) {
       const timer = setTimeout(() => setTimeRemaining(timeRemaining - 1), 1000);
@@ -86,84 +134,113 @@ export default function CBTMode() {
     }
   }, [isExamActive, timeRemaining]);
 
-  // Track mouse position
-  useEffect(() => {
-    if (!isExamActive) return;
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [isExamActive]);
-
-  // Handle keyboard input
+  // Keyboard input - A/B/C/D auto-advances to next question
   useEffect(() => {
     if (!isExamActive) return;
 
     const handleKeyPress = (e: KeyboardEvent) => {
       const key = e.key.toUpperCase();
-      setLastKeyPressed(key);
-      setKeyPressedTime(Date.now());
 
-      // A, B, C, D for answer selection
       if (['A', 'B', 'C', 'D'].includes(key)) {
-        setSelectedAnswer(key);
-        toast({ title: `Answer Selected: ${key}`, description: 'Press Arrow Keys to navigate' });
+        setAnswers((prev) => ({ ...prev, [mockQuestions[currentQuestionIndex].id]: key }));
+        toast({ description: `Answer selected: ${key}` });
+
+        // Auto-advance to next question
+        if (currentQuestionIndex < mockQuestions.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        } else {
+          handleEndExam();
+        }
+        e.preventDefault();
       }
 
       // Arrow keys for navigation
-      if (e.key === 'ArrowRight') {
-        setCurrentQuestion(Math.min(mockQuestions.length - 1, currentQuestion + 1));
+      if (e.key === 'ArrowRight' && currentQuestionIndex < mockQuestions.length - 1) {
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
+        e.preventDefault();
       }
-      if (e.key === 'ArrowLeft') {
-        setCurrentQuestion(Math.max(0, currentQuestion - 1));
+      if (e.key === 'ArrowLeft' && currentQuestionIndex > 0) {
+        setCurrentQuestionIndex(currentQuestionIndex - 1);
+        e.preventDefault();
       }
 
       // ESC to end exam
       if (e.key === 'Escape') {
         handleEndExam();
-      }
-
-      // Prevent default behavior for controlled keys
-      if (['A', 'B', 'C', 'D', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(key) || e.key.startsWith('Arrow')) {
         e.preventDefault();
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isExamActive, currentQuestion]);
+  }, [isExamActive, currentQuestionIndex]);
 
-  // Clear last key after animation
-  useEffect(() => {
-    if (keyPressedTime === 0) return;
-    const timer = setTimeout(() => setLastKeyPressed(''), 300);
-    return () => clearTimeout(timer);
-  }, [keyPressedTime]);
+  const handleStartExam = () => {
+    if (!examType || selectedSubjects.length === 0 || !duration) {
+      toast({
+        title: 'Error',
+        description: 'Please select exam type, subjects, and duration',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setTimeRemaining(parseInt(duration) * 60);
+    setIsExamActive(true);
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+    toast({ description: 'Exam started. Press A/B/C/D to answer. Arrow keys to navigate. ESC to end.' });
+  };
+
+  const handleEndExam = () => {
+    const endTime = new Date();
+    const timeSpent = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+
+    let correctCount = 0;
+    const resultAnswers = mockQuestions.map((q) => {
+      const isCorrect = answers[q.id] === q.correct;
+      if (isCorrect) correctCount++;
+      return {
+        questionId: q.id,
+        userAnswer: answers[q.id] || 'N/A',
+        correct: isCorrect,
+        explanation: q.explanation,
+      };
+    });
+
+    const score = Math.round((correctCount / mockQuestions.length) * 100);
+
+    setExamResult({
+      totalQuestions: mockQuestions.length,
+      correctAnswers: correctCount,
+      score,
+      timeSpent,
+      answers: resultAnswers,
+      summary: `You scored ${score}% (${correctCount}/${mockQuestions.length} correct). Time spent: ${Math.floor(timeSpent / 60)} minutes.`,
+    });
+
+    setIsExamActive(false);
+
+    // Store exam result in memory
+    if (user?.id) {
+      apiRequest('POST', '/api/memory/preferences', {
+        categoryId: 'exam_history',
+        itemKey: 'latest_exam',
+        value: JSON.stringify({
+          exam: examType,
+          subjects: selectedSubjects,
+          score,
+          date: new Date().toISOString(),
+        }),
+      }).catch(console.error);
+    }
+
+    toast({ title: 'Exam Completed!', description: `Your score: ${score}%` });
+  };
 
   const handleSubjectToggle = (subject: string) => {
     setSelectedSubjects((prev) =>
       prev.includes(subject) ? prev.filter((s) => s !== subject) : [...prev, subject]
     );
-  };
-
-  const handleStartExam = () => {
-    if (!examType || selectedSubjects.length === 0 || !duration) {
-      toast({ title: 'Error', description: 'Please select exam type, subjects, and duration', variant: 'destructive' });
-      return;
-    }
-    setTimeRemaining(parseInt(duration) * 60);
-    setIsExamActive(true);
-    setSelectedAnswer(null);
-    setCurrentQuestion(0);
-    toast({ title: 'Exam Started', description: 'Use A, B, C, D keys to answer • Arrow keys to navigate • ESC to end' });
-  };
-
-  const handleEndExam = () => {
-    setIsExamActive(false);
-    toast({ title: 'Exam Ended', description: 'Your answers have been submitted' });
   };
 
   const formatTime = (seconds: number) => {
@@ -173,30 +250,210 @@ export default function CBTMode() {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Dashboard
-  if (!isExamActive) {
+  // Exam Result Summary
+  if (examResult && !isExamActive) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-8">
+      <div className="min-h-screen bg-gradient-to-br from-background to-secondary/5 p-8">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
-            <Monitor className="w-10 h-10 text-blue-400" />
-            CBT Mode - Exam Simulation
-          </h1>
-          <p className="text-slate-300 mb-8">Realistic computer-based testing with keyboard & mouse control</p>
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-4xl font-bold flex items-center gap-3">
+              <CheckCircle2 className="w-10 h-10 text-green-500" />
+              Exam Summary - LEARNORY
+            </h1>
+            <Badge className="px-4 py-2 text-lg">{examResult.score}%</Badge>
+          </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            <Card className="bg-slate-800/50 border-slate-700 p-6">
-              <h2 className="text-xl font-semibold text-white mb-6">Exam Configuration</h2>
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground mb-2">Score</p>
+              <p className="text-3xl font-bold text-green-600">{examResult.score}%</p>
+            </Card>
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground mb-2">Correct Answers</p>
+              <p className="text-3xl font-bold">{examResult.correctAnswers}/{examResult.totalQuestions}</p>
+            </Card>
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground mb-2">Time Spent</p>
+              <p className="text-3xl font-bold">{Math.floor(examResult.timeSpent / 60)} min</p>
+            </Card>
+          </div>
 
+          <Card className="p-6 mb-8 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            <p className="text-lg font-semibold text-blue-900 dark:text-blue-100">Analysis</p>
+            <p className="text-blue-800 dark:text-blue-200 mt-2">{examResult.summary}</p>
+          </Card>
+
+          <div className="space-y-4 mb-8">
+            <h2 className="text-2xl font-bold flex items-center gap-2">
+              <BookOpen className="w-6 h-6" />
+              Detailed Results
+            </h2>
+            {examResult.answers.map((answer, idx) => (
+              <Card key={answer.questionId} className={`p-6 ${answer.correct ? 'border-green-200' : 'border-red-200'}`}>
+                <div className="flex gap-4">
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${answer.correct ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                    {answer.correct ? '✓' : '✗'}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold mb-2">Question {idx + 1}: {mockQuestions[idx].question}</p>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Your answer: <strong>{answer.userAnswer}</strong>
+                      {!answer.correct && <span className="text-red-600"> (Correct: {mockQuestions[idx].correct})</span>}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{answer.explanation}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="flex gap-4">
+            <Button onClick={() => { setExamResult(null); setExamType(''); }} className="flex-1">
+              Take Another Exam
+            </Button>
+            <Button onClick={() => setShowHistory(true)} variant="outline" className="flex-1">
+              View History
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Active Exam Interface
+  if (isExamActive) {
+    const currentQuestion = mockQuestions[currentQuestionIndex];
+    const answeredCount = Object.keys(answers).length;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 p-4 flex flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6 text-white">
+          <h1 className="text-2xl font-bold">LEARNORY CBT</h1>
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-red-500" />
+              <span className="text-2xl font-mono font-bold text-red-500">{formatTime(timeRemaining)}</span>
+            </div>
+            <div className="text-sm">
+              Progress: {answeredCount}/{mockQuestions.length}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-8 flex-1">
+          {/* Question Tracker (Left Sidebar) */}
+          <div className="w-32 bg-slate-800 rounded-lg p-4 overflow-y-auto">
+            <p className="text-sm font-semibold text-slate-300 mb-4">Questions</p>
+            <div className="grid grid-cols-4 gap-2">
+              {mockQuestions.map((q, idx) => (
+                <button
+                  key={q.id}
+                  onClick={() => setCurrentQuestionIndex(idx)}
+                  className={`w-8 h-8 rounded text-xs font-bold transition-all ${
+                    answers[q.id]
+                      ? 'bg-green-500 text-white'
+                      : currentQuestionIndex === idx
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                  data-testid={`btn-question-${idx + 1}`}
+                >
+                  {answers[q.id] ? '✓' : idx + 1}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1">
+            {/* Question Card */}
+            <Card className="bg-white dark:bg-slate-800 p-8 mb-6 min-h-96">
               <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-300 mb-2">Exam Type</label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Question {currentQuestionIndex + 1} of {mockQuestions.length} • {currentQuestion.subject}
+                </p>
+                <h2 className="text-2xl font-bold">{currentQuestion.question}</h2>
+              </div>
+
+              <div className="space-y-3">
+                {currentQuestion.options.map((option) => (
+                  <div
+                    key={option.id}
+                    className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      answers[currentQuestion.id] === option.id
+                        ? 'border-green-500 bg-green-50 dark:bg-green-950'
+                        : 'border-slate-300 dark:border-slate-600 hover:border-slate-400'
+                    }`}
+                    onClick={() => {
+                      setAnswers((prev) => ({ ...prev, [currentQuestion.id]: option.id }));
+                      if (currentQuestionIndex < mockQuestions.length - 1) {
+                        setCurrentQuestionIndex(currentQuestionIndex + 1);
+                      }
+                    }}
+                    data-testid={`option-${option.id}`}
+                  >
+                    <p className="font-bold">{option.id}. {option.text}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Navigation */}
+            <div className="flex gap-4">
+              <Button
+                onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
+                disabled={currentQuestionIndex === 0}
+                variant="outline"
+                className="flex-1"
+                data-testid="btn-previous"
+              >
+                ← Previous
+              </Button>
+              <Button
+                onClick={() => setCurrentQuestionIndex(Math.min(mockQuestions.length - 1, currentQuestionIndex + 1))}
+                disabled={currentQuestionIndex === mockQuestions.length - 1}
+                variant="outline"
+                className="flex-1"
+                data-testid="btn-next"
+              >
+                Next →
+              </Button>
+              <Button onClick={handleEndExam} variant="destructive" className="flex-1" data-testid="btn-submit-exam">
+                Submit Exam (ESC)
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Dashboard
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-8">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
+          <BookOpen className="w-10 h-10 text-blue-500" />
+          LEARNORY CBT Mode
+        </h1>
+        <p className="text-muted-foreground mb-8">Keyboard-only Computer-Based Testing. Press keys A-D to answer and auto-advance.</p>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Configuration */}
+          <Card className="p-6">
+            <h2 className="text-2xl font-bold mb-6">Exam Configuration</h2>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium mb-2">Exam Type</label>
                 <Select value={examType} onValueChange={setExamType}>
-                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                    <SelectValue placeholder="Select exam type" />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select exam" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-700 border-slate-600">
+                  <SelectContent>
                     {EXAM_TYPES.map((exam) => (
-                      <SelectItem key={exam.id} value={exam.id} className="text-white">
+                      <SelectItem key={exam.id} value={exam.id}>
                         {exam.label}
                       </SelectItem>
                     ))}
@@ -204,192 +461,71 @@ export default function CBTMode() {
                 </Select>
               </div>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
-                  <Clock className="w-4 h-4" /> Duration
-                </label>
+              <div>
+                <label className="block text-sm font-medium mb-3">Subjects</label>
+                {examType && SUBJECTS_BY_EXAM[examType]?.map((subject) => (
+                  <label key={subject} className="flex items-center gap-3 mb-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedSubjects.includes(subject)}
+                      onChange={() => handleSubjectToggle(subject)}
+                    />
+                    <span>{subject}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Duration</label>
                 <Select value={duration} onValueChange={setDuration}>
-                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                  <SelectTrigger>
                     <SelectValue placeholder="Select duration" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-700 border-slate-600">
-                    {DURATIONS.map((dur) => (
-                      <SelectItem key={dur.id} value={dur.id} className="text-white">
-                        {dur.label}
-                      </SelectItem>
-                    ))}
+                  <SelectContent>
+                    <SelectItem value="30">30 minutes</SelectItem>
+                    <SelectItem value="60">1 hour</SelectItem>
+                    <SelectItem value="120">2 hours</SelectItem>
+                    <SelectItem value="180">3 hours</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="mb-8">
-                <label className="block text-sm font-medium text-slate-300 mb-3">Subjects</label>
-                <div className="space-y-2">
-                  {examType && SUBJECTS[examType]?.map((subject) => (
-                    <label key={subject} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-slate-700/50">
-                      <input
-                        type="checkbox"
-                        checked={selectedSubjects.includes(subject)}
-                        onChange={() => handleSubjectToggle(subject)}
-                        className="w-4 h-4 rounded"
-                      />
-                      <span className="text-slate-300">{subject}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <Button
-                onClick={handleStartExam}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg"
-                data-testid="button-start-exam"
-              >
+              <Button onClick={handleStartExam} className="w-full text-lg py-6" data-testid="btn-start-exam">
                 Start Exam
               </Button>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 border-blue-700/50 p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">How to Use</h3>
-              <ul className="space-y-3 text-slate-300 text-sm">
-                <li className="flex gap-3">
-                  <Monitor className="w-5 h-5 text-blue-400 flex-shrink-0" />
-                  <span><strong>Monitor is NOT touchscreen</strong> - use keyboard & mouse only</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="w-5 h-5 text-blue-400 flex-shrink-0 font-bold">⌨️</span>
-                  <span><strong>Press A, B, C, D</strong> to select answers</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="w-5 h-5 text-blue-400 flex-shrink-0 font-bold">⬅️➡️</span>
-                  <span><strong>Arrow keys</strong> to navigate questions</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="w-5 h-5 text-blue-400 flex-shrink-0 font-bold">🖱️</span>
-                  <span><strong>Mouse position</strong> tracked (visualization only)</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="w-5 h-5 text-blue-400 flex-shrink-0 font-bold">ESC</span>
-                  <span><strong>Press ESC</strong> to end exam</span>
-                </li>
-              </ul>
-            </Card>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Exam Interface
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
-        {/* Monitor Frame */}
-        <div className="w-full max-w-5xl">
-          <div className="bg-gradient-to-b from-slate-800 to-black rounded-2xl shadow-2xl p-2 border-4 border-slate-700">
-            {/* Monitor Bezel */}
-            <div className="bg-slate-600 rounded-xl p-6">
-              {/* Screen Content - NO TOUCH SCREEN */}
-              <div 
-                ref={monitorRef}
-                className="bg-white rounded-lg p-8 min-h-96 shadow-xl cursor-default"
-                style={{ pointerEvents: 'none' }} // Disable all pointer events on monitor
-              >
-                <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-slate-300">
-                  <span className="text-lg font-bold text-slate-700" data-testid="text-question-number">
-                    Question {currentQuestion + 1} of {mockQuestions.length}
-                  </span>
-                  <span className="text-3xl font-bold text-red-600 tabular-nums" data-testid="text-timer">
-                    {formatTime(timeRemaining)}
-                  </span>
-                </div>
-
-                <div className="mb-8">
-                  <p className="text-xl font-semibold text-slate-800 mb-8">
-                    {mockQuestions[currentQuestion]?.question}
-                  </p>
-
-                  <div className="space-y-4">
-                    {mockQuestions[currentQuestion]?.options.map((option) => (
-                      <div
-                        key={option.id}
-                        className={`flex items-center p-4 border-3 rounded-lg font-medium text-lg transition-all ${
-                          selectedAnswer === option.id
-                            ? 'border-green-500 bg-green-50 text-green-900'
-                            : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
-                        }`}
-                      >
-                        <span className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-700 text-white mr-4 font-bold flex-shrink-0">
-                          {option.id}
-                        </span>
-                        <span>{option.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="text-center text-sm text-slate-500">
-                  Press A, B, C, or D to select • Use Arrow Keys to navigate
-                </div>
-              </div>
             </div>
+          </Card>
 
-            {/* Monitor Stand */}
-            <div className="h-6 bg-gradient-to-b from-slate-600 to-slate-700 rounded-b-xl flex items-center justify-center">
-              <div className="w-40 h-2 bg-slate-500 rounded"></div>
-            </div>
-          </div>
-
-          {/* Keyboard */}
-          <div className="mt-8 bg-gradient-to-b from-slate-800 to-slate-900 p-6 rounded-xl border-2 border-slate-700 shadow-2xl">
-            <div className="text-white text-sm font-semibold mb-4 flex items-center gap-2">
-              <span className="text-base">⌨️ KEYBOARD</span>
-              {lastKeyPressed && (
-                <span className="ml-auto bg-green-500 px-3 py-1 rounded text-white text-sm animate-pulse">
-                  Last Key: {lastKeyPressed}
-                </span>
-              )}
-            </div>
-
-            {KEYBOARD_ROWS.map((row, rowIndex) => (
-              <div key={rowIndex} className="flex gap-2 mb-3 justify-center">
-                {row.keys.map((key) => (
-                  <button
-                    key={key}
-                    className={`w-10 h-10 rounded font-bold text-xs transition-all transform ${
-                      lastKeyPressed === key
-                        ? 'bg-green-500 scale-95 text-white shadow-lg'
-                        : 'bg-slate-700 text-slate-200 hover:bg-slate-600 active:scale-95'
-                    }`}
-                    onMouseDown={() => {
-                      setLastKeyPressed(key);
-                      if (['A', 'B', 'C', 'D'].includes(key)) {
-                        setSelectedAnswer(key);
-                      }
-                    }}
-                    onMouseUp={() => setLastKeyPressed('')}
-                    data-testid={`key-${key}`}
-                  >
-                    {key}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* Mouse Visualization */}
-          <div className="mt-6 flex gap-4 items-center justify-center">
-            <div className="text-slate-300 text-sm font-semibold">🖱️ Mouse Position:</div>
-            <div className="bg-slate-800 px-4 py-2 rounded-lg border border-slate-600 text-slate-300 text-sm font-mono">
-              X: {mousePos.x} | Y: {mousePos.y}
-            </div>
-            <Button
-              onClick={handleEndExam}
-              className="ml-auto bg-red-600 hover:bg-red-700 text-white"
-              data-testid="button-end-exam"
-            >
-              ESC - End Exam
-            </Button>
-          </div>
+          {/* Instructions */}
+          <Card className="p-6 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            <h3 className="text-xl font-bold mb-4 text-blue-900 dark:text-blue-100">How to Use</h3>
+            <ul className="space-y-3 text-sm text-blue-800 dark:text-blue-200">
+              <li className="flex gap-3">
+                <span className="font-bold">⌨️</span>
+                <span><strong>A, B, C, D:</strong> Select answer and auto-advance</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold">⬅️➡️</span>
+                <span><strong>Arrow keys:</strong> Navigate between questions</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold">🟩</span>
+                <span><strong>Green number:</strong> Question answered</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold">⬜</span>
+                <span><strong>Blank number:</strong> Question not answered</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold">ESC</span>
+                <span><strong>End exam:</strong> Submit and see results</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold">📊</span>
+                <span><strong>Summary:</strong> Gemini-powered analysis & explanations</span>
+              </li>
+            </ul>
+          </Card>
         </div>
       </div>
     </div>
