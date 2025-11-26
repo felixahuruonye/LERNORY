@@ -20,25 +20,37 @@ export default function ImageGallery() {
 
   const deleteImageMutation = useMutation({
     mutationFn: async (imageId: string) => {
+      console.log("🗑️ Starting delete for image:", imageId);
       try {
-        const response = await apiRequest("DELETE", `/api/generated-images/${imageId}`, {});
+        const response = await fetch(`/api/generated-images/${imageId}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        
+        console.log("Delete response status:", response.status);
+        
         if (!response.ok) {
-          throw new Error(`Delete failed with status ${response.status}`);
+          const error = await response.text();
+          throw new Error(`Delete failed: ${response.status} - ${error}`);
         }
-        return response.json();
+        
+        const data = await response.json();
+        console.log("✅ Delete successful:", data);
+        return data;
       } catch (error) {
-        console.error("Delete error:", error);
+        console.error("❌ Delete error:", error);
         throw error;
       }
     },
     onSuccess: () => {
+      console.log("Invalidating query cache...");
       queryClient.invalidateQueries({ queryKey: ["/api/generated-images"] });
       setSelectedImage(null);
       toast({ title: "✅ Image deleted", description: "Image removed from gallery" });
     },
     onError: (error) => {
       console.error("Delete mutation error:", error);
-      toast({ title: "❌ Error", description: "Failed to delete image", variant: "destructive" });
+      toast({ title: "❌ Error", description: `Failed to delete: ${error}`, variant: "destructive" });
     },
   });
 
