@@ -4,6 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Send,
   MessageSquare,
   Plus,
@@ -23,6 +29,13 @@ import {
   Square,
   Search,
   ExternalLink,
+  Sparkles,
+  BookOpen,
+  Brain,
+  Gauge,
+  Image,
+  Code,
+  Lightbulb,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -430,6 +443,72 @@ export default function Chat() {
                 )}
               </Button>
               <h1 className="font-semibold text-lg">LEARNORY</h1>
+
+              {/* Quick Action Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="hover-elevate ml-2"
+                    data-testid="button-quick-actions"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Quick Actions
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuItem
+                    onClick={() => (window.location.href = "/cbt-mode")}
+                    data-testid="action-open-cbt"
+                  >
+                    <Lightbulb className="w-4 h-4 mr-2" />
+                    <span>Open CBT Mode</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => (window.location.href = "/memory")}
+                    data-testid="action-show-memory"
+                  >
+                    <Brain className="w-4 h-4 mr-2" />
+                    <span>Show my Memory</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => (window.location.href = "/dashboard")}
+                    data-testid="action-dashboard"
+                  >
+                    <Gauge className="w-4 h-4 mr-2" />
+                    <span>Take me to Dashboard</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => (window.location.href = "/live-ai")}
+                    data-testid="action-live-ai"
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    <span>Launch Live AI</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => (window.location.href = "/settings")}
+                    data-testid="action-settings"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    <span>View my Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => (window.location.href = "/image-gallery")}
+                    data-testid="action-gallery"
+                  >
+                    <Image className="w-4 h-4 mr-2" />
+                    <span>Go to Image Gallery</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => (window.location.href = "/courses")}
+                    data-testid="action-courses"
+                  >
+                    <BookOpen className="w-4 h-4 mr-2" />
+                    <span>Start a Course</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/settings">
