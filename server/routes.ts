@@ -24,6 +24,7 @@ import {
 } from "./openai";
 import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini, fixTextWithLEARNORY } from "./gemini";
 import { nanoid } from "nanoid";
+import { learnFromUserMessage, mergePreferences } from "./memoryLearner";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -99,6 +100,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content,
         attachments: null,
       });
+
+      // Learn from user messages (not assistant responses)
+      if (role === "user") {
+        const learned = await learnFromUserMessage(content);
+        if (Object.keys(learned).length > 0) {
+          await storage.createMemoryEntry({
+            userId,
+            type: "auto_learned",
+            data: { learned, timestamp: new Date().toISOString() },
+          });
+        }
+      }
 
       console.log(`✓ Message saved to transcript: ${role} - ${content.substring(0, 50)}`);
       res.json(message);
@@ -446,6 +459,50 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Memory preferences routes
+  app.get('/api/memory/learned-preferences', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const entries = await storage.getMemoryEntriesByUser(userId);
+      
+      // Aggregate learned preferences from all auto_learned entries
+      let aggregated = {
+        preferences: {},
+        goals: {},
+        skills: {},
+        interests: {},
+        business: {},
+        writing: {},
+      };
+
+      (entries || []).forEach((entry: any) => {
+        if (entry.type === "auto_learned" && entry.data?.learned) {
+          const learned = entry.data.learned;
+          
+          if (learned.subjects?.length) {
+            aggregated.interests = { primary: learned.subjects.join(", ") };
+          }
+          if (learned.goals?.length) {
+            aggregated.goals = { learningGoal: learned.goals.join(", ") };
+          }
+          if (learned.skills?.length) {
+            aggregated.skills = { languages: learned.skills.join(", ") };
+          }
+          if (learned.educationDetails) {
+            aggregated.business = { ...aggregated.business, ...learned.educationDetails };
+          }
+          if (learned.writingStyle) {
+            aggregated.writing = { ...aggregated.writing, ...learned.writingStyle };
+          }
+        }
+      });
+
+      res.json(aggregated);
+    } catch (error) {
+      console.error("Fetch learned preferences failed:", error);
+      res.status(500).json({ message: "Failed to fetch preferences" });
+    }
+  });
+
   app.post('/api/memory/preferences', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
@@ -453,10 +510,8 @@ If they ask about similar topics or reference past conversations, remind them wh
       
       await storage.createMemoryEntry({
         userId,
-        category: categoryId,
-        key: itemKey,
-        value: value,
-        type: 'preference'
+        type: 'preference_manual',
+        data: { categoryId, key: itemKey, value, timestamp: new Date().toISOString() },
       });
       
       res.json({ success: true, message: "Preference saved" });
@@ -473,10 +528,8 @@ If they ask about similar topics or reference past conversations, remind them wh
       
       await storage.createMemoryEntry({
         userId,
-        category: categoryId,
-        key: key,
-        value: value,
-        type: 'preference_added'
+        type: 'preference_manual',
+        data: { categoryId, key, value, timestamp: new Date().toISOString() },
       });
       
       res.json({ success: true, message: "Item added" });

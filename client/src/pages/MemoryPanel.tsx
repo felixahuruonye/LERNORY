@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,74 +35,82 @@ export default function MemoryPanel() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [memoryCategories, setMemoryCategories] = useState([
     {
       id: "preferences",
       title: "Learning Preferences",
       icon: Settings,
       color: "from-blue-500 to-cyan-500",
-      items: [
-        { key: "learningStyle", value: "Visual + Hands-on" },
-        { key: "pace", value: "Moderate" },
-        { key: "language", value: "English" },
-      ],
+      items: [],
     },
     {
       id: "goals",
       title: "Long-Term Goals",
       icon: Target,
       color: "from-purple-500 to-pink-500",
-      items: [
-        { key: "careerGoal", value: "Software Engineer" },
-        { key: "examTarget", value: "JAMB 300+" },
-        { key: "timeline", value: "6 months" },
-      ],
+      items: [],
     },
     {
       id: "skills",
       title: "Technical Skills",
       icon: Code2,
       color: "from-green-500 to-emerald-500",
-      items: [
-        { key: "languages", value: "Python, JavaScript, React" },
-        { key: "level", value: "Intermediate" },
-        { key: "focus", value: "Web Development" },
-      ],
+      items: [],
     },
     {
       id: "interests",
       title: "Subjects of Interest",
       icon: Lightbulb,
       color: "from-orange-500 to-red-500",
-      items: [
-        { key: "primary", value: "Physics, Mathematics" },
-        { key: "secondary", value: "Chemistry, Biology" },
-        { key: "hobbies", value: "Coding, Blogging" },
-      ],
+      items: [],
     },
     {
       id: "business",
       title: "Business & Education Details",
       icon: Globe,
       color: "from-teal-500 to-cyan-500",
-      items: [
-        { key: "school", value: "Not specified" },
-        { key: "course", value: "Engineering" },
-        { key: "workExperience", value: "2 years" },
-      ],
+      items: [],
     },
     {
       id: "writing",
       title: "Writing Style",
       icon: BookOpen,
       color: "from-rose-500 to-pink-500",
-      items: [
-        { key: "tone", value: "Professional" },
-        { key: "formality", value: "Formal" },
-        { key: "audience", value: "Technical" },
-      ],
+      items: [],
     },
   ]);
+
+  // Load learned preferences on mount
+  useEffect(() => {
+    const loadPreferences = async () => {
+      try {
+        const response = await fetch("/api/memory/learned-preferences");
+        if (!response.ok) throw new Error("Failed to load preferences");
+        const learned = await response.json();
+        
+        setMemoryCategories((prev) =>
+          prev.map((cat) => {
+            const categoryData = learned[cat.id];
+            if (!categoryData) return cat;
+            
+            const items = Object.entries(categoryData).map(([key, value]) => ({
+              key,
+              value: String(value),
+            }));
+            
+            return { ...cat, items };
+          })
+        );
+      } catch (error) {
+        console.error("Load preferences error:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPreferences();
+  }, []);
 
   const handleSaveMemoryItem = async (categoryId: string, itemKey: string) => {
     setIsSaving(true);
@@ -270,10 +278,10 @@ export default function MemoryPanel() {
     });
   };
 
-  if (authLoading || !user) {
+  if (authLoading || !user || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">Loading your learning memory...</div>
       </div>
     );
   }
