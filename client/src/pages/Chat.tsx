@@ -457,55 +457,48 @@ export default function Chat() {
                     Quick Actions
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuItem
-                    onClick={() => (window.location.href = "/cbt-mode")}
-                    data-testid="action-open-cbt"
-                  >
-                    <Lightbulb className="w-4 h-4 mr-2" />
-                    <span>Open CBT Mode</span>
+                <DropdownMenuContent align="start" className="w-56 z-50">
+                  <DropdownMenuItem asChild data-testid="action-open-cbt">
+                    <Link href="/cbt-mode" className="flex items-center cursor-pointer">
+                      <Lightbulb className="w-4 h-4 mr-2" />
+                      <span>Open CBT Mode</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => (window.location.href = "/memory")}
-                    data-testid="action-show-memory"
-                  >
-                    <Brain className="w-4 h-4 mr-2" />
-                    <span>Show my Memory</span>
+                  <DropdownMenuItem asChild data-testid="action-show-memory">
+                    <Link href="/memory" className="flex items-center cursor-pointer">
+                      <Brain className="w-4 h-4 mr-2" />
+                      <span>Show my Memory</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => (window.location.href = "/dashboard")}
-                    data-testid="action-dashboard"
-                  >
-                    <Gauge className="w-4 h-4 mr-2" />
-                    <span>Take me to Dashboard</span>
+                  <DropdownMenuItem asChild data-testid="action-dashboard">
+                    <Link href="/dashboard" className="flex items-center cursor-pointer">
+                      <Gauge className="w-4 h-4 mr-2" />
+                      <span>Take me to Dashboard</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => (window.location.href = "/live-ai")}
-                    data-testid="action-live-ai"
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    <span>Launch Live AI</span>
+                  <DropdownMenuItem asChild data-testid="action-live-ai">
+                    <Link href="/live-ai" className="flex items-center cursor-pointer">
+                      <Zap className="w-4 h-4 mr-2" />
+                      <span>Launch Live AI</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => (window.location.href = "/settings")}
-                    data-testid="action-settings"
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    <span>View my Settings</span>
+                  <DropdownMenuItem asChild data-testid="action-settings">
+                    <Link href="/settings" className="flex items-center cursor-pointer">
+                      <Settings className="w-4 h-4 mr-2" />
+                      <span>View my Settings</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => (window.location.href = "/image-gallery")}
-                    data-testid="action-gallery"
-                  >
-                    <Image className="w-4 h-4 mr-2" />
-                    <span>Go to Image Gallery</span>
+                  <DropdownMenuItem asChild data-testid="action-gallery">
+                    <Link href="/image-gallery" className="flex items-center cursor-pointer">
+                      <Image className="w-4 h-4 mr-2" />
+                      <span>Go to Image Gallery</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => (window.location.href = "/courses")}
-                    data-testid="action-courses"
-                  >
-                    <BookOpen className="w-4 h-4 mr-2" />
-                    <span>Start a Course</span>
+                  <DropdownMenuItem asChild data-testid="action-courses">
+                    <Link href="/courses" className="flex items-center cursor-pointer">
+                      <BookOpen className="w-4 h-4 mr-2" />
+                      <span>Start a Course</span>
+                    </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
