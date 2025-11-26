@@ -767,7 +767,6 @@ export class DatabaseStorage implements IStorage {
   async deleteRecording(id: string): Promise<void> {
     await db.delete(recordings).where(eq(recordings.id, id));
   }
-  }
 
   async getCbtAnswersBySession(sessionId: string): Promise<CbtAnswer[]> {
     return await db.select().from(cbtAnswers).where(eq(cbtAnswers.sessionId, sessionId));

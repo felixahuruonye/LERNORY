@@ -116,6 +116,31 @@ export default function LiveSession() {
     }
   }, [user, authLoading, toast]);
 
+  // Load recordings from database on mount
+  useEffect(() => {
+    const loadRecordings = async () => {
+      try {
+        const res = await apiRequest("GET", "/api/recordings");
+        const dbRecordings = await res.json();
+        // Convert database format to client format
+        const formattedRecordings: Recording[] = dbRecordings.map((rec: any) => ({
+          id: rec.id,
+          title: rec.title,
+          transcript: rec.transcript || [],
+          audioBlob: new Blob(),
+          duration: rec.duration,
+          createdAt: new Date(rec.createdAt).getTime(),
+        }));
+        setRecordings(formattedRecordings);
+      } catch (error) {
+        console.error("Error loading recordings:", error);
+      }
+    };
+    if (user) {
+      loadRecordings();
+    }
+  }, [user]);
+
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
@@ -259,18 +284,39 @@ export default function LiveSession() {
       wsRef.current.close();
     }
 
-    // Save to history
+    // Save to history and database
     if (transcript.length > 0 || audioChunksRef.current.length > 0) {
       const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      const newRecording: Recording = {
-        id: sessionId || `recording-${Date.now()}`,
-        title: sessionTitle || "Untitled Recording",
-        transcript,
-        audioBlob,
-        duration,
-        createdAt: Date.now(),
+      
+      // Convert audio to base64 for storage
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const audioData = reader.result as string;
+        const newRecording: Recording = {
+          id: sessionId || `recording-${Date.now()}`,
+          title: sessionTitle || "Untitled Recording",
+          transcript,
+          audioBlob,
+          duration,
+          createdAt: Date.now(),
+        };
+        
+        // Save to database
+        try {
+          await apiRequest("POST", "/api/recordings", {
+            title: newRecording.title,
+            audioData,
+            transcript: newRecording.transcript,
+            duration: newRecording.duration,
+            sessionId,
+          });
+        } catch (error) {
+          console.error("Error saving recording to database:", error);
+        }
+        
+        setRecordings((prev) => [newRecording, ...prev]);
       };
-      setRecordings((prev) => [newRecording, ...prev]);
+      reader.readAsDataURL(audioBlob);
     }
 
     // Save transcript to backend
@@ -298,12 +344,26 @@ export default function LiveSession() {
     });
   };
 
-  const deleteRecording = (id: string) => {
-    setRecordings((prev) => prev.filter((rec) => rec.id !== id));
-    toast({
-      title: "Recording deleted",
-      description: "The recording has been removed from history",
-    });
+  const deleteRecording = async (id: string) => {
+    try {
+      // Delete from database
+      await apiRequest("DELETE", `/api/recordings/${id}`);
+      
+      // Remove from local state
+      setRecordings((prev) => prev.filter((rec) => rec.id !== id));
+      
+      toast({
+        title: "Recording deleted",
+        description: "The recording has been removed from history",
+      });
+    } catch (error) {
+      console.error("Error deleting recording:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete recording",
+        variant: "destructive",
+      });
+    }
   };
 
   const readAllText = async (recording: Recording) => {

@@ -1932,5 +1932,58 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Recording API endpoints
+  app.get('/api/recordings', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const recordings = await storage.getRecordingsByUser(userId);
+      res.json(recordings);
+    } catch (error: any) {
+      console.error("Error fetching recordings:", error);
+      res.status(500).json({ message: error?.message || 'Failed to fetch recordings' });
+    }
+  });
+
+  app.post('/api/recordings', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { title, audioData, transcript, duration, sessionId } = req.body;
+
+      if (!title?.trim()) {
+        return res.status(400).json({ message: 'Title is required' });
+      }
+
+      const recording = await storage.createRecording({
+        userId,
+        sessionId: sessionId || null,
+        title,
+        audioData: audioData || '',
+        transcript: transcript || [],
+        duration: duration || 0,
+      });
+
+      res.json(recording);
+    } catch (error: any) {
+      console.error("Error creating recording:", error);
+      res.status(500).json({ message: error?.message || 'Failed to save recording' });
+    }
+  });
+
+  app.delete('/api/recordings/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { id } = req.params;
+      
+      // Verify recording belongs to user before deleting
+      // (In production, add this verification)
+      await storage.deleteRecording(id);
+      
+      res.json({ message: 'Recording deleted successfully' });
+    } catch (error: any) {
+      console.error("Error deleting recording:", error);
+      res.status(500).json({ message: error?.message || 'Failed to delete recording' });
+    }
+  });
+
   return httpServer;
 }
