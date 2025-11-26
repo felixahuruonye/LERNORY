@@ -636,7 +636,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGeneratedImagesByUser(userId: string): Promise<GeneratedImage[]> {
-    return await db.select().from(generatedImages).where(eq(generatedImages.userId, userId)).orderBy(desc(generatedImages.createdAt));
+    const result = await db.execute(
+      'SELECT id, user_id as "userId", prompt, image_url as "imageUrl", related_topic as "relatedTopic", tags, created_at as "createdAt" FROM generated_images WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+    return result.rows as unknown as GeneratedImage[];
   }
 
   async getGeneratedImagesByTopic(userId: string, topic: string): Promise<GeneratedImage[]> {

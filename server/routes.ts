@@ -1445,12 +1445,7 @@ KEY_WORDS: [keywords separated by commas]`,
     try {
       const userId = req.user.claims.sub;
       const images = await storage.getGeneratedImagesByUser(userId);
-      // Ensure imageUrl field is properly mapped from database
-      const formattedImages = images.map((img: any) => ({
-        ...img,
-        imageUrl: img.imageUrl || img.image_url
-      }));
-      res.json(formattedImages);
+      res.json(images);
     } catch (error) {
       console.error("Error fetching generated images:", error);
       res.status(500).json({ message: "Failed to fetch generated images" });
