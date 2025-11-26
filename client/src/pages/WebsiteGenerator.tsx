@@ -147,39 +147,68 @@ export default function WebsiteGenerator() {
         body: JSON.stringify({ debugPrompt }),
       });
 
-      if (!res.ok) throw new Error("Debug failed");
-      if (!res.body) throw new Error("No stream");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Debug request failed");
+      }
+
+      if (!res.body) {
+        throw new Error("No response stream from server");
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let hasError = false;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.done) break;
-              if (data.error) throw new Error(data.error);
-              if (data.message) {
-                setDebugMessages(prev => [...prev, data.message]);
+          for (const line of lines) {
+            if (line.trim().startsWith("data: ")) {
+              try {
+                const jsonStr = line.trim().slice(6);
+                const data = JSON.parse(jsonStr);
+                
+                if (data.done) {
+                  hasError = false;
+                  break;
+                }
+                
+                if (data.error) {
+                  hasError = true;
+                  throw new Error(data.error);
+                }
+                
+                if (data.message) {
+                  setDebugMessages(prev => [...prev, data.message]);
+                }
+                
+                if (data.file) {
+                  setDebugUpdatingFile(data.file);
+                }
+              } catch (parseErr) {
+                console.error("Parse error:", parseErr);
               }
-              if (data.file) {
-                setDebugUpdatingFile(data.file);
-              }
-            } catch (e) {}
+            }
           }
+        }
+      } catch (streamErr) {
+        if (streamErr instanceof Error) {
+          throw streamErr;
         }
       }
 
-      await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
+      if (!hasError) {
+        await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
+      }
+      
       setIsDebugging(false);
       setShowPreview(true);
 
@@ -189,9 +218,10 @@ export default function WebsiteGenerator() {
       });
     } catch (error: any) {
       setIsDebugging(false);
+      console.error("Debug error:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error?.message || "Failed to debug website",
         variant: "destructive",
       });
     }

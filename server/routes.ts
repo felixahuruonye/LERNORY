@@ -683,10 +683,15 @@ If they ask about similar topics or reference past conversations, remind them wh
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Access-Control-Allow-Origin', '*');
       
       const send = (msg: string, file?: string) => {
-        res.write(`data: ${JSON.stringify({ message: msg, file })}\n\n`);
+        try {
+          if (!res.destroyed) {
+            res.write(`data: ${JSON.stringify({ message: msg, file })}\n\n`);
+          }
+        } catch (e) {
+          console.error("Send error:", e);
+        }
       };
 
       send("🔍 Analyzing code with LEARNORY AI...");
@@ -704,19 +709,19 @@ If they ask about similar topics or reference past conversations, remind them wh
 
       if (htmlUpdated) {
         send("📝 Fixing HTML structure...", "html");
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 500));
         send("✅ HTML fixed");
       }
 
       if (cssUpdated) {
         send("🎨 Fixing CSS styles...", "css");
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 500));
         send("✅ CSS fixed");
       }
 
       if (jsUpdated) {
         send("⚙️ Fixing JavaScript...", "js");
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 500));
         send("✅ JavaScript fixed");
       }
 
@@ -732,12 +737,20 @@ If they ask about similar topics or reference past conversations, remind them wh
       });
 
       send("✨ Done!");
-      res.write('data: {"done":true}\n\n');
-      res.end();
+      if (!res.destroyed) {
+        res.write('data: {"done":true}\n\n');
+        res.end();
+      }
     } catch (error) {
-      console.error("Error debugging code:", error);
-      res.write(`data: ${JSON.stringify({ error: `Error: ${error instanceof Error ? error.message : "Unknown"}` })}\n\n`);
-      res.end();
+      console.error("Debug error:", error);
+      if (!res.destroyed) {
+        try {
+          res.write(`data: ${JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+          res.end();
+        } catch (e) {
+          console.error("Error sending error response:", e);
+        }
+      }
     }
   });
 
