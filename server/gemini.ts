@@ -176,19 +176,18 @@ interface DebugResult {
 export async function debugCodeWithLEARNORY(html: string, css: string, js: string, debugPrompt: string): Promise<DebugResult> {
   const codeSnippet = `HTML:\n${html}\n\nCSS:\n${css}\n\nJavaScript:\n${js}`;
   
-  const prompt = `You are an expert web developer helping someone debug and improve their code. The user wants to: ${debugPrompt}
+  const prompt = `You are an expert web developer. User request: ${debugPrompt}
 
 Current code:
 ${codeSnippet}
 
-Provide:
-1. What's wrong (if anything)
-2. Step-by-step fixes
-3. Improved code
-4. Explanation
-
-Format response as JSON:
-{"htmlCode": "...", "cssCode": "...", "jsCode": "...", "steps": ["step1", "step2"]}`;
+RESPOND WITH ONLY VALID JSON, NO OTHER TEXT:
+{
+  "htmlCode": "<improved html code here>",
+  "cssCode": "improved css code here",
+  "jsCode": "improved javascript code here",
+  "steps": ["fix 1", "fix 2"]
+}`;
 
   try {
     if (!process.env.GEMINI_API_KEY) {
@@ -203,10 +202,30 @@ Format response as JSON:
     const responseText = response.text;
     if (!responseText) throw new Error("Empty response from LEARNORY AI");
 
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Could not extract JSON");
+    console.log("Raw response from Gemini:", responseText.substring(0, 200));
 
-    return JSON.parse(jsonMatch[0]);
+    // Try to parse directly first
+    let result;
+    try {
+      result = JSON.parse(responseText.trim());
+    } catch (e) {
+      // If direct parse fails, try to extract JSON
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Could not extract JSON from response");
+      
+      const cleanedJson = jsonMatch[0]
+        .replace(/[\r\n]/g, " ")
+        .replace(/\s+/g, " ");
+      
+      result = JSON.parse(cleanedJson);
+    }
+
+    return {
+      htmlCode: result.htmlCode || html,
+      cssCode: result.cssCode || css,
+      jsCode: result.jsCode || js,
+      steps: result.steps || []
+    };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("Error debugging code with LEARNORY AI:", errorMsg);
