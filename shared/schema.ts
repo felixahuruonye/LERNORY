@@ -213,6 +213,23 @@ export const chatMessages = pgTable("chat_messages", {
 
 export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, createdAt: true });
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+
+// Extended type for chat messages with proper attachment typing
+export interface ChatMessageWithAttachments {
+  id: string;
+  userId: string;
+  sessionId: string | null;
+  role: string;
+  content: string;
+  attachments: {
+    images?: Array<{
+      url: string;
+      title?: string;
+    }>;
+  } | null;
+  createdAt: Date;
+}
+
 export type ChatMessage = typeof chatMessages.$inferSelect;
 
 // Chat Sessions (for organizing conversations into chat history)

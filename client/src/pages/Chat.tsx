@@ -43,7 +43,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useVoice } from "@/lib/useVoice";
 import { detectFeatureOpen } from "@/lib/featureRegistry";
-import type { ChatMessage, ChatSession } from "@shared/schema";
+import type { ChatMessage, ChatSession, ChatMessageWithAttachments } from "@shared/schema";
 
 export default function Chat() {
   const { user, isLoading: authLoading } = useAuth();
@@ -67,14 +67,14 @@ export default function Chat() {
   });
 
   // Load messages for current session
-  const { data: messages = [], refetch: refetchMessages } = useQuery<ChatMessage[]>({
+  const { data: messages = [], refetch: refetchMessages } = useQuery<ChatMessageWithAttachments[]>({
     queryKey: ["/api/chat/messages", currentSessionId],
     enabled: !!user && !!currentSessionId,
     queryFn: async () => {
       const res = await fetch(`/api/chat/messages?sessionId=${currentSessionId}`);
       if (!res.ok) throw new Error("Failed to load messages");
       const data = await res.json();
-      return data.sort((a: ChatMessage, b: ChatMessage) => {
+      return data.sort((a: ChatMessageWithAttachments, b: ChatMessageWithAttachments) => {
         const timeA = new Date(a.createdAt || 0).getTime();
         const timeB = new Date(b.createdAt || 0).getTime();
         return timeA - timeB;
