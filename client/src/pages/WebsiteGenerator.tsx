@@ -386,7 +386,7 @@ export default function WebsiteGenerator() {
 
               {/* Tabs - Preview & Code */}
               <Tabs defaultValue="preview" className="space-y-0">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="preview" data-testid="tab-preview">
                     <Eye className="h-4 w-4 mr-2" />
                     Preview
@@ -402,10 +402,6 @@ export default function WebsiteGenerator() {
                     {debugUpdatingFile === "css" && (
                       <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                     )}
-                  </TabsTrigger>
-                  <TabsTrigger value="debug" data-testid="tab-debug">
-                    <Zap className="h-4 w-4 mr-2" />
-                    Debug
                   </TabsTrigger>
                 </TabsList>
 
@@ -455,65 +451,6 @@ export default function WebsiteGenerator() {
                     <pre className="text-xs overflow-x-auto max-h-[600px] overflow-y-auto bg-muted/50 p-4 rounded">
                       <code>{selectedWebsiteData.cssCode}</code>
                     </pre>
-                  </Card>
-                </TabsContent>
-
-                {/* Debug Tab */}
-                <TabsContent value="debug" className="mt-4">
-                  <Card className="p-4 space-y-4">
-                    <div>
-                      <label className="text-sm font-semibold block mb-2">What's broken? (Tell LEARNORY AI)</label>
-                      <Textarea
-                        placeholder="e.g., 'The button doesn't respond to clicks', 'The layout breaks on mobile', 'The colors don't match the design'..."
-                        value={debugPrompt}
-                        onChange={(e) => setDebugPrompt(e.target.value)}
-                        className="resize-none min-h-[80px]"
-                        disabled={isDebugging}
-                        data-testid="input-debug-prompt"
-                      />
-                    </div>
-
-                    <Button
-                      onClick={() => startDebug()}
-                      disabled={!debugPrompt.trim() || isDebugging}
-                      className="w-full hover-elevate active-elevate-2 bg-green-600 hover:bg-green-700 text-white"
-                      data-testid="button-start-debug"
-                    >
-                      {isDebugging ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          LEARNORY AI is fixing...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4 mr-2" />
-                          Debug with LEARNORY AI
-                        </>
-                      )}
-                    </Button>
-
-                    {/* Debug Chat Messages */}
-                    {debugMessages.length > 0 && (
-                      <div className="bg-muted/50 rounded-lg p-4 space-y-2 max-h-[300px] overflow-y-auto">
-                        {debugMessages.map((msg, idx) => (
-                          <div key={idx} className="text-sm text-foreground flex items-start gap-2">
-                            <span className="text-xs text-muted-foreground min-w-fit">→</span>
-                            <span>{msg}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {showPreview && !isDebugging && (
-                      <Button
-                        onClick={() => setLocation(`/view/${selectedWebsiteData.id}`)}
-                        className="w-full hover-elevate active-elevate-2 bg-blue-600 hover:bg-blue-700 text-white"
-                        data-testid="button-preview-debug-result"
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        Preview Fixed Website
-                      </Button>
-                    )}
                   </Card>
                 </TabsContent>
               </Tabs>
