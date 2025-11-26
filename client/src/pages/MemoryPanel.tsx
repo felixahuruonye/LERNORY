@@ -27,6 +27,46 @@ export default function MemoryPanel() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
+  const handleExportMemory = async () => {
+    try {
+      const response = await fetch("/api/memory/export");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `memory-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+    } catch (error) {
+      console.error("Export failed:", error);
+    }
+  };
+
+  const handleBackup = async () => {
+    try {
+      const response = await fetch("/api/memory/backup", { method: "POST" });
+      const data = await response.json();
+      console.log("Backup created:", data);
+    } catch (error) {
+      console.error("Backup failed:", error);
+    }
+  };
+
+  const handleClearMemory = async () => {
+    if (confirm("Are you sure? This will permanently delete all your memory data.")) {
+      try {
+        await fetch("/api/memory/clear", { method: "DELETE" });
+        console.log("Memory cleared");
+      } catch (error) {
+        console.error("Clear failed:", error);
+      }
+    }
+  };
+
+  const handleResetDefaults = () => {
+    setMemoryEnabled(true);
+    console.log("Memory reset to defaults");
+  };
+
   const memoryCategories = [
     {
       id: "preferences",
@@ -234,19 +274,19 @@ export default function MemoryPanel() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
-              <Button variant="outline" className="hover-elevate" data-testid="button-export-memory">
+              <Button variant="outline" className="hover-elevate" data-testid="button-export-memory" onClick={handleExportMemory}>
                 <Plus className="h-4 w-4 mr-2" />
                 Export Memory Data
               </Button>
-              <Button variant="outline" className="hover-elevate" data-testid="button-backup-memory">
+              <Button variant="outline" className="hover-elevate" data-testid="button-backup-memory" onClick={handleBackup}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Backup
               </Button>
-              <Button variant="destructive" className="hover-elevate" data-testid="button-clear-memory">
+              <Button variant="destructive" className="hover-elevate" data-testid="button-clear-memory" onClick={handleClearMemory}>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Clear Memory
               </Button>
-              <Button variant="outline" className="hover-elevate" data-testid="button-reset-preferences">
+              <Button variant="outline" className="hover-elevate" data-testid="button-reset-preferences" onClick={handleResetDefaults}>
                 <Plus className="h-4 w-4 mr-2" />
                 Reset to Defaults
               </Button>

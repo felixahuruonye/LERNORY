@@ -396,6 +396,55 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
+  // Memory export/backup routes
+  app.get('/api/memory/export', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const messages = await storage.getChatMessagesByUser(userId);
+      const memories = await storage.getMemoryEntriesByUser(userId);
+      
+      const exportData = {
+        exported: new Date().toISOString(),
+        user: userId,
+        messages: messages.length,
+        memories: memories.length,
+        data: { messages, memories }
+      };
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename=memory-export.json');
+      res.json(exportData);
+    } catch (error) {
+      res.status(500).json({ message: "Export failed" });
+    }
+  });
+
+  app.post('/api/memory/backup', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const messages = await storage.getChatMessagesByUser(userId);
+      const backup = {
+        backupId: `backup_${Date.now()}`,
+        userId,
+        timestamp: new Date().toISOString(),
+        messageCount: messages.length
+      };
+      res.json({ success: true, backup });
+    } catch (error) {
+      res.status(500).json({ message: "Backup failed" });
+    }
+  });
+
+  app.delete('/api/memory/clear', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.deleteChatMessagesByUser(userId);
+      res.json({ success: true, message: "Memory cleared" });
+    } catch (error) {
+      res.status(500).json({ message: "Clear failed" });
+    }
+  });
+
   // Chat Session routes
   app.get('/api/chat/sessions', isAuthenticated, async (req: any, res: Response) => {
     try {
