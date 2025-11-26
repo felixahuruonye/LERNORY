@@ -680,22 +680,7 @@ If they ask about similar topics or reference past conversations, remind them wh
         return res.status(404).json({ message: "Website not found" });
       }
 
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      
-      const send = (msg: string, file?: string) => {
-        try {
-          if (!res.destroyed) {
-            res.write(`data: ${JSON.stringify({ message: msg, file })}\n\n`);
-          }
-        } catch (e) {
-          console.error("Send error:", e);
-        }
-      };
-
-      send("🔍 Analyzing code with LEARNORY AI...");
-      
+      console.log("🔍 Debugging:", debugPrompt);
       const debugResult = await debugCodeWithLEARNORY(
         website.htmlCode,
         website.cssCode,
@@ -707,50 +692,26 @@ If they ask about similar topics or reference past conversations, remind them wh
       const cssUpdated = debugResult.cssCode !== website.cssCode;
       const jsUpdated = (debugResult.jsCode || "") !== (website.jsCode || "");
 
-      if (htmlUpdated) {
-        send("📝 Fixing HTML structure...", "html");
-        await new Promise(r => setTimeout(r, 500));
-        send("✅ HTML fixed");
-      }
-
-      if (cssUpdated) {
-        send("🎨 Fixing CSS styles...", "css");
-        await new Promise(r => setTimeout(r, 500));
-        send("✅ CSS fixed");
-      }
-
-      if (jsUpdated) {
-        send("⚙️ Fixing JavaScript...", "js");
-        await new Promise(r => setTimeout(r, 500));
-        send("✅ JavaScript fixed");
-      }
-
-      if (!htmlUpdated && !cssUpdated && !jsUpdated) {
-        send("✨ Code is optimal");
-      }
-
-      send("💾 Saving...");
       await storage.updateGeneratedWebsite(req.params.id, {
         htmlCode: debugResult.htmlCode,
         cssCode: debugResult.cssCode,
         jsCode: debugResult.jsCode,
       });
 
-      send("✨ Done!");
-      if (!res.destroyed) {
-        res.write('data: {"done":true}\n\n');
-        res.end();
-      }
+      res.json({
+        success: true,
+        updates: {
+          html: htmlUpdated,
+          css: cssUpdated,
+          js: jsUpdated,
+        }
+      });
     } catch (error) {
       console.error("Debug error:", error);
-      if (!res.destroyed) {
-        try {
-          res.write(`data: ${JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
-          res.end();
-        } catch (e) {
-          console.error("Error sending error response:", e);
-        }
-      }
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Debug failed"
+      });
     }
   });
 

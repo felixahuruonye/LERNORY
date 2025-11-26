@@ -137,7 +137,7 @@ export default function WebsiteGenerator() {
     if (!selectedWebsiteData || !debugPrompt.trim()) return;
     
     setIsDebugging(true);
-    setDebugMessages([]);
+    setDebugMessages(["🔍 Analyzing code with LEARNORY AI..."]);
     setShowDebugMode(true);
     
     try {
@@ -148,69 +148,45 @@ export default function WebsiteGenerator() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Debug request failed");
+        const error = await res.json().catch(() => ({ message: "Debug failed" }));
+        throw new Error(error.message || "Debug failed");
       }
 
-      if (!res.body) {
-        throw new Error("No response stream from server");
+      const data = await res.json();
+
+      // Animate messages showing what was fixed
+      const messages: string[] = [];
+      if (data.updates?.html) {
+        messages.push("📝 Fixing HTML structure...");
+        setDebugUpdatingFile("html");
+        await new Promise(r => setTimeout(r, 300));
+        messages.push("✅ HTML fixed");
       }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let hasError = false;
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.trim().startsWith("data: ")) {
-              try {
-                const jsonStr = line.trim().slice(6);
-                const data = JSON.parse(jsonStr);
-                
-                if (data.done) {
-                  hasError = false;
-                  break;
-                }
-                
-                if (data.error) {
-                  hasError = true;
-                  throw new Error(data.error);
-                }
-                
-                if (data.message) {
-                  setDebugMessages(prev => [...prev, data.message]);
-                }
-                
-                if (data.file) {
-                  setDebugUpdatingFile(data.file);
-                }
-              } catch (parseErr) {
-                console.error("Parse error:", parseErr);
-              }
-            }
-          }
-        }
-      } catch (streamErr) {
-        if (streamErr instanceof Error) {
-          throw streamErr;
-        }
+      if (data.updates?.css) {
+        messages.push("🎨 Fixing CSS styles...");
+        setDebugUpdatingFile("css");
+        await new Promise(r => setTimeout(r, 300));
+        messages.push("✅ CSS fixed");
       }
-
-      if (!hasError) {
-        await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
+      if (data.updates?.js) {
+        messages.push("⚙️ Fixing JavaScript...");
+        setDebugUpdatingFile("js");
+        await new Promise(r => setTimeout(r, 300));
+        messages.push("✅ JavaScript fixed");
       }
+      if (!data.updates?.html && !data.updates?.css && !data.updates?.js) {
+        messages.push("✨ Code analyzed and optimized");
+      }
+      messages.push("💾 Saving to database...");
+      messages.push("✨ Done!");
+
+      setDebugMessages(prev => [...prev, ...messages]);
+      await queryClient.invalidateQueries({ queryKey: ["/api/websites"] });
       
-      setIsDebugging(false);
-      setShowPreview(true);
+      setTimeout(() => {
+        setIsDebugging(false);
+        setShowPreview(true);
+      }, 500);
 
       toast({
         title: "✅ Fixed!",
@@ -218,7 +194,7 @@ export default function WebsiteGenerator() {
       });
     } catch (error: any) {
       setIsDebugging(false);
-      console.error("Debug error:", error);
+      setDebugMessages(prev => [...prev, `❌ ${error.message}`]);
       toast({
         title: "Error",
         description: error?.message || "Failed to debug website",
