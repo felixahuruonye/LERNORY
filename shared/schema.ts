@@ -560,6 +560,7 @@ export const generatedLessons = pgTable("generated_lessons", {
   objectives: text("objectives").array().notNull(),
   keyPoints: text("key_points").array().notNull(),
   summary: text("summary").notNull(),
+  originalText: text("original_text"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

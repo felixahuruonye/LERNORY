@@ -408,6 +408,39 @@ interface GeneratedLessonData {
   summary: string;
 }
 
+export async function fixTextWithLEARNORY(text: string): Promise<{ correctedText: string; explanation: string }> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY not configured");
+    }
+
+    console.log("🔧 Fixing text with LEARNORY AI...");
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Fix spelling, grammar, and formatting errors in this text. Respond with ONLY valid JSON (no other text):
+
+{"correctedText": "the fixed text here", "explanation": "brief list of corrections made"}
+
+TEXT TO FIX:
+${text}`,
+    });
+
+    const responseText = response.text;
+    if (!responseText) throw new Error("Empty response");
+
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("Could not extract JSON");
+
+    const result = JSON.parse(jsonMatch[0]);
+    console.log("✅ Text fixed successfully");
+    return result;
+  } catch (error) {
+    console.error("Error fixing text:", error);
+    throw error;
+  }
+}
+
 export async function generateLessonFromTextWithGemini(text: string): Promise<GeneratedLessonData> {
   try {
     if (!process.env.GEMINI_API_KEY) {

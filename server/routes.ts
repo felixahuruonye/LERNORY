@@ -22,7 +22,7 @@ import {
   summarizeText,
   generateFlashcards,
 } from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini } from "./gemini";
+import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini, fixTextWithLEARNORY } from "./gemini";
 import { nanoid } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1191,7 +1191,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  // Generate lesson from text using Gemini (for manual text entries)
+  // Generate lesson from text using LEARNORY AI (for manual text entries)
   app.post('/api/generate-lesson-from-text', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
@@ -1201,7 +1201,7 @@ If they ask about similar topics or reference past conversations, remind them wh
         return res.status(400).json({ message: "Text is required" });
       }
 
-      console.log("📚 Generating lesson from manual text with Gemini...");
+      console.log("📚 Generating lesson from manual text with LEARNORY AI...");
       const geminiData = await generateLessonFromTextWithGemini(text);
 
       const lesson = await storage.createGeneratedLesson({
@@ -1211,6 +1211,7 @@ If they ask about similar topics or reference past conversations, remind them wh
         objectives: geminiData.objectives,
         keyPoints: geminiData.keyPoints,
         summary: geminiData.summary,
+        originalText: text,
       });
 
       console.log("✅ Lesson created and saved:", lesson.id);
@@ -1218,6 +1219,25 @@ If they ask about similar topics or reference past conversations, remind them wh
     } catch (error) {
       console.error("Error generating lesson from text:", error);
       res.status(500).json({ message: "Failed to generate lesson" });
+    }
+  });
+
+  // AI Fix endpoint - Fix text with LEARNORY AI
+  app.post('/api/ai-fix-text', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { text } = req.body;
+      
+      if (!text?.trim()) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+
+      console.log("🔧 Fixing text with LEARNORY AI...");
+      const fixed = await fixTextWithLEARNORY(text);
+
+      res.json(fixed);
+    } catch (error) {
+      console.error("Error fixing text:", error);
+      res.status(500).json({ message: "Failed to fix text" });
     }
   });
 
