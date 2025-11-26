@@ -285,6 +285,22 @@ If they ask about similar topics or reference past conversations, remind them wh
         aiResponse = "I'm having trouble connecting to my AI services right now. Please try again in a moment.";
       }
 
+      // Auto-save to memory for AI learning
+      try {
+        await storage.createMemoryEntry({
+          userId,
+          type: "chat_interaction",
+          data: {
+            userMessage: content.substring(0, 500),
+            aiResponse: aiResponse.substring(0, 500),
+            timestamp: new Date().toISOString(),
+          }
+        });
+        console.log("✓ Memory auto-updated from chat interaction");
+      } catch (memErr) {
+        console.log("Memory auto-save skipped (non-critical)");
+      }
+
       // Save AI response
       await storage.createChatMessage({
         userId,
@@ -385,11 +401,57 @@ If they ask about similar topics or reference past conversations, remind them wh
   app.delete('/api/chat/sessions/:id', isAuthenticated, async (req: any, res: Response) => {
     try {
       const { id } = req.params;
+      const userId = req.user.claims.sub;
+      
+      // Verify ownership before deleting
+      const session = await storage.getChatSession(id);
+      if (!session || session.userId !== userId) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      // Delete session messages (memory cleanup happens automatically through cascade)
+      const sessionMessages = await storage.getChatMessagesBySession(id);
+      console.log(`Deleting ${sessionMessages.length} messages from session ${id}`);
+
       await storage.deleteChatSession(id);
       res.json({ message: "Chat session deleted successfully" });
     } catch (error) {
       console.error("Error deleting chat session:", error);
       res.status(500).json({ message: "Failed to delete chat session" });
+    }
+  });
+
+  // Bulk delete chat sessions
+  app.post('/api/chat/sessions/bulk-delete', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionIds } = req.body;
+
+      if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+        return res.status(400).json({ message: "Session IDs are required" });
+      }
+
+      let deletedCount = 0;
+      for (const sessionId of sessionIds) {
+        try {
+          const session = await storage.getChatSession(sessionId);
+          if (session && session.userId === userId) {
+            await storage.deleteChatSession(sessionId);
+            deletedCount++;
+            console.log(`✓ Deleted session ${sessionId}`);
+          }
+        } catch (err) {
+          console.error(`Error deleting session ${sessionId}:`, err);
+        }
+      }
+
+      res.json({ 
+        message: `Successfully deleted ${deletedCount} chat sessions`,
+        deletedCount 
+      });
+    } catch (error) {
+      console.error("Error in bulk delete:", error);
+      res.status(500).json({ message: "Failed to delete chat sessions" });
     }
   });
 

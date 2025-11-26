@@ -19,6 +19,8 @@ import {
   Settings,
   Bell,
   Zap,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +38,8 @@ export default function Chat() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [historyTab, setHistoryTab] = useState("all"); // "all" or "manage"
+  const [selectedChatsForDelete, setSelectedChatsForDelete] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load chat sessions
@@ -52,7 +56,6 @@ export default function Chat() {
       const res = await fetch(`/api/chat/messages?sessionId=${currentSessionId}`);
       if (!res.ok) throw new Error("Failed to load messages");
       const data = await res.json();
-      // Sort messages by creation time (oldest first)
       return data.sort((a: ChatMessage, b: ChatMessage) => {
         const timeA = new Date(a.createdAt || 0).getTime();
         const timeB = new Date(b.createdAt || 0).getTime();
@@ -72,7 +75,6 @@ export default function Chat() {
       if (sessions.length > 0) {
         setCurrentSessionId(sessions[0].id);
       } else {
-        // Create first session
         createNewChat();
       }
     }
@@ -95,7 +97,7 @@ export default function Chat() {
     }
   };
 
-  // Delete chat
+  // Delete single chat
   const deleteChat = async (sessionId: string) => {
     try {
       await apiRequest("DELETE", `/api/chat/sessions/${sessionId}`, {});
@@ -109,6 +111,48 @@ export default function Chat() {
     }
   };
 
+  // Bulk delete chats
+  const bulkDeleteChats = async () => {
+    if (selectedChatsForDelete.size === 0) {
+      toast({ title: "No chats selected", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await apiRequest("POST", "/api/chat/sessions/bulk-delete", {
+        sessionIds: Array.from(selectedChatsForDelete),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      setSelectedChatsForDelete(new Set());
+      if (selectedChatsForDelete.has(currentSessionId || "")) {
+        setCurrentSessionId(null);
+      }
+      toast({ title: `Deleted ${selectedChatsForDelete.size} chats` });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete chats", variant: "destructive" });
+    }
+  };
+
+  // Toggle select all
+  const toggleSelectAll = () => {
+    if (selectedChatsForDelete.size === sessions.length) {
+      setSelectedChatsForDelete(new Set());
+    } else {
+      setSelectedChatsForDelete(new Set(sessions.map(s => s.id)));
+    }
+  };
+
+  // Toggle individual chat selection
+  const toggleChatSelection = (sessionId: string) => {
+    const newSelected = new Set(selectedChatsForDelete);
+    if (newSelected.has(sessionId)) {
+      newSelected.delete(sessionId);
+    } else {
+      newSelected.add(sessionId);
+    }
+    setSelectedChatsForDelete(newSelected);
+  };
+
   // Send message
   const handleSendMessage = async () => {
     if (!message.trim() || !currentSessionId || isLoading) return;
@@ -118,10 +162,10 @@ export default function Chat() {
       const res = await apiRequest("POST", "/api/chat/send", {
         content: message.trim(),
         sessionId: currentSessionId,
+        autoLearn: true, // Enable auto-learning
       });
       await res.json();
-      
-      // Refetch messages and sessions
+
       await refetchMessages();
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       setMessage("");
@@ -172,41 +216,130 @@ export default function Chat() {
           </Button>
         </div>
 
+        {/* History Tabs */}
+        <div className="flex gap-1 p-3 border-b border-border">
+          <button
+            onClick={() => setHistoryTab("all")}
+            className={`flex-1 text-xs font-semibold py-2 rounded transition-colors ${
+              historyTab === "all"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-history-all"
+          >
+            All
+          </button>
+          <button
+            onClick={() => setHistoryTab("manage")}
+            className={`flex-1 text-xs font-semibold py-2 rounded transition-colors ${
+              historyTab === "manage"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-history-manage"
+          >
+            Manage
+          </button>
+        </div>
+
         {/* Chat History */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {sessions.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">No chats yet</p>
+          {historyTab === "all" ? (
+            // All chats view
+            <>
+              {sessions.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No chats yet</p>
+              ) : (
+                sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                      currentSessionId === session.id
+                        ? "bg-primary/20 text-primary"
+                        : "hover:bg-muted"
+                    }`}
+                  >
+                    <button
+                      onClick={() => setCurrentSessionId(session.id)}
+                      className="flex-1 text-left text-sm truncate min-w-0"
+                      title={session.title}
+                      data-testid={`button-session-${session.id}`}
+                    >
+                      {session.title}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete "${session.title}"?`)) {
+                          deleteChat(session.id);
+                        }
+                      }}
+                      className="p-1 text-destructive hover:bg-destructive/20 rounded transition-colors"
+                      data-testid={`button-delete-${session.id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </>
           ) : (
-            sessions.map((session) => (
-              <div
-                key={session.id}
-                className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
-                  currentSessionId === session.id
-                    ? "bg-primary/20 text-primary"
-                    : "hover:bg-muted"
-                }`}
-              >
-                <button
-                  onClick={() => setCurrentSessionId(session.id)}
-                  className="flex-1 text-left text-sm truncate min-w-0"
-                  title={session.title}
-                  data-testid={`button-session-${session.id}`}
-                >
-                  {session.title}
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm(`Delete "${session.title}"?`)) {
-                      deleteChat(session.id);
-                    }
-                  }}
-                  className="p-1 text-destructive hover:bg-destructive/20 rounded transition-colors"
-                  data-testid={`button-delete-${session.id}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))
+            // Manage chats view with checkboxes
+            <>
+              {sessions.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No chats to manage</p>
+              ) : (
+                <>
+                  {/* Select All Button */}
+                  <button
+                    onClick={toggleSelectAll}
+                    className="w-full flex items-center gap-2 p-2 rounded hover:bg-muted transition-colors mb-2 text-sm font-semibold"
+                    data-testid="button-select-all-chats"
+                  >
+                    {selectedChatsForDelete.size === sessions.length ? (
+                      <CheckSquare className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Square className="w-4 h-4 text-muted-foreground" />
+                    )}
+                    <span className="text-xs">
+                      {selectedChatsForDelete.size > 0 ? `${selectedChatsForDelete.size} selected` : "Select All"}
+                    </span>
+                  </button>
+
+                  {/* Chat List with Checkboxes */}
+                  {sessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center gap-2 p-2 rounded hover:bg-muted transition-colors"
+                    >
+                      <button
+                        onClick={() => toggleChatSelection(session.id)}
+                        className="flex-shrink-0"
+                        data-testid={`checkbox-session-${session.id}`}
+                      >
+                        {selectedChatsForDelete.has(session.id) ? (
+                          <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Square className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      <span className="flex-1 text-sm truncate">{session.title}</span>
+                    </div>
+                  ))}
+
+                  {/* Bulk Delete Button */}
+                  {selectedChatsForDelete.size > 0 && (
+                    <button
+                      onClick={bulkDeleteChats}
+                      className="w-full mt-4 flex items-center justify-center gap-2 p-2 rounded bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors text-sm font-semibold"
+                      data-testid="button-bulk-delete-chats"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete {selectedChatsForDelete.size}
+                    </button>
+                  )}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -259,7 +392,7 @@ export default function Chat() {
               <Bot className="w-16 h-16 text-muted-foreground/30 mb-4" />
               <h2 className="text-2xl font-semibold mb-2">Start a conversation</h2>
               <p className="text-muted-foreground max-w-md">
-                Ask me anything about your studies. I can help with explanations, problem-solving, and more.
+                Ask me anything about your studies. I can help with explanations, problem-solving, exam prep, and more.
               </p>
             </div>
           ) : (
