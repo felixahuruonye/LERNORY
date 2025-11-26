@@ -680,13 +680,16 @@ If they ask about similar topics or reference past conversations, remind them wh
         return res.status(404).json({ message: "Website not found" });
       }
 
-      console.log("🔍 Debugging:", debugPrompt);
+      console.log("🔍 LEARNORY AI Debug Started:", debugPrompt.substring(0, 50));
+      
       const debugResult = await debugCodeWithLEARNORY(
         website.htmlCode,
         website.cssCode,
         website.jsCode || "",
         debugPrompt
       );
+
+      console.log("✅ Debug complete, checking updates...");
 
       const htmlUpdated = debugResult.htmlCode !== website.htmlCode;
       const cssUpdated = debugResult.cssCode !== website.cssCode;
@@ -698,6 +701,8 @@ If they ask about similar topics or reference past conversations, remind them wh
         jsCode: debugResult.jsCode,
       });
 
+      console.log("💾 Website saved. Updates:", { html: htmlUpdated, css: cssUpdated, js: jsUpdated });
+
       res.json({
         success: true,
         updates: {
@@ -707,7 +712,7 @@ If they ask about similar topics or reference past conversations, remind them wh
         }
       });
     } catch (error) {
-      console.error("Debug error:", error);
+      console.error("❌ Debug endpoint error:", error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : "Debug failed"

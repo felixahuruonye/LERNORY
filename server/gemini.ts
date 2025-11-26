@@ -176,22 +176,24 @@ interface DebugResult {
 export async function debugCodeWithLEARNORY(html: string, css: string, js: string, debugPrompt: string): Promise<DebugResult> {
   const codeSnippet = `HTML:\n${html}\n\nCSS:\n${css}\n\nJavaScript:\n${js}`;
   
-  const prompt = `You are an expert web developer. User request: ${debugPrompt}
+  const prompt = `You are an expert web developer fixing code issues.
+
+User request: ${debugPrompt}
 
 Current code:
 ${codeSnippet}
 
-RESPOND WITH ONLY VALID JSON, NO OTHER TEXT:
+Fix the code and RESPOND WITH ONLY THIS JSON FORMAT (no markdown, no explanation, just pure JSON):
 {
-  "htmlCode": "<improved html code here>",
-  "cssCode": "improved css code here",
-  "jsCode": "improved javascript code here",
-  "steps": ["fix 1", "fix 2"]
+  "htmlCode": "<complete fixed html>",
+  "cssCode": "complete fixed css",
+  "jsCode": "complete fixed javascript",
+  "steps": ["what was fixed 1", "what was fixed 2"]
 }`;
 
   try {
     if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+      throw new Error("GEMINI_API_KEY not set");
     }
 
     const response = await ai.models.generateContent({
@@ -199,36 +201,36 @@ RESPOND WITH ONLY VALID JSON, NO OTHER TEXT:
       contents: prompt,
     });
 
-    const responseText = response.text;
-    if (!responseText) throw new Error("Empty response from LEARNORY AI");
+    let responseText = response.text;
+    if (!responseText) throw new Error("Empty response from Gemini");
 
-    console.log("Raw response from Gemini:", responseText.substring(0, 200));
+    // Remove markdown code blocks if present
+    responseText = responseText
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
 
-    // Try to parse directly first
+    console.log("✅ Debug response cleaned, parsing JSON...");
+
+    // Parse JSON - try direct parse first, then fallback to extraction
     let result;
     try {
-      result = JSON.parse(responseText.trim());
+      result = JSON.parse(responseText);
     } catch (e) {
-      // If direct parse fails, try to extract JSON
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("Could not extract JSON from response");
-      
-      const cleanedJson = jsonMatch[0]
-        .replace(/[\r\n]/g, " ")
-        .replace(/\s+/g, " ");
-      
-      result = JSON.parse(cleanedJson);
+      if (!jsonMatch) throw new Error("No JSON found in response");
+      result = JSON.parse(jsonMatch[0]);
     }
 
     return {
       htmlCode: result.htmlCode || html,
       cssCode: result.cssCode || css,
       jsCode: result.jsCode || js,
-      steps: result.steps || []
+      steps: Array.isArray(result.steps) ? result.steps : []
     };
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error debugging code with LEARNORY AI:", errorMsg);
+    console.error("❌ Debug error:", error instanceof Error ? error.message : String(error));
     throw error;
   }
 }
