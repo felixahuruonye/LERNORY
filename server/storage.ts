@@ -803,4 +803,202 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+// Fallback in-memory storage when database is unavailable
+class MemoryStorage implements IStorage {
+  private data: any = {
+    users: new Map(),
+    chatMessages: new Map(),
+    chatSessions: new Map(),
+    memoryEntries: new Map(),
+    generatedImages: new Map(),
+    userProgress: new Map(),
+    examResults: new Map(),
+  };
+  private idCounter = { users: 0, messages: 0, sessions: 0, images: 0 };
+
+  // User operations
+  async getUser(id: string) {
+    return this.data.users.get(id);
+  }
+
+  async upsertUser(user: UpsertUser) {
+    const id = user.id || `user_${++this.idCounter.users}`;
+    const fullUser = { id, ...user, updatedAt: new Date() };
+    this.data.users.set(id, fullUser);
+    return fullUser;
+  }
+
+  // Chat message operations
+  async createChatMessage(msg: InsertChatMessage) {
+    const id = `msg_${++this.idCounter.messages}`;
+    const message = { id, ...msg, createdAt: new Date() };
+    this.data.chatMessages.set(id, message);
+    return message;
+  }
+
+  async getChatMessagesBySession(sessionId: string) {
+    return Array.from(this.data.chatMessages.values()).filter(m => m.sessionId === sessionId);
+  }
+
+  async getChatMessagesByUser(userId: string, limit = 500) {
+    return Array.from(this.data.chatMessages.values()).filter(m => m.userId === userId).slice(0, limit);
+  }
+
+  async deleteChatMessagesByUser(userId: string) {
+    for (const [id, msg] of this.data.chatMessages) {
+      if (msg.userId === userId) this.data.chatMessages.delete(id);
+    }
+  }
+
+  async saveChatMessage(msg: InsertChatMessage) {
+    return this.createChatMessage(msg);
+  }
+
+  // Chat session operations
+  async getChatSession(id: string) {
+    return this.data.chatSessions.get(id);
+  }
+
+  async getChatSessionsByUser(userId: string) {
+    return Array.from(this.data.chatSessions.values()).filter(s => s.userId === userId);
+  }
+
+  async createChatSession(session: InsertChatSession) {
+    const id = `session_${++this.idCounter.sessions}`;
+    const fullSession = { id, ...session, createdAt: new Date(), updatedAt: new Date(), messageCount: 0 };
+    this.data.chatSessions.set(id, fullSession);
+    return fullSession;
+  }
+
+  async updateChatSession(id: string, updates: Partial<InsertChatSession>) {
+    const session = this.data.chatSessions.get(id);
+    if (session) {
+      const updated = { ...session, ...updates, updatedAt: new Date() };
+      this.data.chatSessions.set(id, updated);
+      return updated;
+    }
+  }
+
+  async deleteChatSession(id: string) {
+    this.data.chatSessions.delete(id);
+  }
+
+  // Memory entries
+  async createMemoryEntry(entry: InsertMemoryEntry) {
+    const id = `mem_${++this.idCounter.messages}`;
+    const fullEntry = { id, ...entry, createdAt: new Date() };
+    this.data.memoryEntries.set(id, fullEntry);
+    return fullEntry;
+  }
+
+  async getMemoryEntriesByUser(userId: string) {
+    return Array.from(this.data.memoryEntries.values()).filter(m => m.userId === userId);
+  }
+
+  // User progress
+  async getUserProgressByUser(userId: string) {
+    return this.data.userProgress.get(userId) || [];
+  }
+
+  // Generated images
+  async createGeneratedImage(img: InsertGeneratedImage) {
+    const id = `img_${++this.idCounter.images}`;
+    const fullImg = { id, ...img, createdAt: new Date() };
+    this.data.generatedImages.set(id, fullImg);
+    return fullImg;
+  }
+
+  async getGeneratedImagesByUser(userId: string) {
+    return Array.from(this.data.generatedImages.values()).filter(i => i.userId === userId);
+  }
+
+  async deleteGeneratedImage(id: string) {
+    this.data.generatedImages.delete(id);
+  }
+
+  // Exam results
+  async getExamResultsByUser(userId: string) {
+    return this.data.examResults.get(userId) || [];
+  }
+
+  // Stub implementations for other methods
+  async getCourse() { return undefined; }
+  async getCoursesByTeacher() { return []; }
+  async getAllCourses() { return []; }
+  async createCourse(c: any) { return c as Course; }
+  async updateCourse() { return undefined; }
+  async getLesson() { return undefined; }
+  async getLessonsByCourse() { return []; }
+  async createLesson(l: any) { return l as Lesson; }
+  async getLiveSession() { return undefined; }
+  async getLiveSessionsByTeacher() { return []; }
+  async createLiveSession(s: any) { return s as LiveSession; }
+  async getTranscript() { return undefined; }
+  async getTranscriptsBySession() { return []; }
+  async createTranscript(t: any) { return t as Transcript; }
+  async getQuiz() { return undefined; }
+  async getQuizzesByCourse() { return []; }
+  async createQuiz(q: any) { return q as Quiz; }
+  async getQuizAttempt() { return undefined; }
+  async createQuizAttempt(a: any) { return a as QuizAttempt; }
+  async getAnalyticsEvents() { return []; }
+  async createAnalyticsEvent() { return {} as AnalyticsEvent; }
+  async getPurchasesByUser() { return []; }
+  async createPurchase(p: any) { return p as Purchase; }
+  async getFileUploadsByUser() { return []; }
+  async createFileUpload(f: any) { return f as FileUpload; }
+  async getStudentProfileByUser() { return undefined; }
+  async upsertStudentProfile(p: any) { return p as StudentProfile; }
+  async getSchool() { return undefined; }
+  async getAllSchools() { return []; }
+  async createSchool(s: any) { return s as School; }
+  async getStudyPlan() { return undefined; }
+  async getStudyPlansByUser() { return []; }
+  async createStudyPlan(s: any) { return s as StudyPlan; }
+  async updateStudyPlan() { return undefined; }
+  async getCodeSnippet() { return undefined; }
+  async getCodeSnippetsByUser() { return []; }
+  async createCodeSnippet(c: any) { return c as CodeSnippet; }
+  async createExamResult(e: any) { return e as ExamResult; }
+  async getGeneratedWebsite() { return undefined; }
+  async getGeneratedWebsitesByUser() { return []; }
+  async createGeneratedWebsite(w: any) { return w as GeneratedWebsite; }
+  async getLearningHistory() { return undefined; }
+  async getLearningHistoryByUser() { return []; }
+  async createLearningHistory(l: any) { return l as LearningHistory; }
+  async getTopicExplanation() { return undefined; }
+  async createTopicExplanation(t: any) { return t as TopicExplanation; }
+  async createNotification(n: any) { return n as Notification; }
+  async getNotifications() { return []; }
+  async getVoiceConversation() { return undefined; }
+  async getVoiceConversationsByUser() { return []; }
+  async createVoiceConversation(v: any) { return v as VoiceConversation; }
+  async getDocumentUpload() { return undefined; }
+  async getDocumentUploadsByUser() { return []; }
+  async createDocumentUpload(d: any) { return d as DocumentUpload; }
+  async getLiveAiFeature() { return undefined; }
+  async getLiveAiFeaturesByUser() { return []; }
+  async createLiveAiFeature(f: any) { return f as LiveAiFeature; }
+  async getCbtExam() { return undefined; }
+  async getAllCbtExams() { return []; }
+  async createCbtExam(e: any) { return e as CbtExam; }
+  async getCbtQuestion() { return undefined; }
+  async getCbtQuestionsByExam() { return []; }
+  async createCbtQuestion(q: any) { return q as CbtQuestion; }
+  async getCbtSession() { return undefined; }
+  async getCbtSessionsByUser() { return []; }
+  async createCbtSession(s: any) { return s as CbtSession; }
+  async updateCbtSession() { return undefined; }
+  async getCbtAnswer() { return undefined; }
+  async createCbtAnswer(a: any) { return a as CbtAnswer; }
+  async getRecordingsByUser() { return []; }
+  async createRecording(r: any) { return r as Recording; }
+  async deleteRecording() { }
+  async createGeneratedLesson(l: any) { return l as GeneratedLesson; }
+  async getGeneratedLessonsByUser() { return []; }
+  async deleteGeneratedLesson() { }
+  async getCbtAnswersBySession() { return []; }
+}
+
+// Use memory storage as fallback, try database if available
+export const storage = (db ? new DatabaseStorage() : new MemoryStorage()) as IStorage;
