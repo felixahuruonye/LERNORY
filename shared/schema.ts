@@ -535,6 +535,22 @@ export const cbtAnswers = pgTable("cbt_answers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Live Session Recordings
+export const recordings = pgTable("recordings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: varchar("session_id").references(() => liveSessions.id, { onDelete: 'cascade' }),
+  title: varchar("title", { length: 255 }).notNull(),
+  audioData: text("audio_data").notNull(), // Base64 encoded audio
+  transcript: jsonb("transcript").notNull(), // Array of transcript segments
+  duration: integer("duration").notNull(), // in seconds
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertRecordingSchema = createInsertSchema(recordings).omit({ id: true, createdAt: true });
+export type InsertRecording = z.infer<typeof insertRecordingSchema>;
+export type Recording = typeof recordings.$inferSelect;
+
 export const insertDocumentUploadSchema = createInsertSchema(documentUploads).omit({ id: true, createdAt: true });
 export type InsertDocumentUpload = z.infer<typeof insertDocumentUploadSchema>;
 export type DocumentUpload = typeof documentUploads.$inferSelect;

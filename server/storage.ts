@@ -32,6 +32,7 @@ import {
   cbtQuestions,
   cbtSessions,
   cbtAnswers,
+  recordings,
   type User,
   type UpsertUser,
   type Course,
@@ -94,6 +95,8 @@ import {
   type InsertCbtSession,
   type CbtAnswer,
   type InsertCbtAnswer,
+  type Recording,
+  type InsertRecording,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -231,6 +234,11 @@ export interface IStorage {
   getDocumentUploadsByUser(userId: string): Promise<DocumentUpload[]>;
   createLiveAiFeature(feature: InsertLiveAiFeature): Promise<LiveAiFeature>;
   getLiveAiFeaturesByUser(userId: string): Promise<LiveAiFeature[]>;
+
+  // Recording operations
+  createRecording(recording: InsertRecording): Promise<Recording>;
+  getRecordingsByUser(userId: string): Promise<Recording[]>;
+  deleteRecording(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -744,6 +752,21 @@ export class DatabaseStorage implements IStorage {
   async createCbtAnswer(answer: InsertCbtAnswer): Promise<CbtAnswer> {
     const [newAnswer] = await db.insert(cbtAnswers).values(answer).returning();
     return newAnswer;
+  }
+
+  // Recording operations
+  async createRecording(recording: InsertRecording): Promise<Recording> {
+    const [newRecording] = await db.insert(recordings).values(recording).returning();
+    return newRecording;
+  }
+
+  async getRecordingsByUser(userId: string): Promise<Recording[]> {
+    return await db.select().from(recordings).where(eq(recordings.userId, userId)).orderBy(desc(recordings.createdAt));
+  }
+
+  async deleteRecording(id: string): Promise<void> {
+    await db.delete(recordings).where(eq(recordings.id, id));
+  }
   }
 
   async getCbtAnswersBySession(sessionId: string): Promise<CbtAnswer[]> {
