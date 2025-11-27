@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import fs from "fs";
+import path from "path";
 
 const app = express();
 
@@ -57,13 +59,16 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
+  // Always use static build files if they exist (avoids HMR issues)
+  const distPath = path.resolve(import.meta.dirname, "dist/public");
+  const hasStaticBuild = fs.existsSync(path.join(distPath, "index.html"));
+  
+  if (hasStaticBuild) {
+    console.log("✅ Serving static build files");
     serveStatic(app);
+  } else {
+    console.log("⚠️ Static build not found, using Vite dev server");
+    await setupVite(app, server);
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
