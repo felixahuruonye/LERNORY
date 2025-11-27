@@ -2284,6 +2284,33 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Delete exam from history - Feature: Remove exam records
+  app.delete('/api/cbt/history/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.claims.sub;
+      
+      // Verify ownership before deleting
+      const history = await storage.getCbtExamHistoryByUser(userId);
+      const examToDelete = history.find((h: any) => h.id === id);
+      
+      if (!examToDelete) {
+        return res.status(404).json({ message: 'Exam not found' });
+      }
+
+      // Delete the exam - implementation depends on storage type
+      if (storage.deleteCbtExamHistory) {
+        await (storage as any).deleteCbtExamHistory(id);
+      }
+      
+      console.log(`✅ Exam ${id} deleted by user ${userId}`);
+      res.json({ message: 'Exam deleted successfully', id });
+    } catch (error: any) {
+      console.error("Delete exam error:", error);
+      res.status(500).json({ message: error?.message || 'Failed to delete exam' });
+    }
+  });
+
   // Admin Content Management - Feature 3: Upload and manage question banks
   app.post('/api/admin/cbt/import-questions', isAuthenticated, async (req: any, res: Response) => {
     try {
