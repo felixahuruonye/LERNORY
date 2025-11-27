@@ -207,12 +207,25 @@ export async function gradeAnswersWithLEARNORY(
     let correctCount = 0;
     const questionsData = questions
       .map((q, idx) => {
-        const userAnswer = answers[q.id] || 'Not answered';
-        const isCorrect = userAnswer === q.correct;
+        // Try multiple keys to match the answer: q.id, idx, or formatted keys
+        let userAnswer = answers[q.id] || answers[String(idx)] || answers[String(idx + 1)] || 'Not answered';
+        
+        // If still not found, check for subject_index format that frontend uses
+        if (userAnswer === 'Not answered') {
+          for (const key in answers) {
+            if (key.endsWith(`_${idx}`) || key.endsWith(`_${idx + 1}`)) {
+              userAnswer = answers[key];
+              break;
+            }
+          }
+        }
+        
+        const isCorrect = userAnswer !== 'Not answered' && userAnswer === q.correct;
         if (isCorrect) correctCount++;
         
         return {
           number: idx + 1,
+          questionId: q.id || String(idx),
           question: q.question,
           options: q.options,
           correct: q.correct,
