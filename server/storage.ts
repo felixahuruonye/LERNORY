@@ -1148,8 +1148,7 @@ class MemoryStorage implements IStorage {
   async updateGeneratedLessonsStatus() { return undefined; }
 }
 
-// Use memory storage since database endpoint is disabled
-// The app will work fully with in-memory storage during this session
-export const storage = new MemoryStorage() as IStorage;
+// Use database storage for persistent exam history and analytics
+export const storage = new DatabaseStorage() as IStorage;
 
-console.log('✅ Using in-memory storage for this session');
+console.log('✅ Using database storage for persistent data');
