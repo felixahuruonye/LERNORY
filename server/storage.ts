@@ -822,8 +822,11 @@ class MemoryStorage implements IStorage {
     generatedImages: new Map(),
     userProgress: new Map(),
     examResults: new Map(),
+    cbtExamHistory: new Map(),
+    cbtAnalytics: new Map(),
+    notifications: new Map(),
   };
-  private idCounter = { users: 0, messages: 0, sessions: 0, images: 0 };
+  private idCounter = { users: 0, messages: 0, sessions: 0, images: 0, exams: 0, analytics: 0, notifications: 0 };
 
   // User operations
   async getUser(id: string) {
@@ -930,6 +933,118 @@ class MemoryStorage implements IStorage {
     return this.data.examResults.get(userId) || [];
   }
 
+  // CBT Exam History - STORES exam attempts with results
+  async createCbtExamHistory(history: InsertCbtExamHistory): Promise<CbtExamHistory> {
+    const id = `cbt_${++this.idCounter.exams}`;
+    const fullHistory = { 
+      id, 
+      ...history, 
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as CbtExamHistory;
+    
+    // Store by ID
+    this.data.cbtExamHistory.set(id, fullHistory);
+    
+    // Also index by user for quick retrieval
+    if (!this.data.cbtExamHistory.has(`user_${history.userId}`)) {
+      this.data.cbtExamHistory.set(`user_${history.userId}`, []);
+    }
+    const userExams = this.data.cbtExamHistory.get(`user_${history.userId}`);
+    userExams.push(fullHistory);
+    
+    console.log(`✅ CBT Exam saved: ${history.examType} - ${fullHistory.score}% (User: ${history.userId})`);
+    return fullHistory;
+  }
+
+  // CBT Analytics - TRACKS topic performance across exams
+  async updateCbtAnalytics(userId: string, topic: string, isStrong: boolean): Promise<CbtAnalytics | undefined> {
+    const key = `${userId}_${topic}`;
+    let analytics = this.data.cbtAnalytics.get(key);
+    
+    if (!analytics) {
+      analytics = {
+        id: `analytics_${++this.idCounter.analytics}`,
+        userId,
+        subject: topic.split(' ')[0], // Extract subject from topic
+        topic,
+        attemptCount: 0,
+        correctCount: 0,
+        averageScore: 0,
+        strengthLevel: 'unknown',
+        lastAttempt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+    
+    analytics.attemptCount++;
+    if (isStrong) {
+      analytics.correctCount++;
+    }
+    analytics.averageScore = Math.round((analytics.correctCount / analytics.attemptCount) * 100);
+    analytics.strengthLevel = analytics.averageScore >= 70 ? 'strong' : 'weak';
+    analytics.lastAttempt = new Date();
+    analytics.updatedAt = new Date();
+    
+    this.data.cbtAnalytics.set(key, analytics);
+    console.log(`📊 Analytics updated: ${topic} - ${analytics.strengthLevel} (${analytics.averageScore}%)`);
+    return analytics;
+  }
+
+  // Get exam history by user
+  async getCbtExamHistoryByUser(userId: string): Promise<CbtExamHistory[]> {
+    const userExams = this.data.cbtExamHistory.get(`user_${userId}`) || [];
+    return userExams.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  // Get analytics by user
+  async getCbtAnalyticsByUser(userId: string): Promise<CbtAnalytics[]> {
+    return Array.from(this.data.cbtAnalytics.values())
+      .filter(a => a.userId === userId)
+      .sort((a: any, b: any) => b.averageScore - a.averageScore);
+  }
+
+  // Create notification
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const id = `notif_${++this.idCounter.notifications}`;
+    const fullNotif = { 
+      id, 
+      ...notification, 
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      read: notification.read ?? false,
+    } as Notification;
+    
+    this.data.notifications.set(id, fullNotif);
+    console.log(`🔔 Notification created: ${notification.title}`);
+    return fullNotif;
+  }
+
+  // Get notifications by user
+  async getNotificationsByUser(userId: string, limit = 50): Promise<Notification[]> {
+    return Array.from(this.data.notifications.values())
+      .filter(n => n.userId === userId)
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+  }
+
+  // Mark notification as read
+  async markNotificationAsRead(id: string): Promise<Notification | undefined> {
+    const notif = this.data.notifications.get(id);
+    if (notif) {
+      notif.read = true;
+      notif.updatedAt = new Date();
+      this.data.notifications.set(id, notif);
+    }
+    return notif;
+  }
+
+  // Delete notification
+  async deleteNotification(id: string): Promise<void> {
+    this.data.notifications.delete(id);
+  }
+
   // Stub implementations for other methods
   async getCourse() { return undefined; }
   async getCoursesByTeacher() { return []; }
@@ -1000,10 +1115,6 @@ class MemoryStorage implements IStorage {
   async updateCbtSession() { return undefined; }
   async getCbtAnswer() { return undefined; }
   async createCbtAnswer(a: any) { return a as CbtAnswer; }
-  async createCbtExamHistory(h: any) { return h as CbtExamHistory; }
-  async getCbtExamHistoryByUser() { return []; }
-  async getCbtAnalyticsByUser() { return []; }
-  async updateCbtAnalytics() { return undefined; }
   async createCbtQuestionLicensing(l: any) { return l as CbtQuestionLicensing; }
   async getCbtQuestionLicensing() { return undefined; }
   async getRecordingsByUser() { return []; }
@@ -1013,6 +1124,28 @@ class MemoryStorage implements IStorage {
   async getGeneratedLessonsByUser() { return []; }
   async deleteGeneratedLesson() { }
   async getCbtAnswersBySession() { return []; }
+  async getNotification() { return undefined; }
+  async deleteGeneratedWebsite() { }
+  async toggleFavoriteWebsite() { return undefined; }
+  async incrementViewCount() { return undefined; }
+  async updateGeneratedWebsite() { return undefined; }
+  async updateUserProgress() { return undefined; }
+  async getUserProgress() { return undefined; }
+  async updateCodeSnippet() { return undefined; }
+  async updatePurchaseStatus() { return undefined; }
+  async updateFileUploadStatus() { return undefined; }
+  async getLiveSessionsByTeacher() { return []; }
+  async getQuizAttemptsByStudent() { return []; }
+  async getTopicExplanationsByUser() { return []; }
+  async createAnalyticsEvent() { return {} as AnalyticsEvent; }
+  async createExamResult(e: any) { return e as ExamResult; }
+  async getGetFileUpload() { return undefined; }
+  async createTopicExplanation(t: any) { return t as TopicExplanation; }
+  async getLearningHistoryBySubject() { return []; }
+  async getGeneratedImagesByTopic() { return []; }
+  async getLiveAiFeaturesByUser() { return []; }
+  async updateLiveSession() { return undefined; }
+  async updateGeneratedLessonsStatus() { return undefined; }
 }
 
 // Use memory storage since database endpoint is disabled
