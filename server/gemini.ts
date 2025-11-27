@@ -203,27 +203,37 @@ export async function gradeAnswersWithLEARNORY(
       throw new Error("GEMINI_API_KEY not configured");
     }
 
+    // Calculate score locally first
+    let correctCount = 0;
     const questionsData = questions
-      .map((q, idx) => ({
-        number: idx + 1,
-        question: q.question,
-        options: q.options,
-        correct: q.correct,
-        userAnswer: answers[q.id] || 'Not answered',
-        isCorrect: answers[q.id] === q.correct,
-        explanation: q.explanation || '',
-      }))
+      .map((q, idx) => {
+        const userAnswer = answers[q.id] || 'Not answered';
+        const isCorrect = userAnswer === q.correct;
+        if (isCorrect) correctCount++;
+        
+        return {
+          number: idx + 1,
+          question: q.question,
+          options: q.options,
+          correct: q.correct,
+          userAnswer: userAnswer,
+          isCorrect: isCorrect,
+          explanation: q.explanation || '',
+        };
+      })
       .map((q) => JSON.stringify(q))
       .join('\n\n');
 
-    const prompt = `You are LEARNORY - an expert educational AI tutor. Grade these exam answers and provide detailed, personalized feedback.
+    const localScore = Math.round((correctCount / questions.length) * 100);
+
+    const prompt = `You are LEARNORY - an expert educational AI tutor. Grade these exam answers and provide detailed, personalized feedback. Student got ${localScore}% correct (${correctCount}/${questions.length}).
 
 QUESTIONS AND ANSWERS:
 ${questionsData}
 
 Analyze the answers and return ONLY valid JSON (no other text):
 {
-  "score": 75,
+  "score": ${localScore},
   "detailedFeedback": [
     {"questionId": "1", "isCorrect": true, "explanation": "Well done...", "keyLearning": "Key insight..."},
     {"questionId": "2", "isCorrect": false, "explanation": "The correct answer is...", "keyLearning": "Important concept..."}
@@ -246,6 +256,8 @@ Analyze the answers and return ONLY valid JSON (no other text):
     if (!jsonMatch) throw new Error("Could not extract JSON from LEARNORY grading");
 
     const gradingData = JSON.parse(jsonMatch[0]);
+    // Ensure score is set to calculated value
+    gradingData.score = localScore;
     console.log(`✅ LEARNORY grading complete: ${gradingData.score}%`);
 
     return gradingData;

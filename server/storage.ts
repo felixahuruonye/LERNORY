@@ -943,15 +943,8 @@ class MemoryStorage implements IStorage {
       updatedAt: new Date(),
     } as CbtExamHistory;
     
-    // Store by ID
+    // Store exam directly with ID
     this.data.cbtExamHistory.set(id, fullHistory);
-    
-    // Also index by user for quick retrieval
-    if (!this.data.cbtExamHistory.has(`user_${history.userId}`)) {
-      this.data.cbtExamHistory.set(`user_${history.userId}`, []);
-    }
-    const userExams = this.data.cbtExamHistory.get(`user_${history.userId}`);
-    userExams.push(fullHistory);
     
     console.log(`✅ CBT Exam saved: ${history.examType} - ${fullHistory.score}% (User: ${history.userId})`);
     return fullHistory;
@@ -994,25 +987,14 @@ class MemoryStorage implements IStorage {
 
   // Get exam history by user
   async getCbtExamHistoryByUser(userId: string): Promise<CbtExamHistory[]> {
-    const userExams = this.data.cbtExamHistory.get(`user_${userId}`) || [];
-    return userExams.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return Array.from(this.data.cbtExamHistory.values())
+      .filter((exam: any) => exam && exam.userId === userId)
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   // Delete exam from history
   async deleteCbtExamHistory(examId: string): Promise<void> {
-    // Find and remove the exam
-    for (const [key, value] of this.data.cbtExamHistory.entries()) {
-      if (Array.isArray(value)) {
-        // User exams array
-        const filtered = value.filter((e: any) => e.id !== examId);
-        if (filtered.length < value.length) {
-          this.data.cbtExamHistory.set(key, filtered);
-        }
-      } else if (value?.id === examId) {
-        // Direct exam entry
-        this.data.cbtExamHistory.delete(key);
-      }
-    }
+    this.data.cbtExamHistory.delete(examId);
     console.log(`✅ Exam ${examId} deleted from history`);
   }
 
