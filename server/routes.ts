@@ -2266,69 +2266,7 @@ KEY_WORDS: [keywords separated by commas]`,
   app.get('/api/cbt/history', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
-      let history = await storage.getCbtExamHistoryByUser(userId);
-      
-      // If no history for this user, create sample exams and store them
-      if (history.length === 0) {
-        const sampleQuestions1 = [
-          { id: 'q1', question: 'What is the molecular formula of methane?', options: ['CH4', 'C2H6', 'C3H8', 'C4H10'], correct: 'A', explanation: 'Methane is the simplest hydrocarbon with one carbon and four hydrogen atoms.' },
-          { id: 'q2', question: 'Which element is most electronegative?', options: ['Oxygen', 'Fluorine', 'Nitrogen', 'Chlorine'], correct: 'B', explanation: 'Fluorine is the most electronegative element on the periodic table.' },
-          { id: 'q3', question: 'What is the pH of pure water at 25°C?', options: ['5', '7', '9', '11'], correct: 'B', explanation: 'Pure water has a pH of 7, making it neutral.' }
-        ];
-        const sampleQuestions2 = [
-          { id: 'p1', question: 'What is the SI unit of force?', options: ['kg', 'N', 'm/s', 'J'], correct: 'B', explanation: 'The Newton (N) is the SI unit of force, defined as kg·m/s².' },
-          { id: 'p2', question: 'What does the second law of motion state?', options: ['F=ma', 'E=mc²', 'v=at', 'a=F/m'], correct: 'A', explanation: 'Newton\'s second law states F=ma, relating force, mass, and acceleration.' },
-          { id: 'p3', question: 'What is the speed of light?', options: ['1.5×10^8 m/s', '3×10^8 m/s', '5×10^8 m/s', '9×10^8 m/s'], correct: 'B', explanation: 'The speed of light in vacuum is approximately 3×10^8 m/s.' }
-        ];
-        
-        // Create and store sample exams
-        const exam1 = await storage.createCbtExamHistory({
-          userId,
-          sessionId: 'session_001',
-          examType: 'JAMB',
-          subjects: ['Chemistry'],
-          score: 78,
-          totalQuestions: 50,
-          correctAnswers: 39,
-          timeSpent: 1800,
-          summary: 'Good performance in Chemistry. Strong on organic chemistry topics, needs improvement on inorganic reactions.',
-          questions: sampleQuestions1,
-          userAnswers: { 'q1': 'A', 'q2': 'B', 'q3': 'B' },
-          aiAnalysis: {
-            score: 78,
-            detailedFeedback: [],
-            summary: 'Your Chemistry knowledge is solid overall.',
-            strongTopics: ['Organic Chemistry', 'Bonding'],
-            weakTopics: ['Inorganic Reactions'],
-            recommendations: ['Review periodic table trends', 'Practice balancing equations']
-          }
-        });
-        
-        const exam2 = await storage.createCbtExamHistory({
-          userId,
-          sessionId: 'session_002',
-          examType: 'JAMB',
-          subjects: ['Physics'],
-          score: 85,
-          totalQuestions: 50,
-          correctAnswers: 42,
-          timeSpent: 1650,
-          summary: 'Excellent performance in Physics. Strong mechanics and electromagnetism understanding.',
-          questions: sampleQuestions2,
-          userAnswers: { 'p1': 'B', 'p2': 'A', 'p3': 'B' },
-          aiAnalysis: {
-            score: 85,
-            detailedFeedback: [],
-            summary: 'Outstanding Physics performance with consistent problem-solving skills.',
-            strongTopics: ['Mechanics', 'Electromagnetism', 'Waves'],
-            weakTopics: ['Thermodynamics'],
-            recommendations: ['Keep practicing complex mechanics problems', 'Review thermodynamic processes']
-          }
-        });
-        
-        history = [exam1, exam2];
-      }
-      
+      const history = await storage.getCbtExamHistoryByUser(userId);
       res.json(history);
     } catch (error: any) {
       res.status(500).json({ message: error?.message || 'Failed to fetch history' });
