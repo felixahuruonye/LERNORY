@@ -1169,10 +1169,60 @@ class MemoryStorage implements IStorage {
 // Use database storage with automatic fallback to memory storage
 import { isDatabaseAvailable } from "./db";
 
-export const storage = (isDatabaseAvailable() ? new DatabaseStorage() : new MemoryStorage()) as IStorage;
+const memoryStorage = new MemoryStorage();
+export const storage = (isDatabaseAvailable() ? new DatabaseStorage() : memoryStorage) as IStorage;
 
 if (isDatabaseAvailable()) {
   console.log('✅ Using database storage - exam history will persist permanently');
 } else {
   console.log('⚠️ Database unavailable - using in-memory storage (data will persist during this session only)');
+  
+  // Seed sample exam history for demonstration
+  setTimeout(async () => {
+    const userId = 'default-user'; // Use a consistent user ID
+    
+    // Exam 1: Chemistry
+    await memoryStorage.createCbtExamHistory({
+      userId,
+      sessionId: 'session_001',
+      examType: 'JAMB',
+      subjects: ['Chemistry'],
+      score: 78,
+      totalQuestions: 50,
+      correctAnswers: 39,
+      timeSpent: 1800,
+      summary: 'Good performance in Chemistry. Strong on organic chemistry topics, needs improvement on inorganic reactions.',
+      aiAnalysis: {
+        score: 78,
+        detailedFeedback: [],
+        summary: 'Your Chemistry knowledge is solid overall.',
+        strongTopics: ['Organic Chemistry', 'Bonding'],
+        weakTopics: ['Inorganic Reactions'],
+        recommendations: ['Review periodic table trends', 'Practice balancing equations']
+      }
+    });
+    
+    // Exam 2: Physics  
+    await memoryStorage.createCbtExamHistory({
+      userId,
+      sessionId: 'session_002',
+      examType: 'JAMB',
+      subjects: ['Physics'],
+      score: 85,
+      totalQuestions: 50,
+      correctAnswers: 42,
+      timeSpent: 1650,
+      summary: 'Excellent performance in Physics. Strong mechanics and electromagnetism understanding.',
+      aiAnalysis: {
+        score: 85,
+        detailedFeedback: [],
+        summary: 'Outstanding Physics performance with consistent problem-solving skills.',
+        strongTopics: ['Mechanics', 'Electromagnetism', 'Waves'],
+        weakTopics: ['Thermodynamics'],
+        recommendations: ['Keep practicing complex mechanics problems', 'Review thermodynamic processes']
+      }
+    });
+    
+    console.log('📚 Sample exam history loaded');
+  }, 100);
 }
