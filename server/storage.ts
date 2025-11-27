@@ -998,6 +998,24 @@ class MemoryStorage implements IStorage {
     return userExams.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
+  // Delete exam from history
+  async deleteCbtExamHistory(examId: string): Promise<void> {
+    // Find and remove the exam
+    for (const [key, value] of this.data.cbtExamHistory.entries()) {
+      if (Array.isArray(value)) {
+        // User exams array
+        const filtered = value.filter((e: any) => e.id !== examId);
+        if (filtered.length < value.length) {
+          this.data.cbtExamHistory.set(key, filtered);
+        }
+      } else if (value?.id === examId) {
+        // Direct exam entry
+        this.data.cbtExamHistory.delete(key);
+      }
+    }
+    console.log(`✅ Exam ${examId} deleted from history`);
+  }
+
   // Get analytics by user
   async getCbtAnalyticsByUser(userId: string): Promise<CbtAnalytics[]> {
     return Array.from(this.data.cbtAnalytics.values())
@@ -1148,8 +1166,13 @@ class MemoryStorage implements IStorage {
   async updateGeneratedLessonsStatus() { return undefined; }
 }
 
-// Use memory storage by default - database operations will be added when fully stable
-// This prevents crashes when Neon client query methods aren't available
-export const storage = new MemoryStorage() as IStorage;
+// Use database storage with automatic fallback to memory storage
+import { isDatabaseAvailable } from "./db";
 
-console.log('✅ Using in-memory storage - exam history will be saved during this session');
+export const storage = (isDatabaseAvailable() ? new DatabaseStorage() : new MemoryStorage()) as IStorage;
+
+if (isDatabaseAvailable()) {
+  console.log('✅ Using database storage - exam history will persist permanently');
+} else {
+  console.log('⚠️ Database unavailable - using in-memory storage (data will persist during this session only)');
+}

@@ -14,22 +14,24 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Create Neon client with error handling
-const queryClient = neon(process.env.DATABASE_URL);
-
-// Wrap drizzle to catch connection errors gracefully
+let queryClient: any = null;
 let dbInstance: any = null;
 let dbError: Error | null = null;
+let isDbAvailable = false;
 
 try {
+  queryClient = neon(process.env.DATABASE_URL);
   dbInstance = drizzle({ client: queryClient, schema });
   console.log('✅ Database connection established');
+  isDbAvailable = true;
 } catch (error: any) {
   dbError = error;
-  console.warn('⚠️ Database connection failed (falling back to in-memory storage):', error.message);
+  console.warn('⚠️ Database connection warning:', error.message);
+  // Don't fail - allow fallback to memory storage
 }
 
 export const db = dbInstance;
-export const isDatabaseAvailable = () => !dbError;
+export const isDatabaseAvailable = () => isDbAvailable;
 
 // Create a simple pool interface for backward compatibility
 export const pool = {
