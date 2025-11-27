@@ -81,43 +81,69 @@ REQUIREMENTS:
 
       batchPromises.push(
         (async () => {
-          try {
-            const response = await ai.models.generateContent({
-              model: "gemini-2.5-flash",
-              contents: prompt,
-            });
-
-            let responseText = response.text;
-            if (!responseText) throw new Error(`Empty response for batch ${batch + 1}`);
-
-            // Extract JSON
-            let jsonText = responseText;
-            const markdownMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-            if (markdownMatch) jsonText = markdownMatch[1];
-
-            const arrayMatch = jsonText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-            if (!arrayMatch) throw new Error(`Could not extract JSON from batch ${batch + 1}`);
-
-            const questionsData = JSON.parse(arrayMatch[0]);
-            if (!Array.isArray(questionsData)) throw new Error(`Batch ${batch + 1} response is not array`);
-
-            console.log(`✅ Batch ${batch + 1}/${numBatches} completed with ${questionsData.length} questions`);
-            return questionsData;
-          } catch (batchError) {
-            console.warn(`⚠️ Batch ${batch + 1} failed, generating fallback questions:`, batchError);
-            // Generate fallback questions for this batch
-            const fallbacks = [];
-            for (let i = startId; i <= endId; i++) {
-              fallbacks.push({
-                id: String(i),
-                question: `${subject} Practice Question ${i}: Test your knowledge of ${subject} concepts?`,
-                options: ["Option A - Correct answer", "Option B - Incorrect", "Option C - Distractor", "Option D - Distractor"],
-                correct: "A",
-                explanation: "Review the key concepts in your textbook for this topic."
+          let retries = 0;
+          const maxRetries = 2;
+          
+          while (retries < maxRetries) {
+            try {
+              const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: prompt,
               });
+
+              let responseText = response.text;
+              if (!responseText) throw new Error(`Empty response for batch ${batch + 1}`);
+
+              // Extract JSON - try multiple patterns
+              let jsonText = responseText;
+              const markdownMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+              if (markdownMatch) jsonText = markdownMatch[1];
+
+              // Try to find array pattern
+              let arrayMatch = jsonText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+              if (!arrayMatch) {
+                // More aggressive pattern for edge cases
+                arrayMatch = jsonText.match(/\[[\s\S]*\]/);
+              }
+              
+              if (!arrayMatch) throw new Error(`Could not extract JSON from batch ${batch + 1} (attempt ${retries + 1})`);
+
+              const questionsData = JSON.parse(arrayMatch[0]);
+              if (!Array.isArray(questionsData)) throw new Error(`Batch ${batch + 1} response is not array`);
+
+              // Validate all questions have proper structure
+              const validBatch = questionsData.filter((q: any) => q.id && q.question && q.options && q.correct && q.explanation);
+              
+              console.log(`✅ Batch ${batch + 1}/${numBatches} completed with ${validBatch.length}/${questionsData.length} valid questions (${subject})`);
+              return validBatch;
+            } catch (batchError) {
+              retries++;
+              console.warn(`⚠️ Batch ${batch + 1} attempt ${retries} failed (${subject}):`, (batchError as any).message);
+              
+              if (retries >= maxRetries) {
+                console.warn(`⚠️ Batch ${batch + 1} failed after ${maxRetries} attempts, using fallback`);
+                // Generate fallback questions for this batch
+                const fallbacks = [];
+                for (let i = startId; i <= endId; i++) {
+                  const options = ["Option A", "Option B", "Option C", "Option D"];
+                  const correctAnswer = String.fromCharCode(65 + (i % 4)); // Vary correct answers
+                  fallbacks.push({
+                    id: String(i),
+                    question: `${subject} Exam Question ${i}: What is the correct answer?`,
+                    options: options,
+                    correct: correctAnswer,
+                    explanation: `This is a ${subject} question. Review the relevant textbook chapter.`
+                  });
+                }
+                return fallbacks;
+              }
+              
+              // Wait before retry
+              await new Promise(resolve => setTimeout(resolve, 1000));
             }
-            return fallbacks;
           }
+          
+          return [];
         })()
       );
     }

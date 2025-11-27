@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, CheckCircle2, BookOpen, TrendingUp, History, Loader2 } from 'lucide-react';
+import { Clock, CheckCircle2, BookOpen, TrendingUp, History, Loader2, Trash2, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -22,7 +22,7 @@ const SUBJECTS: Record<string, string[]> = {
 export default function CBTModeEnhanced() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [view, setView] = useState<'dashboard' | 'config' | 'loading' | 'exam' | 'results' | 'history' | 'analytics'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'config' | 'loading' | 'exam' | 'results' | 'history' | 'analytics' | 'review'>('dashboard');
   
   // Exam configuration
   const [selectedExamType, setSelectedExamType] = useState<string>('');
@@ -39,6 +39,7 @@ export default function CBTModeEnhanced() {
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
+  const [selectedReviewExam, setSelectedReviewExam] = useState<any>(null);
 
   // Fetch exam history
   const { data: examHistory = [] } = useQuery<any[]>({
@@ -63,6 +64,21 @@ export default function CBTModeEnhanced() {
       setView('results');
       setIsExamActive(false);
       toast({ title: '✅ Exam Graded by LEARNORY!', description: `Your score: ${data.gradingResult.score}%` });
+    },
+  });
+
+  // Delete exam mutation
+  const deleteExamMutation = useMutation({
+    mutationFn: async (examId: string) => {
+      const res = await apiRequest('DELETE', `/api/cbt/history/${examId}`, {});
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/cbt/history'] });
+      toast({ title: '✅ Exam deleted', description: 'Exam removed from history' });
+    },
+    onError: () => {
+      toast({ title: '❌ Error', description: 'Failed to delete exam' });
     },
   });
 
@@ -558,7 +574,7 @@ export default function CBTModeEnhanced() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background to-secondary/5 p-8">
         <div className="max-w-4xl mx-auto">
-          <Button onClick={() => setView('dashboard')} variant="outline" className="mb-8">← Back</Button>
+          <Button onClick={() => setView('dashboard')} variant="outline" className="mb-8" data-testid="button-back-dashboard">← Back</Button>
           <h1 className="text-4xl font-bold flex items-center gap-3 mb-8">
             <History className="w-10 h-10" />
             Exam History
@@ -568,13 +584,38 @@ export default function CBTModeEnhanced() {
             <div className="space-y-4">
               {examHistory.map((exam: any) => (
                 <Card key={exam.id} className="p-6 hover:bg-secondary transition-colors">
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start gap-4">
                     <div className="flex-1">
-                      <p className="font-bold text-lg">{exam.examType} - {exam.subjects?.join(', ')}</p>
+                      <p className="font-bold text-lg" data-testid={`text-exam-${exam.id}`}>{exam.examType} - {exam.subjects?.join(', ')}</p>
                       <p className="text-sm text-muted-foreground">{new Date(exam.createdAt).toLocaleDateString()}</p>
                       <p className="mt-2 text-sm">{exam.summary}</p>
                     </div>
-                    <Badge className="text-lg px-4 py-2">{exam.score}%</Badge>
+                    <div className="flex items-center gap-3">
+                      <Badge className="text-lg px-4 py-2" data-testid={`badge-score-${exam.id}`}>{exam.score}%</Badge>
+                      <Button 
+                        size="icon" 
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedReviewExam(exam);
+                          setView('review');
+                        }}
+                        data-testid={`button-view-${exam.id}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="destructive"
+                        onClick={() => {
+                          if (confirm('Delete this exam from history?')) {
+                            deleteExamMutation.mutate(exam.id);
+                          }
+                        }}
+                        data-testid={`button-delete-${exam.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               ))}
@@ -584,6 +625,74 @@ export default function CBTModeEnhanced() {
               <p>No exam history yet. Start your first exam to begin!</p>
             </Card>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Review view - Show questions with correct answers
+  if (view === 'review' && selectedReviewExam) {
+    const allReviewQuestions: any[] = selectedReviewExam.questions || [];
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-secondary/5 p-8">
+        <div className="max-w-4xl mx-auto">
+          <Button onClick={() => setView('history')} variant="outline" className="mb-8" data-testid="button-back-history">← Back to History</Button>
+          <h1 className="text-4xl font-bold mb-4 flex items-center gap-3">
+            <BookOpen className="w-10 h-10" />
+            {selectedReviewExam.examType} - Review
+          </h1>
+          <p className="text-muted-foreground mb-8">Score: <span className="font-bold text-lg">{selectedReviewExam.score}%</span></p>
+
+          <div className="space-y-6">
+            {allReviewQuestions.map((q: any, idx: number) => {
+              const userAnswer = selectedReviewExam.userAnswers?.[q.id] || 'Not answered';
+              const isCorrect = userAnswer === q.correct;
+              
+              return (
+                <Card key={idx} className="p-6 border-l-4" style={{
+                  borderLeftColor: isCorrect ? '#22c55e' : '#ef4444'
+                }} data-testid={`card-question-${idx}`}>
+                  <div className="flex gap-2 mb-2">
+                    <p className="font-bold text-sm">Q{idx + 1}:</p>
+                    <p className="font-bold flex-1">{q.question}</p>
+                    <Badge variant={isCorrect ? 'default' : 'destructive'} data-testid={`badge-result-${idx}`}>
+                      {isCorrect ? '✓ Correct' : '✗ Wrong'}
+                    </Badge>
+                  </div>
+
+                  <div className="ml-12 space-y-2">
+                    {q.options?.map((opt: string, optIdx: number) => {
+                      const letter = String.fromCharCode(65 + optIdx);
+                      const isUserAnswer = letter === userAnswer;
+                      const isCorrectAnswer = letter === q.correct;
+
+                      return (
+                        <div 
+                          key={optIdx} 
+                          className={`p-3 rounded-md text-sm ${
+                            isCorrectAnswer ? 'bg-green-100 dark:bg-green-900 border-2 border-green-500' :
+                            isUserAnswer && !isCorrect ? 'bg-red-100 dark:bg-red-900 border-2 border-red-500' :
+                            'bg-secondary/30'
+                          }`}
+                          data-testid={`option-${idx}-${optIdx}`}
+                        >
+                          <span className="font-bold">{letter}.</span> {opt}
+                          {isCorrectAnswer && <span className="ml-2 font-bold text-green-700 dark:text-green-300">✓ Correct</span>}
+                          {isUserAnswer && !isCorrect && <span className="ml-2 font-bold text-red-700 dark:text-red-300">✗ Your answer</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900 rounded-md" data-testid={`explanation-${idx}`}>
+                    <p className="text-sm font-bold text-blue-900 dark:text-blue-100 mb-1">Explanation:</p>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">{q.explanation}</p>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
