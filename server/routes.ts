@@ -2210,7 +2210,7 @@ KEY_WORDS: [keywords separated by commas]`,
   // CBT Grading with LEARNORY - Feature 1: AI-powered grading and explanations
   app.post('/api/cbt/grade', isAuthenticated, async (req: any, res: Response) => {
     try {
-      const { questions, answers, sessionId } = req.body;
+      const { questions, answers, sessionId, examType, subjects } = req.body;
       const userId = req.user.claims.sub;
 
       if (!questions || !answers) {
@@ -2224,14 +2224,16 @@ KEY_WORDS: [keywords separated by commas]`,
       const examHistory = await storage.createCbtExamHistory({
         userId,
         sessionId: sessionId || 'temp',
-        examType: 'custom',
-        subjects: [],
+        examType: examType || 'custom',
+        subjects: subjects || [],
         score: gradingResult.score,
         totalQuestions: questions.length,
         correctAnswers: Math.round((gradingResult.score / 100) * questions.length),
         timeSpent: 0,
         summary: gradingResult.summary,
         aiAnalysis: gradingResult,
+        questions: questions,
+        userAnswers: answers,
       });
 
       // Create notification - Feature 6: Notifications
