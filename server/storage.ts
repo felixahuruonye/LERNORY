@@ -1148,13 +1148,8 @@ class MemoryStorage implements IStorage {
   async updateGeneratedLessonsStatus() { return undefined; }
 }
 
-// Use database storage with fallback to memory storage
-import { isDatabaseAvailable } from "./db";
+// Use memory storage by default - database operations will be added when fully stable
+// This prevents crashes when Neon client query methods aren't available
+export const storage = new MemoryStorage() as IStorage;
 
-export const storage = (isDatabaseAvailable() ? new DatabaseStorage() : new MemoryStorage()) as IStorage;
-
-if (isDatabaseAvailable()) {
-  console.log('✅ Using database storage for persistent data');
-} else {
-  console.log('⚠️ Database unavailable - using in-memory storage (data will be lost on restart)');
-}
+console.log('✅ Using in-memory storage - exam history will be saved during this session');
