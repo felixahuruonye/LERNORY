@@ -48,3 +48,10 @@ externalPort = 3001
 [[ports]]
 localPort = 45835
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+VITE_HMR_HOST = "0.0.0.0"
+VITE_HMR_PROTOCOL = "wss"
+VITE_HMR_PORT = "5000"
