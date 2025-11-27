@@ -1148,7 +1148,13 @@ class MemoryStorage implements IStorage {
   async updateGeneratedLessonsStatus() { return undefined; }
 }
 
-// Use database storage for persistent exam history and analytics
-export const storage = new DatabaseStorage() as IStorage;
+// Use database storage with fallback to memory storage
+import { isDatabaseAvailable } from "./db";
 
-console.log('✅ Using database storage for persistent data');
+export const storage = (isDatabaseAvailable() ? new DatabaseStorage() : new MemoryStorage()) as IStorage;
+
+if (isDatabaseAvailable()) {
+  console.log('✅ Using database storage for persistent data');
+} else {
+  console.log('⚠️ Database unavailable - using in-memory storage (data will be lost on restart)');
+}
