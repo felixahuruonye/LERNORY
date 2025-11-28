@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -85,8 +86,7 @@ export default function MemoryPanel() {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const response = await fetch("/api/memory/learned-preferences");
-        if (!response.ok) throw new Error("Failed to load preferences");
+        const response = await apiRequest("GET", "/api/memory/learned-preferences");
         const learned = await response.json();
         
         setMemoryCategories((prev) =>
@@ -115,12 +115,7 @@ export default function MemoryPanel() {
   const handleSaveMemoryItem = async (categoryId: string, itemKey: string) => {
     setIsSaving(true);
     try {
-      const response = await fetch("/api/memory/preferences", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryId, itemKey, value: editValue }),
-      });
-      if (!response.ok) throw new Error("Save failed");
+      const response = await apiRequest("POST", "/api/memory/preferences", { categoryId, itemKey, value: editValue });
       
       setMemoryCategories((prevCategories) =>
         prevCategories.map((cat) =>
@@ -158,12 +153,7 @@ export default function MemoryPanel() {
     
     setIsSaving(true);
     try {
-      const response = await fetch("/api/memory/preferences/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryId, key: itemKey, value: itemValue }),
-      });
-      if (!response.ok) throw new Error("Add failed");
+      const response = await apiRequest("POST", "/api/memory/preferences/add", { categoryId, key: itemKey, value: itemValue });
       
       setMemoryCategories((prevCategories) =>
         prevCategories.map((cat) =>
@@ -192,8 +182,7 @@ export default function MemoryPanel() {
   const handleExportMemory = async () => {
     setIsExporting(true);
     try {
-      const response = await fetch("/api/memory/export");
-      if (!response.ok) throw new Error("Export failed");
+      const response = await apiRequest("GET", "/api/memory/export");
       const data = await response.json();
       
       const jsonString = JSON.stringify(data, null, 2);
@@ -226,8 +215,7 @@ export default function MemoryPanel() {
   const handleBackup = async () => {
     setIsBackingUp(true);
     try {
-      const response = await fetch("/api/memory/backup", { method: "POST" });
-      if (!response.ok) throw new Error("Backup failed");
+      const response = await apiRequest("POST", "/api/memory/backup", {});
       const data = await response.json();
       
       toast({
@@ -251,8 +239,7 @@ export default function MemoryPanel() {
     
     setIsClearing(true);
     try {
-      const response = await fetch("/api/memory/clear", { method: "DELETE" });
-      if (!response.ok) throw new Error("Clear failed");
+      const response = await apiRequest("DELETE", "/api/memory/clear", {});
       
       toast({
         title: "Memory Cleared",
