@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,22 +40,6 @@ export default function AdvancedDashboard() {
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
   const [showGetStarted, setShowGetStarted] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-
-  // Check if user is first-time (show guide only once)
-  useEffect(() => {
-    try {
-      if (user && !authLoading) {
-        const userId = user.id || user.email;
-        const hasSeenGuide = localStorage.getItem(`guide-seen-${userId}`);
-        if (!hasSeenGuide) {
-          setShowGetStarted(true);
-          localStorage.setItem(`guide-seen-${userId}`, "true");
-        }
-      }
-    } catch (error) {
-      console.error("Guide check error:", error);
-    }
-  }, [user, authLoading]);
 
   if (authLoading || !user) {
     return (
@@ -327,8 +311,6 @@ export default function AdvancedDashboard() {
         )}
       </main>
 
-      {/* Get Started Guide Modal */}
-      <GetStartedGuide open={showGetStarted} onOpenChange={setShowGetStarted} />
     </div>
   );
 }
