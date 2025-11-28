@@ -97,23 +97,40 @@ export default function AdvancedChat() {
   };
 
   const handleSendMessage = async () => {
-    if (!message.trim() || isLoading) return;
+    const trimmedMsg = message.trim();
+    if (!trimmedMsg || isLoading) return;
 
-    // Check if user wants to read projects
-    if (shouldShowProjects(message)) {
-      const userMsg = { role: "user", content: message };
-      setMessages([...messages, userMsg]);
+    // ⚡ CRITICAL: Check FIRST if user wants to read projects - BEFORE doing anything else
+    if (shouldShowProjects(trimmedMsg)) {
+      // Add user message to UI
+      const userMsg = { role: "user", content: trimmedMsg };
+      setMessages((prev) => [...prev, userMsg]);
       
-      await loadProjects();
-      setShowProjectSelector(true);
+      // Clear input immediately
       setMessage("");
+      
+      // Load projects and show dialog
+      setIsLoading(true);
+      try {
+        await loadProjects();
+        setShowProjectSelector(true);
+      } catch (error) {
+        console.error("Failed to load projects:", error);
+        toast({ title: "Error", description: "Failed to load projects", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+      
+      // RETURN - DO NOT CONTINUE TO SEND TO BACKEND
       return;
     }
 
+    // If we get here, it's NOT a project reading request - send to backend AI
     try {
       setIsLoading(true);
-      const userMsg = { role: "user", content: message };
+      const userMsg = { role: "user", content: trimmedMsg };
       setMessages((prev) => [...prev, userMsg]);
+      setMessage("");
 
       // Build context if project is selected
       let systemContext = "";
@@ -122,7 +139,7 @@ export default function AdvancedChat() {
       }
 
       const res = await apiRequest("POST", "/api/chat/send", {
-        content: message.trim(),
+        content: trimmedMsg,
         sessionId: sessions[0]?.id,
         context: systemContext,
       });
@@ -135,7 +152,6 @@ export default function AdvancedChat() {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
-      setMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
       toast({ title: "Error", description: "Failed to send message", variant: "destructive" });
