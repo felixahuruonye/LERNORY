@@ -472,30 +472,44 @@ If they ask about similar topics or reference past conversations, remind them wh
         interests: {},
         business: {},
         writing: {},
+        autoLearned: {
+          subjects: [] as string[],
+          goals: [] as string[],
+          skills: [] as string[],
+          educationDetails: {} as Record<string, string>,
+          writingStyle: {} as Record<string, string>,
+        }
       };
 
       (entries || []).forEach((entry: any) => {
         if (entry.type === "auto_learned" && entry.data?.learned) {
           const learned = entry.data.learned;
           
+          // Collect raw learned data
           if (learned.subjects?.length) {
-            aggregated.interests = { primary: learned.subjects.join(", ") };
+            aggregated.autoLearned.subjects = Array.from(new Set([...aggregated.autoLearned.subjects, ...learned.subjects]));
+            aggregated.interests = { primary: aggregated.autoLearned.subjects.join(", ") };
           }
           if (learned.goals?.length) {
-            aggregated.goals = { learningGoal: learned.goals.join(", ") };
+            aggregated.autoLearned.goals = Array.from(new Set([...aggregated.autoLearned.goals, ...learned.goals]));
+            aggregated.goals = { learningGoal: aggregated.autoLearned.goals.join(", ") };
           }
           if (learned.skills?.length) {
-            aggregated.skills = { languages: learned.skills.join(", ") };
+            aggregated.autoLearned.skills = Array.from(new Set([...aggregated.autoLearned.skills, ...learned.skills]));
+            aggregated.skills = { languages: aggregated.autoLearned.skills.join(", ") };
           }
           if (learned.educationDetails) {
-            aggregated.business = { ...aggregated.business, ...learned.educationDetails };
+            aggregated.autoLearned.educationDetails = { ...aggregated.autoLearned.educationDetails, ...learned.educationDetails };
+            aggregated.business = { ...aggregated.business, ...aggregated.autoLearned.educationDetails };
           }
           if (learned.writingStyle) {
-            aggregated.writing = { ...aggregated.writing, ...learned.writingStyle };
+            aggregated.autoLearned.writingStyle = { ...aggregated.autoLearned.writingStyle, ...learned.writingStyle };
+            aggregated.writing = { ...aggregated.writing, ...aggregated.autoLearned.writingStyle };
           }
         }
       });
 
+      console.log(`✅ AI Auto-learned ${aggregated.autoLearned.subjects.length} subjects, ${aggregated.autoLearned.goals.length} goals, ${aggregated.autoLearned.skills.length} skills`);
       res.json(aggregated);
     } catch (error) {
       console.error("Fetch learned preferences failed:", error);

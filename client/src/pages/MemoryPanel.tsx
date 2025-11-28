@@ -102,6 +102,18 @@ export default function MemoryPanel() {
             return { ...cat, items };
           })
         );
+
+        // Log AI learning activity
+        if (learned.autoLearned) {
+          const learnedCount = 
+            (learned.autoLearned.subjects?.length || 0) + 
+            (learned.autoLearned.goals?.length || 0) + 
+            (learned.autoLearned.skills?.length || 0);
+          
+          if (learnedCount > 0) {
+            console.log(`🧠 AI has learned ${learnedCount} preferences from your interactions!`);
+          }
+        }
       } catch (error) {
         console.error("Load preferences error:", error);
       } finally {
