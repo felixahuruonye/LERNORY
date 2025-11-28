@@ -557,8 +557,19 @@ export default function CBTModeEnhanced() {
                   >
                     Next →
                   </Button>
-                  <Button onClick={handleSubmitExam} className="flex-1 bg-green-600 hover:bg-green-700">
-                    Submit (ESC)
+                  <Button 
+                    onClick={handleSubmitExam} 
+                    disabled={gradeMutation.isPending}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    {gradeMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Grading...
+                      </>
+                    ) : (
+                      'Submit (ESC)'
+                    )}
                   </Button>
                 </div>
               </>
@@ -635,7 +646,7 @@ export default function CBTModeEnhanced() {
           </Card>
 
           <div className="space-y-4">
-            <Card className="p-6 cursor-pointer hover:bg-secondary transition-colors" onClick={() => setView('history')}>
+            <Card className="p-6 cursor-pointer hover:bg-secondary transition-colors" onClick={() => window.location.href = '/notifications'}>
               <h3 className="font-bold mb-2 flex items-center gap-2">
                 <History className="w-4 h-4" />
                 Exam History
