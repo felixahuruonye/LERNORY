@@ -149,43 +149,80 @@ function Notifications() {
               const isCorrect = userAnswer === q.correct;
               
               return (
-                <Card key={idx} className="p-6 bg-slate-800/50 border-slate-700 border-l-4" style={{
+                <Card key={idx} className="p-6 bg-slate-800/50 border-slate-700" style={{
+                  borderLeftWidth: '4px',
                   borderLeftColor: isCorrect ? '#22c55e' : '#ef4444'
-                }}>
-                  <div className="flex gap-2 mb-2">
-                    <p className="font-bold text-sm text-white">Q{idx + 1}:</p>
-                    <p className="font-bold flex-1 text-white">{q.question}</p>
-                    <Badge variant={isCorrect ? 'default' : 'destructive'}>
-                      {isCorrect ? '✓ Correct' : '✗ Wrong'}
+                }} data-testid={`card-exam-review-${idx}`}>
+                  {/* Question Header */}
+                  <div className="flex gap-3 mb-6 items-start">
+                    <div className="flex-1">
+                      <p className="font-bold text-lg text-white">Q{idx + 1}: {q.question}</p>
+                    </div>
+                    <Badge variant={isCorrect ? 'default' : 'destructive'} className="whitespace-nowrap">
+                      {isCorrect ? '✓ Correct' : '✗ Incorrect'}
                     </Badge>
                   </div>
 
-                  <div className="ml-12 space-y-2">
-                    {q.options?.map((opt: string, optIdx: number) => {
-                      const letter = String.fromCharCode(65 + optIdx);
-                      const isUserAnswer = letter === userAnswer;
-                      const isCorrectAnswer = letter === q.correct;
+                  {/* Answer Comparison Section */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    {/* Your Answer */}
+                    <div className="p-4 rounded-md bg-amber-900/30 border border-amber-700">
+                      <p className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-3">Your Answer</p>
+                      <div className="space-y-2">
+                        {q.options?.map((opt: string, optIdx: number) => {
+                          const letter = String.fromCharCode(65 + optIdx);
+                          const isUserAnswer = letter === userAnswer;
+                          
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-2 rounded text-sm font-mono ${
+                                isUserAnswer 
+                                  ? 'bg-amber-700/60 border border-amber-500 text-amber-100 font-bold'
+                                  : 'text-gray-400'
+                              }`}
+                            >
+                              <span className="font-bold text-white">{letter}.</span> {opt}
+                              {isUserAnswer && <span className="ml-2 text-amber-300">← {isCorrect ? '✓' : '✗'}</span>}
+                            </div>
+                          );
+                        })}
+                        {userAnswer === 'Not answered' && (
+                          <p className="text-sm text-amber-400 italic">No answer submitted</p>
+                        )}
+                      </div>
+                    </div>
 
-                      return (
-                        <div 
-                          key={optIdx} 
-                          className={`p-3 rounded-md text-sm ${
-                            isCorrectAnswer ? 'bg-green-900/50 border border-green-500' :
-                            isUserAnswer && !isCorrect ? 'bg-red-900/50 border border-red-500' :
-                            'bg-slate-700/50'
-                          }`}
-                        >
-                          <span className="font-bold text-white">{letter}.</span> <span className="text-gray-200">{opt}</span>
-                          {isCorrectAnswer && <span className="ml-2 font-bold text-green-400">✓ Correct</span>}
-                          {isUserAnswer && !isCorrect && <span className="ml-2 font-bold text-red-400">✗ Your answer</span>}
-                        </div>
-                      );
-                    })}
+                    {/* Correct Answer */}
+                    <div className="p-4 rounded-md bg-green-900/30 border border-green-700">
+                      <p className="text-xs font-bold text-green-300 uppercase tracking-wider mb-3">Correct Answer</p>
+                      <div className="space-y-2">
+                        {q.options?.map((opt: string, optIdx: number) => {
+                          const letter = String.fromCharCode(65 + optIdx);
+                          const isCorrectAnswer = letter === q.correct;
+                          
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-2 rounded text-sm font-mono ${
+                                isCorrectAnswer 
+                                  ? 'bg-green-700/60 border border-green-500 text-green-100 font-bold'
+                                  : 'text-gray-400'
+                              }`}
+                            >
+                              <span className="font-bold text-white">{letter}.</span> {opt}
+                              {isCorrectAnswer && <span className="ml-2 text-green-300">✓</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="mt-4 p-4 bg-blue-900/30 rounded-md border border-blue-700">
-                    <p className="text-sm font-bold text-blue-300 mb-1">Explanation:</p>
-                    <p className="text-sm text-blue-200">{q.explanation}</p>
+                  {/* AI Correction/Explanation */}
+                  <div className="p-4 bg-blue-900/30 rounded-md border border-blue-700">
+                    <p className="text-sm font-bold text-blue-300 mb-2">📚 AI's Explanation (Why this is important):</p>
+                    <p className="text-sm text-blue-200 leading-relaxed">{q.explanation}</p>
                   </div>
                 </Card>
               );
