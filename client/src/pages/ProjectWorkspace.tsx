@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -24,25 +27,112 @@ import {
 
 export default function ProjectWorkspace() {
   const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState("files");
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      name: "Physics Study Guide",
-      description: "Comprehensive physics notes",
-      lastModified: "2 hours ago",
-      files: 12,
-      tasks: 5,
-    },
-    {
-      id: 2,
-      name: "Code Portfolio",
-      description: "Personal coding projects",
-      lastModified: "1 day ago",
-      files: 24,
-      tasks: 3,
-    },
-  ]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = useState<any>(null);
+  const [files, setFiles] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      const response = await apiRequest("GET", "/api/projects");
+      const data = await response.json();
+      setProjects(data);
+      if (data.length > 0) {
+        setSelectedProject(data[0]);
+        loadProjectData(data[0].id);
+      }
+    } catch (error) {
+      console.error("Load projects error:", error);
+      toast({ title: "Error", description: "Failed to load projects", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadProjectData = async (projectId: string) => {
+    try {
+      const [filesRes, tasksRes] = await Promise.all([
+        apiRequest("GET", `/api/projects/${projectId}/files`),
+        apiRequest("GET", `/api/projects/${projectId}/tasks`),
+      ]);
+      const filesData = await filesRes.json();
+      const tasksData = await tasksRes.json();
+      setFiles(filesData);
+      setTasks(tasksData);
+    } catch (error) {
+      console.error("Load project data error:", error);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return;
+    try {
+      const project = await apiRequest("POST", "/api/projects", { name: newProjectName, description: "" });
+      const newProject = await project.json();
+      setProjects([...projects, newProject]);
+      setSelectedProject(newProject);
+      setNewProjectName("");
+      await loadProjectData(newProject.id);
+      toast({ title: "Success", description: "Project created" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to create project", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      await apiRequest("DELETE", `/api/projects/${projectId}`, {});
+      setProjects(projects.filter(p => p.id !== projectId));
+      if (selectedProject?.id === projectId) {
+        const newSelected = projects[0];
+        setSelectedProject(newSelected);
+        if (newSelected) loadProjectData(newSelected.id);
+      }
+      toast({ title: "Success", description: "Project deleted" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete project", variant: "destructive" });
+    }
+  };
+
+  const handleCreateTask = async (title: string) => {
+    if (!selectedProject) return;
+    try {
+      const task = await apiRequest("POST", `/api/projects/${selectedProject.id}/tasks`, { title, status: "pending" });
+      const newTask = await task.json();
+      setTasks([...tasks, newTask]);
+      toast({ title: "Success", description: "Task created" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to create task", variant: "destructive" });
+    }
+  };
+
+  const handleUpdateTask = async (taskId: string, updates: any) => {
+    try {
+      const task = await apiRequest("PATCH", `/api/tasks/${taskId}`, updates);
+      const updated = await task.json();
+      setTasks(tasks.map(t => t.id === taskId ? updated : t));
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to update task", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await apiRequest("DELETE", `/api/tasks/${taskId}`, {});
+      setTasks(tasks.filter(t => t.id !== taskId));
+      toast({ title: "Success", description: "Task deleted" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete task", variant: "destructive" });
+    }
+  };
 
   if (authLoading || !user) {
     return <div>Loading...</div>;
@@ -71,14 +161,47 @@ export default function ProjectWorkspace() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Create New Project */}
+        <div className="mb-8 flex gap-2">
+          <Input
+            placeholder="New project name..."
+            value={newProjectName}
+            onChange={(e) => setNewProjectName(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && handleCreateProject()}
+            data-testid="input-new-project"
+          />
+          <Button onClick={handleCreateProject} data-testid="button-create-project">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Project
+          </Button>
+        </div>
+
         {/* Projects Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {projects.map((project) => (
-            <Card key={project.id} className="hover-elevate cursor-pointer" data-testid={`card-project-${project.id}`}>
+            <Card 
+              key={project.id} 
+              className={`hover-elevate cursor-pointer ${selectedProject?.id === project.id ? 'border-primary' : ''}`}
+              onClick={() => {
+                setSelectedProject(project);
+                loadProjectData(project.id);
+              }}
+              data-testid={`card-project-${project.id}`}
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <h3 className="font-semibold text-lg">{project.name}</h3>
-                  <Badge variant="secondary">{project.lastModified}</Badge>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteProject(project.id);
+                    }}
+                    data-testid={`button-delete-project-${project.id}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
               </CardHeader>
@@ -86,30 +209,19 @@ export default function ProjectWorkspace() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="bg-secondary/50 p-2 rounded text-center">
-                    <p className="font-semibold text-primary">{project.files}</p>
+                    <p className="font-semibold text-primary">{files.length}</p>
                     <p className="text-xs text-muted-foreground">Files</p>
                   </div>
                   <div className="bg-secondary/50 p-2 rounded text-center">
-                    <p className="font-semibold text-chart-2">{project.tasks}</p>
+                    <p className="font-semibold text-chart-2">{tasks.length}</p>
                     <p className="text-xs text-muted-foreground">Tasks</p>
                   </div>
                 </div>
 
-                <Button className="w-full hover-elevate" asChild data-testid={`button-open-project-${project.id}`}>
-                  <a href="#">Open Project</a>
-                </Button>
+                <Badge variant="secondary">Open Project</Badge>
               </CardContent>
             </Card>
           ))}
-
-          {/* Create New Project */}
-          <Card className="hover-elevate cursor-pointer border-2 border-dashed border-primary/50 flex items-center justify-center min-h-48" data-testid="card-new-project">
-            <div className="text-center">
-              <Plus className="h-8 w-8 mx-auto text-primary mb-2" />
-              <p className="font-semibold">New Project</p>
-              <p className="text-sm text-muted-foreground mt-1">Create a new workspace</p>
-            </div>
-          </Card>
         </div>
 
         {/* Project Details */}
@@ -177,12 +289,29 @@ function hello() {
               </TabsContent>
 
               <TabsContent value="tasks" className="space-y-4 mt-4">
+                <div className="flex gap-2 mb-4">
+                  <Input placeholder="Add new task..." data-testid="input-new-task" onKeyPress={(e) => {
+                    if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                      handleCreateTask(e.currentTarget.value);
+                      e.currentTarget.value = "";
+                    }
+                  }} />
+                </div>
                 <div className="space-y-2">
-                  {["Complete study notes", "Review chapter 3", "Practice problems"].map((task, idx) => (
-                    <div key={idx} className="p-3 bg-secondary/50 rounded flex items-center gap-3 hover-elevate">
-                      <input type="checkbox" className="h-4 w-4" data-testid={`checkbox-task-${idx}`} />
-                      <span className="text-sm font-medium flex-1">{task}</span>
-                      <Badge>In Progress</Badge>
+                  {tasks.map((task) => (
+                    <div key={task.id} className="p-3 bg-secondary/50 rounded flex items-center gap-3 hover-elevate">
+                      <input 
+                        type="checkbox" 
+                        className="h-4 w-4" 
+                        checked={task.status === "completed"}
+                        onChange={() => handleUpdateTask(task.id, { status: task.status === "completed" ? "pending" : "completed" })}
+                        data-testid={`checkbox-task-${task.id}`} 
+                      />
+                      <span className="text-sm font-medium flex-1">{task.title}</span>
+                      <Badge>{task.status}</Badge>
+                      <Button size="sm" variant="ghost" onClick={() => handleDeleteTask(task.id)} data-testid={`button-delete-task-${task.id}`}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   ))}
                 </div>

@@ -2379,5 +2379,101 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Project Workspace Routes
+  app.get('/api/projects', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const projects = await storage.getProjectsByUser(userId);
+      res.json(projects);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to fetch projects' });
+    }
+  });
+
+  app.post('/api/projects', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { name, description } = req.body;
+      const project = await storage.createProject({ userId, name, description });
+      res.json(project);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to create project' });
+    }
+  });
+
+  app.delete('/api/projects/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      await storage.deleteProject(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to delete project' });
+    }
+  });
+
+  app.get('/api/projects/:projectId/files', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const files = await storage.getFilesByProject(req.params.projectId);
+      res.json(files);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to fetch files' });
+    }
+  });
+
+  app.post('/api/projects/:projectId/files', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { name, content } = req.body;
+      const file = await storage.createFile({ projectId: req.params.projectId, name, content });
+      res.json(file);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to create file' });
+    }
+  });
+
+  app.delete('/api/files/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      await storage.deleteFile(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to delete file' });
+    }
+  });
+
+  app.get('/api/projects/:projectId/tasks', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const tasks = await storage.getTasksByProject(req.params.projectId);
+      res.json(tasks);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to fetch tasks' });
+    }
+  });
+
+  app.post('/api/projects/:projectId/tasks', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { title, status } = req.body;
+      const task = await storage.createTask({ projectId: req.params.projectId, title, status: status || 'pending' });
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to create task' });
+    }
+  });
+
+  app.patch('/api/tasks/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const task = await storage.updateTask(req.params.id, req.body);
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to update task' });
+    }
+  });
+
+  app.delete('/api/tasks/:id', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      await storage.deleteTask(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to delete task' });
+    }
+  });
+
   return httpServer;
 }

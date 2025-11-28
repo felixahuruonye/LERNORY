@@ -256,6 +256,21 @@ export interface IStorage {
   createGeneratedLesson(lesson: InsertGeneratedLesson): Promise<GeneratedLesson>;
   getGeneratedLessonsByUser(userId: string): Promise<GeneratedLesson[]>;
   deleteGeneratedLesson(id: string): Promise<void>;
+
+  // Project Workspace operations
+  getProjectsByUser(userId: string): Promise<any[]>;
+  createProject(project: any): Promise<any>;
+  updateProject(id: string, updates: any): Promise<any>;
+  deleteProject(id: string): Promise<void>;
+  
+  getFilesByProject(projectId: string): Promise<any[]>;
+  createFile(file: any): Promise<any>;
+  deleteFile(id: string): Promise<void>;
+  
+  getTasksByProject(projectId: string): Promise<any[]>;
+  createTask(task: any): Promise<any>;
+  updateTask(id: string, updates: any): Promise<any>;
+  deleteTask(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -826,8 +841,11 @@ class MemoryStorage implements IStorage {
     cbtExamHistory: new Map(),
     cbtAnalytics: new Map(),
     notifications: new Map(),
+    projects: new Map(),
+    projectFiles: new Map(),
+    projectTasks: new Map(),
   };
-  private idCounter = { users: 0, messages: 0, sessions: 0, images: 0, websites: 0, exams: 0, analytics: 0, notifications: 0 };
+  private idCounter = { users: 0, messages: 0, sessions: 0, images: 0, websites: 0, exams: 0, analytics: 0, notifications: 0, projects: 0, files: 0, tasks: 0 };
 
   // User operations
   async getUser(id: string) {
@@ -1199,6 +1217,70 @@ class MemoryStorage implements IStorage {
   async getLiveAiFeaturesByUser() { return []; }
   async updateLiveSession() { return undefined; }
   async updateGeneratedLessonsStatus() { return undefined; }
+
+  // Project Workspace
+  async getProjectsByUser(userId: string) {
+    return Array.from(this.data.projects.values()).filter(p => p.userId === userId).sort((a: any, b: any) => b.createdAt - a.createdAt);
+  }
+
+  async createProject(project: any) {
+    const id = `proj_${++this.idCounter.projects}`;
+    const fullProject = { id, ...project, createdAt: new Date(), updatedAt: new Date() };
+    this.data.projects.set(id, fullProject);
+    return fullProject;
+  }
+
+  async updateProject(id: string, updates: any) {
+    const project = this.data.projects.get(id);
+    if (project) {
+      const updated = { ...project, ...updates, updatedAt: new Date() };
+      this.data.projects.set(id, updated);
+      return updated;
+    }
+  }
+
+  async deleteProject(id: string) {
+    this.data.projects.delete(id);
+  }
+
+  async getFilesByProject(projectId: string) {
+    return Array.from(this.data.projectFiles.values()).filter(f => f.projectId === projectId);
+  }
+
+  async createFile(file: any) {
+    const id = `file_${++this.idCounter.files}`;
+    const fullFile = { id, ...file, createdAt: new Date() };
+    this.data.projectFiles.set(id, fullFile);
+    return fullFile;
+  }
+
+  async deleteFile(id: string) {
+    this.data.projectFiles.delete(id);
+  }
+
+  async getTasksByProject(projectId: string) {
+    return Array.from(this.data.projectTasks.values()).filter(t => t.projectId === projectId);
+  }
+
+  async createTask(task: any) {
+    const id = `task_${++this.idCounter.tasks}`;
+    const fullTask = { id, ...task, createdAt: new Date() };
+    this.data.projectTasks.set(id, fullTask);
+    return fullTask;
+  }
+
+  async updateTask(id: string, updates: any) {
+    const task = this.data.projectTasks.get(id);
+    if (task) {
+      const updated = { ...task, ...updates, updatedAt: new Date() };
+      this.data.projectTasks.set(id, updated);
+      return updated;
+    }
+  }
+
+  async deleteTask(id: string) {
+    this.data.projectTasks.delete(id);
+  }
 }
 
 // Use memory storage - safe fallback until database is properly configured
