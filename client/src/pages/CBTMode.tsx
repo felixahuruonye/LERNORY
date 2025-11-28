@@ -57,6 +57,7 @@ export default function CBTModeEnhanced() {
   const gradeMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest('POST', '/api/cbt/grade', data);
+      if (!res.ok) throw new Error(`Grade request failed: ${res.status}`);
       return await res.json();
     },
     onSuccess: (data: any) => {
@@ -66,6 +67,16 @@ export default function CBTModeEnhanced() {
       queryClient.invalidateQueries({ queryKey: ['/api/cbt/history'] });
       queryClient.invalidateQueries({ queryKey: ['/api/cbt/analytics'] });
       toast({ title: '✅ Exam Graded by LEARNORY!', description: `Your score: ${data.gradingResult.score}%` });
+    },
+    onError: (error: any) => {
+      setView('exam');
+      setIsExamActive(true);
+      toast({ 
+        title: '❌ Submission Failed', 
+        description: error?.message || 'Failed to submit exam. Please try again.',
+        variant: 'destructive'
+      });
+      console.error('Grading mutation error:', error);
     },
   });
 
