@@ -30,6 +30,9 @@ interface GetStartedGuideProps {
 
 export function GetStartedGuide({ open, onOpenChange }: GetStartedGuideProps) {
   const [currentStep, setCurrentStep] = useState(0);
+  
+  // Handle errors gracefully
+  if (!open) return null;
 
   const steps = [
     {
@@ -145,12 +148,18 @@ export function GetStartedGuide({ open, onOpenChange }: GetStartedGuideProps) {
     },
   ];
 
-  const step = steps[currentStep];
-  const Icon = step.icon;
-  const isLastStep = currentStep === steps.length - 1;
+  try {
+    const step = steps[currentStep];
+    if (!step) {
+      onOpenChange(false);
+      return null;
+    }
+    
+    const Icon = step.icon;
+    const isLastStep = currentStep === steps.length - 1;
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-4">
@@ -238,5 +247,10 @@ export function GetStartedGuide({ open, onOpenChange }: GetStartedGuideProps) {
         </div>
       </DialogContent>
     </Dialog>
-  );
+    );
+  } catch (error) {
+    console.error("GetStartedGuide error:", error);
+    onOpenChange(false);
+    return null;
+  }
 }

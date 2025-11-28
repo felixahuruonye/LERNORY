@@ -43,12 +43,17 @@ export default function AdvancedDashboard() {
 
   // Check if user is first-time (show guide only once)
   useEffect(() => {
-    if (user && !authLoading) {
-      const hasSeenGuide = localStorage.getItem(`guide-seen-${user.id || user.email}`);
-      if (!hasSeenGuide) {
-        setShowGetStarted(true);
-        localStorage.setItem(`guide-seen-${user.id || user.email}`, "true");
+    try {
+      if (user && !authLoading) {
+        const userId = user.id || user.email;
+        const hasSeenGuide = localStorage.getItem(`guide-seen-${userId}`);
+        if (!hasSeenGuide) {
+          setShowGetStarted(true);
+          localStorage.setItem(`guide-seen-${userId}`, "true");
+        }
       }
+    } catch (error) {
+      console.error("Guide check error:", error);
     }
   }, [user, authLoading]);
 
