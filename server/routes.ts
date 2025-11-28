@@ -781,7 +781,6 @@ If they ask about similar topics or reference past conversations, remind them wh
         jsCode: generated.js || "",
         tags: [],
         isFavorite: false,
-        viewCount: 0,
       });
 
       res.json(website);
