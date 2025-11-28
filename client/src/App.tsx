@@ -49,6 +49,7 @@ function Router() {
           <Route path="/image-gallery" component={ImageGallery} />
           <Route path="/image-gen" component={ImageGenAdvanced} />
           <Route path="/workspace" component={ProjectWorkspace} />
+          <Route path="/project-workspace" component={ProjectWorkspace} />
           <Route path="/memory" component={MemoryPanel} />
           <Route path="/settings" component={SettingsPanel} />
           <Route path="/audio" component={AudioSystem} />

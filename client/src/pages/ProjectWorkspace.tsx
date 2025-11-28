@@ -2,43 +2,45 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Link } from "wouter";
 import {
   ArrowLeft,
   FolderOpen,
-  FileText,
-  Code,
-  CheckSquare,
-  History,
-  Download,
   Plus,
   Trash2,
-  GitBranch,
-  Eye,
-  Edit3,
-  Brain,
+  HelpCircle,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export default function ProjectWorkspace() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [selectedTab, setSelectedTab] = useState("files");
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProject, setSelectedProject] = useState<any>(null);
-  const [files, setFiles] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [newProjectName, setNewProjectName] = useState("");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [showInstructions, setShowInstructions] = useState(false);
 
   useEffect(() => {
-    loadProjects();
-  }, []);
+    if (!authLoading && user) {
+      loadProjects();
+    }
+  }, [authLoading, user]);
 
   const loadProjects = async () => {
     try {
@@ -47,7 +49,7 @@ export default function ProjectWorkspace() {
       setProjects(data);
       if (data.length > 0) {
         setSelectedProject(data[0]);
-        loadProjectData(data[0].id);
+        loadProjectTasks(data[0].id);
       }
     } catch (error) {
       console.error("Load projects error:", error);
@@ -57,32 +59,31 @@ export default function ProjectWorkspace() {
     }
   };
 
-  const loadProjectData = async (projectId: string) => {
+  const loadProjectTasks = async (projectId: string) => {
     try {
-      const [filesRes, tasksRes] = await Promise.all([
-        apiRequest("GET", `/api/projects/${projectId}/files`),
-        apiRequest("GET", `/api/projects/${projectId}/tasks`),
-      ]);
-      const filesData = await filesRes.json();
-      const tasksData = await tasksRes.json();
-      setFiles(filesData);
-      setTasks(tasksData);
+      const response = await apiRequest("GET", `/api/projects/${projectId}/tasks`);
+      const data = await response.json();
+      setTasks(data);
     } catch (error) {
-      console.error("Load project data error:", error);
+      console.error("Load tasks error:", error);
     }
   };
 
   const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
+    if (!newProjectName.trim()) {
+      toast({ title: "Error", description: "Project name cannot be empty", variant: "destructive" });
+      return;
+    }
     try {
-      const project = await apiRequest("POST", "/api/projects", { name: newProjectName, description: "" });
-      const newProject = await project.json();
+      const response = await apiRequest("POST", "/api/projects", { name: newProjectName, description: "" });
+      const newProject = await response.json();
       setProjects([...projects, newProject]);
       setSelectedProject(newProject);
       setNewProjectName("");
-      await loadProjectData(newProject.id);
-      toast({ title: "Success", description: "Project created" });
+      await loadProjectTasks(newProject.id);
+      toast({ title: "Success", description: "Project created successfully!", variant: "default" });
     } catch (error) {
+      console.error("Create project error:", error);
       toast({ title: "Error", description: "Failed to create project", variant: "destructive" });
     }
   };
@@ -90,36 +91,57 @@ export default function ProjectWorkspace() {
   const handleDeleteProject = async (projectId: string) => {
     try {
       await apiRequest("DELETE", `/api/projects/${projectId}`, {});
-      setProjects(projects.filter(p => p.id !== projectId));
+      const newProjects = projects.filter(p => p.id !== projectId);
+      setProjects(newProjects);
       if (selectedProject?.id === projectId) {
-        const newSelected = projects[0];
-        setSelectedProject(newSelected);
-        if (newSelected) loadProjectData(newSelected.id);
+        if (newProjects.length > 0) {
+          setSelectedProject(newProjects[0]);
+          await loadProjectTasks(newProjects[0].id);
+        } else {
+          setSelectedProject(null);
+          setTasks([]);
+        }
       }
-      toast({ title: "Success", description: "Project deleted" });
+      toast({ title: "Success", description: "Project deleted", variant: "default" });
     } catch (error) {
+      console.error("Delete project error:", error);
       toast({ title: "Error", description: "Failed to delete project", variant: "destructive" });
     }
   };
 
-  const handleCreateTask = async (title: string) => {
-    if (!selectedProject) return;
+  const handleCreateTask = async () => {
+    if (!selectedProject) {
+      toast({ title: "Error", description: "Please select a project first", variant: "destructive" });
+      return;
+    }
+    if (!newTaskTitle.trim()) {
+      toast({ title: "Error", description: "Task title cannot be empty", variant: "destructive" });
+      return;
+    }
     try {
-      const task = await apiRequest("POST", `/api/projects/${selectedProject.id}/tasks`, { title, status: "pending" });
-      const newTask = await task.json();
+      const response = await apiRequest("POST", `/api/projects/${selectedProject.id}/tasks`, { 
+        title: newTaskTitle, 
+        status: "pending" 
+      });
+      const newTask = await response.json();
       setTasks([...tasks, newTask]);
-      toast({ title: "Success", description: "Task created" });
+      setNewTaskTitle("");
+      toast({ title: "Success", description: "Task created!", variant: "default" });
     } catch (error) {
+      console.error("Create task error:", error);
       toast({ title: "Error", description: "Failed to create task", variant: "destructive" });
     }
   };
 
-  const handleUpdateTask = async (taskId: string, updates: any) => {
+  const handleToggleTask = async (taskId: string, currentStatus: string) => {
+    const newStatus = currentStatus === "completed" ? "pending" : "completed";
     try {
-      const task = await apiRequest("PATCH", `/api/tasks/${taskId}`, updates);
-      const updated = await task.json();
+      const response = await apiRequest("PATCH", `/api/tasks/${taskId}`, { status: newStatus });
+      const updated = await response.json();
       setTasks(tasks.map(t => t.id === taskId ? updated : t));
+      toast({ title: "Success", description: `Task marked as ${newStatus}`, variant: "default" });
     } catch (error) {
+      console.error("Update task error:", error);
       toast({ title: "Error", description: "Failed to update task", variant: "destructive" });
     }
   };
@@ -128,15 +150,19 @@ export default function ProjectWorkspace() {
     try {
       await apiRequest("DELETE", `/api/tasks/${taskId}`, {});
       setTasks(tasks.filter(t => t.id !== taskId));
-      toast({ title: "Success", description: "Task deleted" });
+      toast({ title: "Success", description: "Task deleted", variant: "default" });
     } catch (error) {
+      console.error("Delete task error:", error);
       toast({ title: "Error", description: "Failed to delete task", variant: "destructive" });
     }
   };
 
   if (authLoading || !user) {
-    return <div>Loading...</div>;
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
+
+  const completedCount = tasks.filter(t => t.status === "completed").length;
+  const totalCount = tasks.length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
@@ -155,203 +181,290 @@ export default function ProjectWorkspace() {
                 <h1 className="text-2xl font-bold">Project Workspace</h1>
               </div>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setShowInstructions(true)}
+                data-testid="button-help"
+              >
+                <HelpCircle className="h-5 w-5" />
+              </Button>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Create New Project */}
-        <div className="mb-8 flex gap-2">
-          <Input
-            placeholder="New project name..."
-            value={newProjectName}
-            onChange={(e) => setNewProjectName(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && handleCreateProject()}
-            data-testid="input-new-project"
-          />
-          <Button onClick={handleCreateProject} data-testid="button-create-project">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Project
-          </Button>
-        </div>
+        {/* Create New Project Section */}
+        <Card className="mb-8 hover-elevate">
+          <CardHeader>
+            <CardTitle>Create New Project</CardTitle>
+            <CardDescription>Start organizing your work with a new project</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Input
+              placeholder="Enter project name (e.g., Physics Study, Math Notes)..."
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && handleCreateProject()}
+              data-testid="input-new-project"
+              className="flex-1"
+            />
+            <Button 
+              onClick={handleCreateProject}
+              data-testid="button-create-project"
+              className="min-w-32"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Project
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Projects Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          {projects.map((project) => (
-            <Card 
-              key={project.id} 
-              className={`hover-elevate cursor-pointer ${selectedProject?.id === project.id ? 'border-primary' : ''}`}
-              onClick={() => {
-                setSelectedProject(project);
-                loadProjectData(project.id);
-              }}
-              data-testid={`card-project-${project.id}`}
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <h3 className="font-semibold text-lg">{project.name}</h3>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteProject(project.id);
-                    }}
-                    data-testid={`button-delete-project-${project.id}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="bg-secondary/50 p-2 rounded text-center">
-                    <p className="font-semibold text-primary">{files.length}</p>
-                    <p className="text-xs text-muted-foreground">Files</p>
-                  </div>
-                  <div className="bg-secondary/50 p-2 rounded text-center">
-                    <p className="font-semibold text-chart-2">{tasks.length}</p>
-                    <p className="text-xs text-muted-foreground">Tasks</p>
-                  </div>
-                </div>
-
-                <Badge variant="secondary">Open Project</Badge>
+          {projects.length === 0 ? (
+            <Card className="md:col-span-2 lg:col-span-3 hover-elevate">
+              <CardContent className="pt-6 text-center text-muted-foreground">
+                <FolderOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No projects yet. Create one to get started!</p>
               </CardContent>
             </Card>
-          ))}
+          ) : (
+            projects.map((project) => (
+              <Card 
+                key={project.id}
+                className={`hover-elevate cursor-pointer transition-all ${
+                  selectedProject?.id === project.id ? 'border-primary border-2' : ''
+                }`}
+                onClick={() => {
+                  setSelectedProject(project);
+                  loadProjectTasks(project.id);
+                }}
+                data-testid={`card-project-${project.id}`}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-lg flex-1">{project.name}</h3>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProject(project.id);
+                      }}
+                      data-testid={`button-delete-project-${project.id}`}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardHeader>
+
+                <CardContent>
+                  <Badge variant="secondary" className="mb-2">
+                    {totalCount} tasks
+                  </Badge>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
 
-        {/* Project Details */}
-        <Card className="hover-elevate">
-          <CardHeader>
-            <CardTitle>Project Management</CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <Tabs defaultValue="files" onValueChange={setSelectedTab}>
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="files" data-testid="tab-files">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Files
-                </TabsTrigger>
-                <TabsTrigger value="editor" data-testid="tab-editor">
-                  <Code className="h-4 w-4 mr-2" />
-                  Editor
-                </TabsTrigger>
-                <TabsTrigger value="tasks" data-testid="tab-tasks">
-                  <CheckSquare className="h-4 w-4 mr-2" />
-                  Tasks
-                </TabsTrigger>
-                <TabsTrigger value="history" data-testid="tab-history">
-                  <History className="h-4 w-4 mr-2" />
-                  History
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="files" className="space-y-4 mt-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold">Project Files</h3>
-                  <Button size="sm" className="hover-elevate" data-testid="button-upload-file">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Upload File
-                  </Button>
+        {/* Selected Project Tasks */}
+        {selectedProject && (
+          <Card className="hover-elevate">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{selectedProject.name} - Tasks</CardTitle>
+                  <CardDescription>
+                    {completedCount} of {totalCount} tasks completed
+                  </CardDescription>
                 </div>
-                <div className="space-y-2">
-                  {["notes.md", "code.js", "styles.css"].map((file) => (
-                    <div key={file} className="p-3 bg-secondary/50 rounded flex items-center justify-between hover-elevate">
-                      <span className="text-sm font-medium">{file}</span>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" data-testid={`button-edit-${file}`}>
-                          <Edit3 className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" data-testid={`button-delete-${file}`}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
+                {totalCount > 0 && (
+                  <Badge variant="outline" className="text-lg">
+                    {Math.round((completedCount / totalCount) * 100)}%
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
 
-              <TabsContent value="editor" className="space-y-4 mt-4">
-                <div className="bg-secondary/50 rounded p-4 font-mono text-sm h-64 overflow-auto">
-                  <pre>{`// Code Editor
-function hello() {
-  console.log("Hello, LERNORY!");
-}`}</pre>
-                </div>
-                <Button className="w-full hover-elevate" data-testid="button-save-code">
-                  Save Code
+            <CardContent className="space-y-4">
+              {/* Add New Task */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add a new task (e.g., Review Chapter 5)..."
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleCreateTask()}
+                  data-testid="input-new-task"
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={handleCreateTask}
+                  data-testid="button-add-task"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add
                 </Button>
-              </TabsContent>
+              </div>
 
-              <TabsContent value="tasks" className="space-y-4 mt-4">
-                <div className="flex gap-2 mb-4">
-                  <Input placeholder="Add new task..." data-testid="input-new-task" onKeyPress={(e) => {
-                    if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                      handleCreateTask(e.currentTarget.value);
-                      e.currentTarget.value = "";
-                    }
-                  }} />
-                </div>
-                <div className="space-y-2">
-                  {tasks.map((task) => (
-                    <div key={task.id} className="p-3 bg-secondary/50 rounded flex items-center gap-3 hover-elevate">
-                      <input 
-                        type="checkbox" 
-                        className="h-4 w-4" 
-                        checked={task.status === "completed"}
-                        onChange={() => handleUpdateTask(task.id, { status: task.status === "completed" ? "pending" : "completed" })}
-                        data-testid={`checkbox-task-${task.id}`} 
-                      />
-                      <span className="text-sm font-medium flex-1">{task.title}</span>
-                      <Badge>{task.status}</Badge>
-                      <Button size="sm" variant="ghost" onClick={() => handleDeleteTask(task.id)} data-testid={`button-delete-task-${task.id}`}>
+              {/* Tasks List */}
+              <div className="space-y-2 mt-6">
+                {tasks.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No tasks yet. Add one to get started!</p>
+                  </div>
+                ) : (
+                  tasks.map((task) => (
+                    <div 
+                      key={task.id}
+                      className="p-4 bg-secondary/30 rounded-lg flex items-center gap-3 hover-elevate group transition-all"
+                      data-testid={`task-item-${task.id}`}
+                    >
+                      <button
+                        onClick={() => handleToggleTask(task.id, task.status)}
+                        className="flex-shrink-0 hover-elevate"
+                        data-testid={`button-toggle-task-${task.id}`}
+                      >
+                        {task.status === "completed" ? (
+                          <CheckCircle2 className="h-6 w-6 text-green-500" />
+                        ) : (
+                          <Circle className="h-6 w-6 text-muted-foreground" />
+                        )}
+                      </button>
+                      
+                      <span 
+                        className={`flex-1 font-medium ${
+                          task.status === "completed" 
+                            ? "text-muted-foreground line-through" 
+                            : "text-foreground"
+                        }`}
+                      >
+                        {task.title}
+                      </span>
+
+                      <Badge 
+                        variant={task.status === "completed" ? "default" : "secondary"}
+                        className="text-xs"
+                      >
+                        {task.status}
+                      </Badge>
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDeleteTask(task.id)}
+                        data-testid={`button-delete-task-${task.id}`}
+                        className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                  ))}
-                </div>
-              </TabsContent>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-              <TabsContent value="history" className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  {["Updated notes", "Added code section", "Fixed typos"].map((change, idx) => (
-                    <div key={idx} className="p-3 bg-secondary/50 rounded text-sm hover-elevate">
-                      <p className="font-medium">{change}</p>
-                      <p className="text-xs text-muted-foreground mt-1">2 hours ago</p>
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        {/* Export Options */}
-        <Card className="mt-8 hover-elevate">
-          <CardHeader>
-            <CardTitle>Export Project</CardTitle>
-          </CardHeader>
-          <CardContent className="grid md:grid-cols-3 gap-4">
-            <Button variant="outline" className="hover-elevate" data-testid="button-export-pdf">
-              <Download className="h-4 w-4 mr-2" />
-              Export as PDF
-            </Button>
-            <Button variant="outline" className="hover-elevate" data-testid="button-export-docx">
-              <Download className="h-4 w-4 mr-2" />
-              Export as DOCX
-            </Button>
-            <Button variant="outline" className="hover-elevate" data-testid="button-export-html">
-              <Download className="h-4 w-4 mr-2" />
-              Export as HTML
-            </Button>
-          </CardContent>
-        </Card>
+        {!selectedProject && projects.length > 0 && (
+          <Card className="hover-elevate">
+            <CardContent className="pt-6 text-center text-muted-foreground">
+              <p>Select a project above to view and manage its tasks</p>
+            </CardContent>
+          </Card>
+        )}
       </main>
+
+      {/* Instructions Modal */}
+      <Dialog open={showInstructions} onOpenChange={setShowInstructions}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Project Workspace Guide</DialogTitle>
+            <DialogDescription>Learn how to use this workspace to organize your studies</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Step 1 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Badge className="text-lg">1</Badge>
+                <h3 className="font-semibold text-lg">Create a Project</h3>
+              </div>
+              <p className="text-sm text-muted-foreground ml-10">
+                Enter a project name (like "Physics Study Guide" or "Math Homework") in the input field and click "Create Project". This will be your workspace for organizing related tasks.
+              </p>
+            </div>
+
+            {/* Step 2 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Badge className="text-lg">2</Badge>
+                <h3 className="font-semibold text-lg">Select a Project</h3>
+              </div>
+              <p className="text-sm text-muted-foreground ml-10">
+                Click on any project card in the grid to select it. The selected project will appear highlighted. Its tasks will display below.
+              </p>
+            </div>
+
+            {/* Step 3 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Badge className="text-lg">3</Badge>
+                <h3 className="font-semibold text-lg">Add Tasks</h3>
+              </div>
+              <p className="text-sm text-muted-foreground ml-10">
+                Type a task name (like "Review Chapter 5" or "Complete Practice Problems") in the task input and press Enter or click "Add". Tasks help you break down your project into smaller, manageable pieces.
+              </p>
+            </div>
+
+            {/* Step 4 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Badge className="text-lg">4</Badge>
+                <h3 className="font-semibold text-lg">Track Progress</h3>
+              </div>
+              <p className="text-sm text-muted-foreground ml-10">
+                Click the circle icon next to a task to mark it as complete. Completed tasks will show a green checkmark. Your progress percentage displays at the top.
+              </p>
+            </div>
+
+            {/* Step 5 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Badge className="text-lg">5</Badge>
+                <h3 className="font-semibold text-lg">Delete Tasks or Projects</h3>
+              </div>
+              <p className="text-sm text-muted-foreground ml-10">
+                Hover over a task to see the delete button, or click the trash icon on a project card to remove it. Deleted items cannot be recovered.
+              </p>
+            </div>
+
+            {/* Tips */}
+            <div className="bg-primary/10 p-4 rounded-lg space-y-2">
+              <h4 className="font-semibold">Tips for Best Results:</h4>
+              <ul className="text-sm text-muted-foreground space-y-1 ml-4">
+                <li>• Use clear, descriptive project names (e.g., "Biology Semester" not "Bio")</li>
+                <li>• Break large tasks into smaller, actionable items</li>
+                <li>• Update task status regularly to track your progress</li>
+                <li>• Create new projects for each subject or exam to stay organized</li>
+              </ul>
+            </div>
+          </div>
+
+          <Button 
+            onClick={() => setShowInstructions(false)}
+            className="w-full"
+            data-testid="button-close-instructions"
+          >
+            Got it!
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
