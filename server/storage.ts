@@ -1201,7 +1201,7 @@ class MemoryStorage implements IStorage {
   async updateGeneratedLessonsStatus() { return undefined; }
 }
 
-// Use memory storage for stability - provides session persistence
-export const storage = new MemoryStorage() as IStorage;
+// Use database storage for permanent persistence across sessions
+export const storage = new DatabaseStorage() as IStorage;
 
-console.log('✅ Using in-memory storage - exam history persists during this session');
+console.log('✅ Using DATABASE storage - all data is now PERMANENTLY PERSISTED');
