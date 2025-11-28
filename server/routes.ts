@@ -776,11 +776,12 @@ If they ask about similar topics or reference past conversations, remind them wh
         title: generated.title,
         description: `Generated from: ${prompt.substring(0, 100)}...`,
         prompt,
-        htmlCode: generated.html,
-        cssCode: generated.css,
+        htmlCode: generated.html || "",
+        cssCode: generated.css || "",
         jsCode: generated.js || "",
         tags: [],
         isFavorite: false,
+        viewCount: 0,
       });
 
       res.json(website);
