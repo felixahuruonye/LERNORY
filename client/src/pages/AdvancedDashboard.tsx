@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { GetStartedGuide } from "@/components/GetStartedGuide";
 import { Link } from "wouter";
 import {
   Search,
@@ -37,7 +38,7 @@ export default function AdvancedDashboard() {
   const { user, isLoading: authLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMode, setSelectedMode] = useState<string | null>(null);
-  const [showTutorials, setShowTutorials] = useState(true);
+  const [showGetStarted, setShowGetStarted] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
 
   if (authLoading || !user) {
@@ -150,6 +151,19 @@ export default function AdvancedDashboard() {
             <Clock className="h-4 w-4" />
             {new Date().toLocaleDateString()} • Ready to learn something new?
           </p>
+        </div>
+
+        {/* Get Started Button */}
+        <div className="mb-8">
+          <Button
+            onClick={() => setShowGetStarted(true)}
+            variant="outline"
+            className="gap-2 border-primary/50 hover:border-primary"
+            data-testid="button-get-started"
+          >
+            <Lightbulb className="h-4 w-4" />
+            Get Started with LERNORY
+          </Button>
         </div>
 
         {/* Quick Actions - No Plus Signs */}
@@ -299,6 +313,9 @@ export default function AdvancedDashboard() {
           </div>
         )}
       </main>
+
+      {/* Get Started Guide Modal */}
+      <GetStartedGuide open={showGetStarted} onOpenChange={setShowGetStarted} />
     </div>
   );
 }
