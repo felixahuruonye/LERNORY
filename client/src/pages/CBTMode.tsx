@@ -63,6 +63,8 @@ export default function CBTModeEnhanced() {
       setExamResult(data.gradingResult);
       setView('results');
       setIsExamActive(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/cbt/history'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cbt/analytics'] });
       toast({ title: '✅ Exam Graded by LEARNORY!', description: `Your score: ${data.gradingResult.score}%` });
     },
   });

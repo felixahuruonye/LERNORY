@@ -50,7 +50,7 @@ function Notifications() {
   const { data: notifications = [], isLoading, refetch } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
     queryFn: async () => {
-      const response = await fetch("/api/notifications");
+      const response = await apiRequest("GET", "/api/notifications");
       if (!response.ok) throw new Error("Failed to fetch");
       return response.json();
     },
@@ -59,7 +59,7 @@ function Notifications() {
   const { data: examHistory = [] } = useQuery<ExamHistory[]>({
     queryKey: ["/api/cbt/history"],
     queryFn: async () => {
-      const response = await fetch("/api/cbt/history");
+      const response = await apiRequest("GET", "/api/cbt/history");
       if (!response.ok) throw new Error("Failed to fetch exam history");
       return response.json();
     },
