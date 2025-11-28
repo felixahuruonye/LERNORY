@@ -1,8 +1,277 @@
+import { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Send,
+  Loader2,
+  Bot,
+  User as UserIcon,
+  FolderOpen,
+  CheckCircle2,
+  Circle,
+} from "lucide-react";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+
 export default function AdvancedChat() {
+  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const [messages, setMessages] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = useState<any>(null);
+  const [projectContext, setProjectContext] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: sessions = [] } = useQuery({
+    queryKey: ["/api/chat/sessions"],
+    enabled: !!user,
+  });
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Detect if user wants to read project workspace
+  const shouldShowProjects = (text: string) => {
+    const keywords = [
+      "read my project",
+      "show my projects",
+      "my workspace",
+      "read workspace",
+      "project workspace",
+      "read project",
+    ];
+    return keywords.some(k => text.toLowerCase().includes(k));
+  };
+
+  const loadProjects = async () => {
+    try {
+      const response = await apiRequest("GET", "/api/projects");
+      const data = await response.json();
+      setProjects(data);
+    } catch (error) {
+      console.error("Failed to load projects:", error);
+      toast({ title: "Error", description: "Failed to load projects", variant: "destructive" });
+    }
+  };
+
+  const handleSelectProject = async (project: any) => {
+    setSelectedProject(project);
+    try {
+      const response = await apiRequest("GET", `/api/projects/${project.id}/tasks`);
+      const tasks = await response.json();
+      
+      const projectInfo = `**Project:** ${project.name}\n**Description:** ${project.description || "No description"}\n\n**Tasks (${tasks.length}):**\n${tasks
+        .map((t: any) => `- ${t.completed ? "✓" : "○"} ${t.title}`)
+        .join("\n")}`;
+      
+      setProjectContext(projectInfo);
+      
+      // Add assistant message about the project
+      const assistantMessage = {
+        role: "assistant",
+        content: `I've loaded your project **${project.name}**! Here's what I see:\n\n${projectInfo}\n\nHow can I help you with this project?`,
+      };
+      
+      setMessages([...messages, assistantMessage]);
+      setShowProjectSelector(false);
+    } catch (error) {
+      console.error("Failed to load project tasks:", error);
+      toast({ title: "Error", description: "Failed to load project tasks", variant: "destructive" });
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim() || isLoading) return;
+
+    // Check if user wants to read projects
+    if (shouldShowProjects(message)) {
+      const userMsg = { role: "user", content: message };
+      setMessages([...messages, userMsg]);
+      
+      await loadProjects();
+      setShowProjectSelector(true);
+      setMessage("");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const userMsg = { role: "user", content: message };
+      setMessages((prev) => [...prev, userMsg]);
+
+      // Build context if project is selected
+      let systemContext = "";
+      if (projectContext) {
+        systemContext = `User is discussing this project:\n${projectContext}\n\n`;
+      }
+
+      const res = await apiRequest("POST", "/api/chat/send", {
+        content: message.trim(),
+        sessionId: sessions[0]?.id,
+        context: systemContext,
+      });
+
+      const data = await res.json();
+      
+      const assistantMsg = {
+        role: "assistant",
+        content: data.response || "I'll help you with that!",
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+      setMessage("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast({ title: "Error", description: "Failed to send message", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold">Chat Page</h1>
-      <p>Welcome to the chat!</p>
+    <div className="flex flex-col h-screen bg-background">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-border">
+        <div>
+          <h1 className="text-2xl font-bold">Advanced Chat</h1>
+          <p className="text-sm text-muted-foreground">
+            Try: "read my project workspace" to discuss your projects
+          </p>
+        </div>
+        {projectContext && (
+          <Badge variant="outline" className="gap-2">
+            <FolderOpen className="w-4 h-4" />
+            Project Active
+          </Badge>
+        )}
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center space-y-4">
+              <Bot className="w-12 h-12 mx-auto text-muted-foreground" />
+              <p className="text-muted-foreground">Start a conversation...</p>
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <Card className={`max-w-md p-4 ${msg.role === "user" ? "bg-primary text-primary-foreground" : ""}`}>
+              <div className="flex gap-3">
+                {msg.role === "assistant" && <Bot className="w-5 h-5 flex-shrink-0 mt-0.5" />}
+                {msg.role === "user" && <UserIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />}
+                <div className="flex-1 whitespace-pre-wrap text-sm">{msg.content}</div>
+              </div>
+            </Card>
+          </div>
+        ))}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="p-4 border-t border-border space-y-2">
+        <Textarea
+          placeholder='Try "read my project workspace"...'
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="resize-none"
+          rows={3}
+          data-testid="textarea-chat-input"
+        />
+        <div className="flex gap-2">
+          <Button
+            onClick={handleSendMessage}
+            disabled={!message.trim() || isLoading}
+            className="gap-2"
+            data-testid="button-send-message"
+          >
+            <Send className="w-4 h-4" />
+            Send
+          </Button>
+          <Link href="/project-workspace">
+            <Button variant="outline" className="gap-2" data-testid="button-go-workspace">
+              <FolderOpen className="w-4 h-4" />
+              My Projects
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Project Selector Dialog */}
+      <Dialog open={showProjectSelector} onOpenChange={setShowProjectSelector}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select a Project to Discuss</DialogTitle>
+            <DialogDescription>Choose a project and I'll read it for context</DialogDescription>
+          </DialogHeader>
+
+          {projects.length === 0 ? (
+            <div className="text-center py-8 space-y-4">
+              <FolderOpen className="w-12 h-12 mx-auto text-muted-foreground" />
+              <p className="text-muted-foreground">No projects yet</p>
+              <Link href="/project-workspace">
+                <Button variant="outline" data-testid="button-create-project">
+                  Create Your First Project
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {projects.map((project) => (
+                <Button
+                  key={project.id}
+                  variant="outline"
+                  className="w-full justify-start gap-3 h-auto p-3"
+                  onClick={() => handleSelectProject(project)}
+                  data-testid={`button-select-project-${project.id}`}
+                >
+                  <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                  <div className="text-left">
+                    <p className="font-semibold">{project.name}</p>
+                    <p className="text-xs text-muted-foreground">{project.description || "No description"}</p>
+                  </div>
+                </Button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
