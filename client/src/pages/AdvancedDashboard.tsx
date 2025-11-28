@@ -41,6 +41,17 @@ export default function AdvancedDashboard() {
   const [showGetStarted, setShowGetStarted] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
 
+  // Check if user is first-time (show guide only once)
+  useEffect(() => {
+    if (user && !authLoading) {
+      const hasSeenGuide = localStorage.getItem(`guide-seen-${user.id || user.email}`);
+      if (!hasSeenGuide) {
+        setShowGetStarted(true);
+        localStorage.setItem(`guide-seen-${user.id || user.email}`, "true");
+      }
+    }
+  }, [user, authLoading]);
+
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
@@ -117,6 +128,16 @@ export default function AdvancedDashboard() {
 
             {/* Right Controls */}
             <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowGetStarted(true)}
+                className="gap-2 hidden md:flex hover-elevate"
+                data-testid="button-get-started-header"
+              >
+                <Lightbulb className="h-4 w-4" />
+                Get Started
+              </Button>
               <ThemeToggle />
               <Button variant="ghost" size="icon" asChild className="hover-elevate relative" data-testid="link-notifications">
                 <Link href="/notifications">
@@ -151,19 +172,6 @@ export default function AdvancedDashboard() {
             <Clock className="h-4 w-4" />
             {new Date().toLocaleDateString()} • Ready to learn something new?
           </p>
-        </div>
-
-        {/* Get Started Button */}
-        <div className="mb-8">
-          <Button
-            onClick={() => setShowGetStarted(true)}
-            variant="outline"
-            className="gap-2 border-primary/50 hover:border-primary"
-            data-testid="button-get-started"
-          >
-            <Lightbulb className="h-4 w-4" />
-            Get Started with LERNORY
-          </Button>
         </div>
 
         {/* Quick Actions - No Plus Signs */}
