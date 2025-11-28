@@ -820,13 +820,14 @@ class MemoryStorage implements IStorage {
     chatSessions: new Map(),
     memoryEntries: new Map(),
     generatedImages: new Map(),
+    generatedWebsites: new Map(),
     userProgress: new Map(),
     examResults: new Map(),
     cbtExamHistory: new Map(),
     cbtAnalytics: new Map(),
     notifications: new Map(),
   };
-  private idCounter = { users: 0, messages: 0, sessions: 0, images: 0, exams: 0, analytics: 0, notifications: 0 };
+  private idCounter = { users: 0, messages: 0, sessions: 0, images: 0, websites: 0, exams: 0, analytics: 0, notifications: 0 };
 
   // User operations
   async getUser(id: string) {
@@ -1084,9 +1085,29 @@ class MemoryStorage implements IStorage {
   async getCodeSnippetsByUser() { return []; }
   async createCodeSnippet(c: any) { return c as CodeSnippet; }
   async createExamResult(e: any) { return e as ExamResult; }
-  async getGeneratedWebsite() { return undefined; }
-  async getGeneratedWebsitesByUser() { return []; }
-  async createGeneratedWebsite(w: any) { return w as GeneratedWebsite; }
+  async getGeneratedWebsite(id: string) {
+    return this.data.generatedWebsites.get(id);
+  }
+  
+  async getGeneratedWebsitesByUser(userId: string) {
+    return Array.from(this.data.generatedWebsites.values())
+      .filter(w => w.userId === userId)
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  
+  async createGeneratedWebsite(w: InsertGeneratedWebsite): Promise<GeneratedWebsite> {
+    const id = `web_${++this.idCounter.websites}`;
+    const website = { 
+      id, 
+      ...w, 
+      createdAt: new Date(), 
+      updatedAt: new Date(),
+      viewCount: 0,
+    } as GeneratedWebsite;
+    this.data.generatedWebsites.set(id, website);
+    console.log(`✅ Website saved to memory: ${website.title}`);
+    return website;
+  }
   async getLearningHistory() { return undefined; }
   async getLearningHistoryByUser() { return []; }
   async createLearningHistory(l: any) { return l as LearningHistory; }
@@ -1125,10 +1146,42 @@ class MemoryStorage implements IStorage {
   async deleteGeneratedLesson() { }
   async getCbtAnswersBySession() { return []; }
   async getNotification() { return undefined; }
-  async deleteGeneratedWebsite() { }
-  async toggleFavoriteWebsite() { return undefined; }
-  async incrementViewCount() { return undefined; }
-  async updateGeneratedWebsite() { return undefined; }
+  async deleteGeneratedWebsite(id: string) {
+    this.data.generatedWebsites.delete(id);
+    console.log(`✅ Website deleted from memory: ${id}`);
+  }
+  
+  async toggleFavoriteWebsite(id: string) {
+    const website = this.data.generatedWebsites.get(id);
+    if (website) {
+      website.isFavorite = !website.isFavorite;
+      website.updatedAt = new Date();
+      this.data.generatedWebsites.set(id, website);
+      return website;
+    }
+    return undefined;
+  }
+  
+  async incrementViewCount(id: string) {
+    const website = this.data.generatedWebsites.get(id);
+    if (website) {
+      website.viewCount = (website.viewCount || 0) + 1;
+      website.updatedAt = new Date();
+      this.data.generatedWebsites.set(id, website);
+      return website;
+    }
+    return undefined;
+  }
+  
+  async updateGeneratedWebsite(id: string, updates: Partial<InsertGeneratedWebsite>) {
+    const website = this.data.generatedWebsites.get(id);
+    if (website) {
+      const updated = { ...website, ...updates, updatedAt: new Date() };
+      this.data.generatedWebsites.set(id, updated);
+      return updated;
+    }
+    return undefined;
+  }
   async updateUserProgress() { return undefined; }
   async getUserProgress() { return undefined; }
   async updateCodeSnippet() { return undefined; }
