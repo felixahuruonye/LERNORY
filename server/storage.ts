@@ -1201,7 +1201,17 @@ class MemoryStorage implements IStorage {
   async updateGeneratedLessonsStatus() { return undefined; }
 }
 
-// Use database storage for permanent persistence across sessions
-export const storage = new DatabaseStorage() as IStorage;
+// Smart storage selection: Try database, fallback to memory if it fails
+import { isDatabaseAvailable } from "./db";
 
-console.log('✅ Using DATABASE storage - all data is now PERMANENTLY PERSISTED');
+const isDatabaseReady = isDatabaseAvailable();
+
+export const storage: IStorage = isDatabaseReady 
+  ? (new DatabaseStorage() as IStorage)
+  : (new MemoryStorage() as IStorage);
+
+if (isDatabaseReady) {
+  console.log('✅ Using DATABASE storage - all data is PERMANENTLY PERSISTED');
+} else {
+  console.log('⚠️ Database unavailable - using in-memory storage (data persists during session)');
+}
