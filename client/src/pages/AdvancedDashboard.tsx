@@ -452,16 +452,30 @@ export default function AdvancedDashboard() {
             >
               {searchCategories.map((cat) => {
                 const CatIcon = cat.icon;
+                const categoryLinks: Record<string, string> = {
+                  all: "/advanced-chat",
+                  chat: "/advanced-chat",
+                  memory: "/memory",
+                  study_plan: "/study-plans",
+                  exam: "/cbt-mode",
+                  website: "/website-generator",
+                  image: "/image-gen",
+                  project: "/project-workspace",
+                  lesson: "/advanced-chat",
+                };
                 return (
-                  <button
+                  <Link
                     key={cat.value}
-                    onClick={() => setSearchQuery(cat.label)}
-                    className="flex items-center gap-2 px-4 py-2 bg-secondary/50 hover:bg-secondary border border-primary/20 rounded-full whitespace-nowrap hover-elevate transition-all"
-                    data-testid={`button-category-${cat.value}`}
+                    href={categoryLinks[cat.value] || "/advanced-chat"}
                   >
-                    <CatIcon className="h-4 w-4" />
-                    {cat.label}
-                  </button>
+                    <button
+                      className="flex items-center gap-2 px-4 py-2 bg-secondary/50 hover:bg-secondary border border-primary/20 rounded-full whitespace-nowrap hover-elevate transition-all"
+                      data-testid={`button-category-${cat.value}`}
+                    >
+                      <CatIcon className="h-4 w-4" />
+                      {cat.label}
+                    </button>
+                  </Link>
                 );
               })}
             </div>
