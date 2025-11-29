@@ -110,15 +110,18 @@ export default function AdvancedDashboard() {
     enabled: !!searchQuery && showSearchDropdown,
   });
 
-  // Load search history from localStorage
+  // Load search history from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem("searchHistory");
-    if (saved) {
-      try {
-        setSearchHistory(JSON.parse(saved));
-      } catch (e) {
-        // Ignore parse errors
+    try {
+      const saved = localStorage.getItem("dashboardSearchHistory");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setSearchHistory(parsed);
+        }
       }
+    } catch (e) {
+      console.error("Failed to load search history:", e);
     }
   }, []);
 
@@ -148,13 +151,21 @@ export default function AdvancedDashboard() {
     if (query.trim()) {
       const updated = [query, ...searchHistory.filter((q) => q !== query)].slice(0, 5);
       setSearchHistory(updated);
-      localStorage.setItem("searchHistory", JSON.stringify(updated));
+      try {
+        localStorage.setItem("dashboardSearchHistory", JSON.stringify(updated));
+      } catch (e) {
+        console.error("Failed to save search history:", e);
+      }
     }
   };
 
   const clearSearchHistory = () => {
     setSearchHistory([]);
-    localStorage.removeItem("searchHistory");
+    try {
+      localStorage.removeItem("dashboardSearchHistory");
+    } catch (e) {
+      console.error("Failed to clear search history:", e);
+    }
   };
 
   // Filter tools based on search query

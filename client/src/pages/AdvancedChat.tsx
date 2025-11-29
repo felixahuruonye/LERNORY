@@ -148,7 +148,7 @@ export default function AdvancedChat() {
       
       const assistantMsg = {
         role: "assistant",
-        content: data.response || "I'll help you with that!",
+        content: data.message || data.response || "I'll help you with that!",
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
