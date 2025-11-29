@@ -44,6 +44,9 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: userRoleEnum("role").default('student').notNull(),
   schoolId: varchar("school_id"),
+  subscriptionTier: varchar("subscription_tier", { length: 50 }).default('free'),
+  subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  paystackCustomerId: varchar("paystack_customer_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -663,3 +666,45 @@ export type CbtAnalytics = typeof cbtAnalytics.$inferSelect;
 export const insertCbtQuestionLicensingSchema = createInsertSchema(cbtQuestionLicensing).omit({ id: true, createdAt: true });
 export type InsertCbtQuestionLicensing = z.infer<typeof insertCbtQuestionLicensingSchema>;
 export type CbtQuestionLicensing = typeof cbtQuestionLicensing.$inferSelect;
+
+// Pricing Tiers
+export const pricingTiers = pgTable("pricing_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  priceNaira: decimal("price_naira", { precision: 10, scale: 2 }).notNull(),
+  billingPeriod: varchar("billing_period", { length: 50 }).default('monthly'),
+  features: text("features").array().notNull(),
+  maxChats: integer("max_chats").default(-1),
+  maxGenerations: integer("max_generations").default(-1),
+  maxProjects: integer("max_projects").default(-1),
+  accessToAdvancedAI: boolean("access_to_advanced_ai").default(false),
+  accessToCBT: boolean("access_to_cbt").default(false),
+  accessToWebsiteGenerator: boolean("access_to_website_generator").default(false),
+  accessToVoiceFeatures: boolean("access_to_voice_features").default(false),
+  priority: integer("priority").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPricingTierSchema = createInsertSchema(pricingTiers).omit({ id: true, createdAt: true });
+export type InsertPricingTier = z.infer<typeof insertPricingTierSchema>;
+export type PricingTier = typeof pricingTiers.$inferSelect;
+
+// Subscription Records
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tierId: varchar("tier_id").notNull().references(() => pricingTiers.id),
+  status: varchar("status", { length: 50 }).default('active'),
+  paystackReference: varchar("paystack_reference", { length: 255 }),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  autoRenew: boolean("auto_renew").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;

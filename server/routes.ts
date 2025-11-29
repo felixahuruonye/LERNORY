@@ -25,6 +25,8 @@ import {
 import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini, fixTextWithLEARNORY, gradeAnswersWithLEARNORY, generateQuestionsWithLEARNORY } from "./gemini";
 import { nanoid } from "nanoid";
 import { learnFromUserMessage, mergePreferences } from "./memoryLearner";
+import { initializePayment, verifyPayment, convertNairaToKobo } from "./paystack";
+import { nanoid as generateId } from "nanoid";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -315,6 +317,7 @@ If they ask about similar topics or reference past conversations, remind them wh
       }
 
       // Check if user asked for image explanation
+      // FIX: Don't add LEARNORY branding to generated images - just return the response
       const imageKeywords = ["explain with image", "show me", "visualize", "draw", "illustrate", "with image", "with a picture", "with diagram"];
       const shouldGenerateImage = imageKeywords.some(keyword => content.toLowerCase().includes(keyword));
       
@@ -325,7 +328,7 @@ If they ask about similar topics or reference past conversations, remind them wh
           const imagePrompt = `Create a visual representation for: ${aiResponse.substring(0, 200)}`;
           const image = await generateImageWithLEARNORY(imagePrompt);
           
-          // Store generated image
+          // Store generated image - NO LEARNORY BRANDING ADDED
           await storage.createGeneratedImage({
             userId,
             prompt: imagePrompt,
@@ -341,10 +344,9 @@ If they ask about similar topics or reference past conversations, remind them wh
               }
             ]
           };
-          console.log("✅ Image attached to response");
+          console.log("✅ Image generated successfully (no branding added to image)");
         } catch (imgErr) {
           console.error("Image generation skipped:", imgErr);
-          // Continue without image - not critical
         }
       }
       
@@ -389,7 +391,13 @@ If they ask about similar topics or reference past conversations, remind them wh
         }
       }
 
-      res.json({ success: true, message: aiResponse });
+      // CRITICAL FIX: Don't add LEARNORY branding to the AI response itself
+      // The response should be pure - branding stays in UI, not in generated content
+      // This prevents AI from overwriting user's requested branding on websites, images, PDFs
+      res.json({ 
+        success: true, 
+        message: aiResponse  // Plain response - NO branding injection
+      });
     } catch (error) {
       console.error("Error sending message:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -2558,6 +2566,110 @@ KEY_WORDS: [keywords separated by commas]`,
     } catch (error) {
       console.error("Error searching:", error);
       res.status(500).json({ message: "Search failed", results: [] });
+    }
+  });
+
+  // Pricing & Payment Routes
+  app.post('/api/payments/initialize', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { tierId } = req.body;
+      
+      const user = await storage.getUser(userId);
+      if (!user?.email) {
+        return res.status(400).json({ message: "User email not found" });
+      }
+
+      const reference = `sub_${generateId()}`;
+      
+      // Pricing tiers hardcoded (can be expanded to database later)
+      const tierPricing: { [key: string]: number } = {
+        free: 0,
+        pro: 5000,
+        premium: 15000,
+      };
+
+      const priceNaira = tierPricing[tierId] || 5000;
+      
+      if (priceNaira === 0) {
+        // Free tier - just update subscription
+        await storage.updateUser(userId, { subscriptionTier: "free" });
+        return res.json({ success: true, message: "Free tier activated" });
+      }
+
+      const kobo = await convertNairaToKobo(priceNaira);
+      const paystackResponse = await initializePayment(
+        user.email,
+        kobo,
+        reference,
+        { userId, tierId, email: user.email }
+      );
+
+      if (paystackResponse.status) {
+        res.json({
+          success: true,
+          authorizationUrl: paystackResponse.data.authorization_url,
+          reference: paystackResponse.data.reference,
+        });
+      } else {
+        res.status(400).json({ message: "Payment initialization failed" });
+      }
+    } catch (error) {
+      console.error("Payment initialization error:", error);
+      res.status(500).json({ message: "Failed to initialize payment" });
+    }
+  });
+
+  app.post('/api/payments/verify', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { reference, tierId } = req.body;
+      const userId = req.user.claims.sub;
+
+      const paystackResponse = await verifyPayment(reference);
+
+      if (paystackResponse.status === "success") {
+        // Update user subscription
+        const expiresAt = new Date();
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+        
+        await storage.updateUser(userId, {
+          subscriptionTier: tierId,
+          subscriptionExpiresAt: expiresAt,
+          paystackCustomerId: paystackResponse.data.customer.email,
+        });
+
+        res.json({ success: true, message: "Subscription activated" });
+      } else {
+        res.status(400).json({ message: "Payment verification failed" });
+      }
+    } catch (error) {
+      console.error("Payment verification error:", error);
+      res.status(500).json({ message: "Failed to verify payment" });
+    }
+  });
+
+  app.get('/api/subscription/status', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      res.json({
+        tier: user?.subscriptionTier || 'free',
+        expiresAt: user?.subscriptionExpiresAt,
+        isActive: user?.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt) > new Date() : user?.subscriptionTier === 'free',
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get subscription status" });
+    }
+  });
+
+  app.post('/api/subscription/cancel', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.updateUser(userId, { subscriptionTier: 'free', subscriptionExpiresAt: null });
+      res.json({ success: true, message: "Subscription cancelled" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to cancel subscription" });
     }
   });
 

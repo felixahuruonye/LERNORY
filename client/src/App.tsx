@@ -15,6 +15,7 @@ import ImageGenAdvanced from "@/pages/ImageGenAdvanced";
 import ProjectWorkspace from "@/pages/ProjectWorkspace";
 import MemoryPanel from "@/pages/MemoryPanel";
 import StudyPlans from "@/pages/StudyPlans";
+import Pricing from "@/pages/Pricing";
 import SettingsPanel from "@/pages/SettingsPanel";
 import AudioSystem from "@/pages/AudioSystem";
 import AgentsPanel from "@/pages/AgentsPanel";
@@ -53,6 +54,7 @@ function Router() {
           <Route path="/project-workspace" component={ProjectWorkspace} />
           <Route path="/memory" component={MemoryPanel} />
           <Route path="/study-plans" component={StudyPlans} />
+          <Route path="/pricing" component={Pricing} />
           <Route path="/settings" component={SettingsPanel} />
           <Route path="/audio" component={AudioSystem} />
           <Route path="/agents" component={AgentsPanel} />

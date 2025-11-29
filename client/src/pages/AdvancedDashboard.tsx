@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   BookOpen,
+  Crown,
 } from "lucide-react";
 
 // Fuzzy search algorithm
@@ -95,6 +96,13 @@ export default function AdvancedDashboard() {
     { label: "Projects", value: "project", icon: FolderOpen },
     { label: "Lessons", value: "lesson", icon: BookOpen },
   ];
+
+  // Global search query hook
+  // Subscription status
+  const { data: subscriptionStatus } = useQuery({
+    queryKey: ['/api/subscription/status'],
+    enabled: !!user,
+  });
 
   // Global search query hook
   const { data: searchResults = { results: [] }, isLoading: searchLoading } = useQuery({
@@ -254,6 +262,7 @@ export default function AdvancedDashboard() {
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => setShowSearchDropdown(true)}
+                data-testid="input-search"
                 className="pl-10 pr-8 bg-secondary/50 border-primary/20 focus:border-primary/50"
                 data-testid="input-search-dashboard"
               />
@@ -392,6 +401,18 @@ export default function AdvancedDashboard() {
 
             {/* Right Controls */}
             <div className="flex items-center gap-3">
+              {subscriptionStatus?.tier && subscriptionStatus.tier !== 'free' && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs" data-testid="badge-subscription">
+                  <Crown className="h-3 w-3 text-primary" />
+                  <span className="font-medium text-primary capitalize">{subscriptionStatus.tier}</span>
+                </div>
+              )}
+              <Link href="/pricing">
+                <Button variant="outline" size="sm" className="gap-2 hidden sm:flex" data-testid="button-upgrade">
+                  <Zap className="h-4 w-4" />
+                  Upgrade
+                </Button>
+              </Link>
               <ThemeToggle />
               <Button variant="ghost" size="icon" asChild className="hover-elevate relative" data-testid="link-notifications">
                 <Link href="/notifications">
