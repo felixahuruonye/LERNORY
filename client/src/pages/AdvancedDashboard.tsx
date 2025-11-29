@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Link } from "wouter";
 import {
@@ -23,6 +25,9 @@ import {
   X,
   History,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
 } from "lucide-react";
 
 // Fuzzy search algorithm
@@ -30,7 +35,7 @@ const fuzzyMatch = (query: string, text: string): number => {
   const q = query.toLowerCase();
   const t = text.toLowerCase();
   
-  if (t.includes(q)) return 100; // Exact substring match
+  if (t.includes(q)) return 100;
   
   let score = 0;
   let queryIdx = 0;
@@ -53,7 +58,10 @@ export default function AdvancedDashboard() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<any>(null);
+  const [scrollPos, setScrollPos] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
 
   // AI Tools Hub
   const aiTools = [
@@ -75,6 +83,33 @@ export default function AdvancedDashboard() {
     { label: "Generate Image", icon: ImageIcon, href: "/image-gen", color: "bg-orange-500/10" },
   ];
 
+  // Search Categories
+  const searchCategories = [
+    { label: "All", value: "all", icon: Search },
+    { label: "Chat History", value: "chat", icon: MessageSquare },
+    { label: "Memory", value: "memory", icon: Brain },
+    { label: "Study Plans", value: "study_plan", icon: BookOpen },
+    { label: "Exams", value: "exam", icon: Monitor },
+    { label: "Websites", value: "website", icon: Code2 },
+    { label: "Images", value: "image", icon: ImageIcon },
+    { label: "Projects", value: "project", icon: FolderOpen },
+    { label: "Lessons", value: "lesson", icon: BookOpen },
+  ];
+
+  // Global search query hook
+  const { data: searchResults = { results: [] }, isLoading: searchLoading } = useQuery({
+    queryKey: ['/api/search', searchQuery],
+    queryFn: async () => {
+      if (!searchQuery.trim()) return { results: [] };
+      const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) return { results: [] };
+      return res.json();
+    },
+    enabled: !!searchQuery && showSearchDropdown,
+  });
+
   // Load search history from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("searchHistory");
@@ -87,7 +122,7 @@ export default function AdvancedDashboard() {
     }
   }, []);
 
-  // Keyboard shortcut: Cmd+K / Ctrl+K to focus search
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -147,6 +182,31 @@ export default function AdvancedDashboard() {
     setShowSearchDropdown(false);
   };
 
+  const scrollCategories = (direction: "left" | "right") => {
+    if (categoryScrollRef.current) {
+      const scrollAmount = 300;
+      categoryScrollRef.current.scrollBy({
+        left: direction === "right" ? scrollAmount : -scrollAmount,
+        behavior: "smooth",
+      });
+    }
+  };
+
+  // Get icon component by name
+  const getIconComponent = (iconName: string) => {
+    const iconMap: Record<string, any> = {
+      MessageSquare,
+      Brain,
+      BookOpen,
+      Monitor,
+      Code2,
+      ImageIcon,
+      FolderOpen,
+      Search,
+    };
+    return iconMap[iconName] || Search;
+  };
+
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
@@ -179,7 +239,7 @@ export default function AdvancedDashboard() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 ref={searchInputRef}
-                placeholder="Search tools... (Cmd+K)"
+                placeholder="Search everything... (Cmd+K)"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => setShowSearchDropdown(true)}
@@ -201,32 +261,41 @@ export default function AdvancedDashboard() {
 
               {/* Search Dropdown */}
               {showSearchDropdown && (
-                <Card className="absolute top-full left-0 right-0 mt-2 shadow-xl border-primary/20 max-h-96 overflow-y-auto">
-                  {/* Search Results */}
-                  {filteredTools.length > 0 && (
+                <Card className="absolute top-full left-0 right-0 mt-2 shadow-xl border-primary/20 max-h-96 overflow-y-auto z-50">
+                  {/* Search Results from Backend */}
+                  {searchQuery && searchResults.results.length > 0 && (
                     <div>
                       <div className="px-3 py-2 border-b border-primary/10">
                         <p className="text-xs font-semibold text-muted-foreground">
-                          {filteredTools.length} result{filteredTools.length !== 1 ? "s" : ""}
+                          Global Results ({searchResults.results.length})
                         </p>
                       </div>
                       <div className="divide-y divide-primary/10">
-                        {filteredTools.map((tool) => {
-                          const ToolIcon = tool.icon;
+                        {searchResults.results.map((result: any) => {
+                          const ResultIcon = getIconComponent(result.icon);
                           return (
                             <Link
-                              key={tool.id}
-                              href={tool.href}
-                              onClick={() => handleToolClick(tool.name)}
+                              key={`${result.type}-${result.id}`}
+                              href={result.href || "/advanced-chat"}
+                              onClick={() => handleToolClick(result.title)}
                             >
                               <button
                                 className="w-full px-3 py-2 hover:bg-secondary/50 transition-colors text-left flex items-center gap-3 group"
-                                data-testid={`button-search-result-${tool.id}`}
+                                data-testid={`button-search-result-${result.type}`}
+                                onClick={() => {
+                                  if (result.type === "image") {
+                                    setSelectedImage(result);
+                                  }
+                                }}
                               >
-                                <ToolIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                                {result.type === "image" && result.imageUrl ? (
+                                  <img src={result.imageUrl} alt={result.title} className="h-8 w-8 rounded object-cover" />
+                                ) : (
+                                  <ResultIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                                )}
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-foreground truncate">{tool.name}</p>
-                                  <p className="text-xs text-muted-foreground truncate">{tool.description}</p>
+                                  <p className="text-sm font-medium text-foreground truncate">{result.title}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{result.description}</p>
                                 </div>
                                 <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                               </button>
@@ -237,12 +306,38 @@ export default function AdvancedDashboard() {
                     </div>
                   )}
 
+                  {/* Tools Search Results */}
+                  {searchQuery && filteredTools.length > 0 && (
+                    <div>
+                      <div className="px-3 py-2 border-b border-primary/10">
+                        <p className="text-xs font-semibold text-muted-foreground">Tools</p>
+                      </div>
+                      <div className="divide-y divide-primary/10">
+                        {filteredTools.map((tool) => (
+                          <Link key={tool.id} href={tool.href} onClick={() => handleToolClick(tool.name)}>
+                            <button
+                              className="w-full px-3 py-2 hover:bg-secondary/50 transition-colors text-left flex items-center gap-3 group"
+                              data-testid={`button-search-tool-${tool.id}`}
+                            >
+                              <tool.icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">{tool.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{tool.description}</p>
+                              </div>
+                              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                            </button>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* No Results */}
-                  {searchQuery && filteredTools.length === 0 && (
+                  {searchQuery && searchResults.results.length === 0 && filteredTools.length === 0 && (
                     <div className="px-4 py-8 text-center">
                       <Search className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No tools found for "{searchQuery}"</p>
-                      <p className="text-xs text-muted-foreground mt-1">Try searching for chat, website, exam, or memory</p>
+                      <p className="text-sm text-muted-foreground">No results for "{searchQuery}"</p>
+                      <p className="text-xs text-muted-foreground mt-1">Try searching for chat, images, projects, or study plans</p>
                     </div>
                   )}
 
@@ -318,7 +413,7 @@ export default function AdvancedDashboard() {
           </div>
           <p className="text-muted-foreground flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            {new Date().toLocaleDateString()} • Try searching with Cmd+K or Ctrl+K
+            {new Date().toLocaleDateString()} • Press Cmd+K to search everything
           </p>
         </div>
 
@@ -334,6 +429,50 @@ export default function AdvancedDashboard() {
               </Card>
             </Link>
           ))}
+        </div>
+
+        {/* Search Categories */}
+        <div className="mb-12">
+          <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+            <Search className="h-6 w-6 text-primary" />
+            What do you want to search today?
+          </h3>
+          <div className="relative flex items-center gap-2">
+            <button
+              onClick={() => scrollCategories("left")}
+              className="absolute left-0 z-10 p-2 bg-background/80 hover-elevate rounded-full"
+              data-testid="button-scroll-categories-left"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div
+              ref={categoryScrollRef}
+              className="flex gap-3 overflow-x-auto scroll-smooth px-12"
+              data-testid="scroll-categories"
+            >
+              {searchCategories.map((cat) => {
+                const CatIcon = cat.icon;
+                return (
+                  <button
+                    key={cat.value}
+                    onClick={() => setSearchQuery(cat.label)}
+                    className="flex items-center gap-2 px-4 py-2 bg-secondary/50 hover:bg-secondary border border-primary/20 rounded-full whitespace-nowrap hover-elevate transition-all"
+                    data-testid={`button-category-${cat.value}`}
+                  >
+                    <CatIcon className="h-4 w-4" />
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => scrollCategories("right")}
+              className="absolute right-0 z-10 p-2 bg-background/80 hover-elevate rounded-full"
+              data-testid="button-scroll-categories-right"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* AI Tools Hub */}
@@ -384,6 +523,26 @@ export default function AdvancedDashboard() {
           </Link>
         </div>
       </main>
+
+      {/* Image Gallery Modal */}
+      {selectedImage && (
+        <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
+          <DialogContent className="max-w-2xl" data-testid="dialog-image-gallery">
+            <div className="flex flex-col gap-4">
+              <img src={selectedImage.imageUrl} alt={selectedImage.title} className="w-full rounded-lg object-cover max-h-96" data-testid="img-gallery-preview" />
+              <div>
+                <p className="font-semibold mb-2" data-testid="text-image-title">{selectedImage.title}</p>
+                <p className="text-sm text-muted-foreground" data-testid="text-image-prompt">{selectedImage.description}</p>
+              </div>
+              <Link href={selectedImage.href || "/image-gen"}>
+                <Button className="w-full" data-testid="button-open-image">
+                  View & Edit in Generator
+                </Button>
+              </Link>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -2475,5 +2475,91 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
+  // Global Search API - queries all data types
+  app.get('/api/search', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const query = (req.query.q as string)?.toLowerCase() || "";
+      
+      if (!query.trim()) {
+        return res.json({ results: [] });
+      }
+
+      const results: any[] = [];
+
+      // Search Chat History
+      const chatSessions = await storage.getChatSessionsByUser(userId);
+      const chatResults = chatSessions
+        .filter(s => s.title.toLowerCase().includes(query) || s.summary?.toLowerCase().includes(query))
+        .map(s => ({ type: 'chat', id: s.id, title: s.title, description: s.summary || 'No description', icon: 'MessageSquare', href: `/advanced-chat` }))
+        .slice(0, 3);
+      results.push(...chatResults);
+
+      // Search Memory Entries
+      const memoryEntries = await storage.getMemoryEntriesByUser(userId);
+      const memoryResults = memoryEntries
+        .filter(m => JSON.stringify(m.data).toLowerCase().includes(query))
+        .map(m => ({ type: 'memory', id: m.id, title: `Memory: ${m.type}`, description: JSON.stringify(m.data).substring(0, 50), icon: 'Brain', href: `/memory` }))
+        .slice(0, 3);
+      results.push(...memoryResults);
+
+      // Search Study Plans
+      const studyPlans = await storage.getStudyPlansByUser(userId);
+      const planResults = studyPlans
+        .filter(p => p.title.toLowerCase().includes(query) || p.subjects.some((s: string) => s.toLowerCase().includes(query)))
+        .map(p => ({ type: 'study_plan', id: p.id, title: p.title, description: `${p.subjects.join(", ")}`, icon: 'BookOpen', href: `/study-plans` }))
+        .slice(0, 3);
+      results.push(...planResults);
+
+      // Search Exam Results
+      const examResults = await storage.getExamResultsByUser(userId);
+      const examResultsFiltered = examResults
+        .filter(e => e.examName.toLowerCase().includes(query) || e.subject?.toLowerCase().includes(query))
+        .map(e => ({ type: 'exam', id: e.id, title: e.examName, description: `${e.subject} - Score: ${e.score}`, icon: 'Monitor', href: `/cbt-mode` }))
+        .slice(0, 3);
+      results.push(...examResultsFiltered);
+
+      // Search Generated Websites
+      const websites = await storage.getGeneratedWebsitesByUser(userId);
+      const websiteResults = websites
+        .filter(w => w.title.toLowerCase().includes(query) || w.description?.toLowerCase().includes(query))
+        .map(w => ({ type: 'website', id: w.id, title: w.title, description: w.description || w.prompt.substring(0, 50), icon: 'Code2', href: `/website-generator` }))
+        .slice(0, 3);
+      results.push(...websiteResults);
+
+      // Search Generated Images
+      const images = await storage.getGeneratedImagesByUser(userId);
+      const imageResults = images
+        .filter(i => i.prompt.toLowerCase().includes(query) || i.relatedTopic?.toLowerCase().includes(query))
+        .map(i => ({ type: 'image', id: i.id, title: i.relatedTopic || 'Generated Image', description: i.prompt.substring(0, 50), icon: 'ImageIcon', imageUrl: i.imageUrl, href: `/image-gen` }))
+        .slice(0, 3);
+      results.push(...imageResults);
+
+      // Search Projects
+      const projects = await storage.getProjectsByUser(userId);
+      const projectResults = projects
+        .filter(p => p.name.toLowerCase().includes(query) || p.description?.toLowerCase().includes(query))
+        .map(p => ({ type: 'project', id: p.id, title: p.name, description: p.description || 'No description', icon: 'FolderOpen', href: `/project-workspace` }))
+        .slice(0, 3);
+      results.push(...projectResults);
+
+      // Search Generated Lessons
+      const lessons = await storage.getGeneratedLessonsByUser(userId);
+      const lessonResults = lessons
+        .filter(l => l.title.toLowerCase().includes(query) || l.content?.toLowerCase().includes(query))
+        .map(l => ({ type: 'lesson', id: l.id, title: l.title, description: l.content.substring(0, 50), icon: 'BookOpen', href: `/advanced-chat` }))
+        .slice(0, 3);
+      results.push(...lessonResults);
+
+      // Combine and limit results
+      const allResults = [...chatResults, ...memoryResults, ...planResults, ...examResultsFiltered, ...websiteResults, ...imageResults, ...projectResults, ...lessonResults].slice(0, 20);
+
+      res.json({ results: allResults });
+    } catch (error) {
+      console.error("Error searching:", error);
+      res.status(500).json({ message: "Search failed", results: [] });
+    }
+  });
+
   return httpServer;
 }
