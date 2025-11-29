@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Link } from "wouter";
 import {
@@ -21,31 +20,51 @@ import {
   LogOut,
   Monitor,
   Bell,
+  X,
+  History,
+  ArrowRight,
 } from "lucide-react";
+
+// Fuzzy search algorithm
+const fuzzyMatch = (query: string, text: string): number => {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  
+  if (t.includes(q)) return 100; // Exact substring match
+  
+  let score = 0;
+  let queryIdx = 0;
+  
+  for (let i = 0; i < t.length && queryIdx < q.length; i++) {
+    if (t[i] === q[queryIdx]) {
+      score += 10;
+      queryIdx++;
+    } else {
+      score -= 1;
+    }
+  }
+  
+  return queryIdx === q.length ? Math.max(0, score) : -1;
+};
 
 export default function AdvancedDashboard() {
   const { user, isLoading: authLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
-        <div className="animate-pulse text-muted-foreground">Loading LERNORY...</div>
-      </div>
-    );
-  }
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // AI Tools Hub
   const aiTools = [
-    { id: "chat", name: "Advanced Chat", icon: MessageSquare, description: "Multi-mode conversational AI", color: "from-blue-500 to-cyan-500", href: "/advanced-chat" },
-    { id: "website", name: "Website Generator", icon: Code2, description: "AI-powered code generation", color: "from-green-500 to-emerald-500", href: "/website-generator" },
-    { id: "live", name: "Live Session", icon: Mic, description: "Real-time transcription & recording", color: "from-rose-500 to-pink-500", href: "/live-session" },
-    { id: "image", name: "Image Generation", icon: ImageIcon, description: "DALL-E & image tools", color: "from-orange-500 to-red-500", href: "/image-gen" },
-    { id: "memory", name: "Memory Panel", icon: Brain, description: "Learning memory system", color: "from-teal-500 to-cyan-500", href: "/memory" },
-    { id: "cbt", name: "CBT Mode", icon: Monitor, description: "Exam simulation (JAMB/WAEC/NECO)", color: "from-amber-500 to-yellow-500", href: "/cbt-mode" },
-    { id: "workspace", name: "Project Workspace", icon: FolderOpen, description: "Organize your projects", color: "from-purple-500 to-pink-500", href: "/project-workspace" },
-    { id: "settings", name: "Settings", icon: Settings, description: "Customize your experience", color: "from-indigo-500 to-blue-500", href: "/settings" },
+    { id: "chat", name: "Advanced Chat", icon: MessageSquare, description: "Multi-mode conversational AI", color: "from-blue-500 to-cyan-500", href: "/advanced-chat", keywords: ["chat", "ask", "ai", "tutor", "help"] },
+    { id: "website", name: "Website Generator", icon: Code2, description: "AI-powered code generation", color: "from-green-500 to-emerald-500", href: "/website-generator", keywords: ["website", "code", "generate", "build", "web"] },
+    { id: "live", name: "Live Session", icon: Mic, description: "Real-time transcription & recording", color: "from-rose-500 to-pink-500", href: "/live-session", keywords: ["live", "session", "voice", "record", "transcribe"] },
+    { id: "image", name: "Image Generation", icon: ImageIcon, description: "DALL-E & image tools", color: "from-orange-500 to-red-500", href: "/image-gen", keywords: ["image", "generate", "photo", "visual", "art"] },
+    { id: "memory", name: "Memory Panel", icon: Brain, description: "Learning memory system", color: "from-teal-500 to-cyan-500", href: "/memory", keywords: ["memory", "learn", "remember", "notes", "history"] },
+    { id: "cbt", name: "CBT Mode", icon: Monitor, description: "Exam simulation (JAMB/WAEC/NECO)", color: "from-amber-500 to-yellow-500", href: "/cbt-mode", keywords: ["exam", "test", "cbt", "jamb", "waec", "practice"] },
+    { id: "workspace", name: "Project Workspace", icon: FolderOpen, description: "Organize your projects", color: "from-purple-500 to-pink-500", href: "/project-workspace", keywords: ["project", "workspace", "organize", "folder", "task"] },
+    { id: "settings", name: "Settings", icon: Settings, description: "Customize your experience", color: "from-indigo-500 to-blue-500", href: "/settings", keywords: ["settings", "config", "preferences", "customize"] },
   ];
 
   // Quick Actions
@@ -55,6 +74,86 @@ export default function AdvancedDashboard() {
     { label: "Live Session", icon: Mic, href: "/live-session", color: "bg-rose-500/10" },
     { label: "Generate Image", icon: ImageIcon, href: "/image-gen", color: "bg-orange-500/10" },
   ];
+
+  // Load search history from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("searchHistory");
+    if (saved) {
+      try {
+        setSearchHistory(JSON.parse(saved));
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+  }, []);
+
+  // Keyboard shortcut: Cmd+K / Ctrl+K to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === "Escape") {
+        setShowSearchDropdown(false);
+        searchInputRef.current?.blur();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setShowSearchDropdown(!!value || searchHistory.length > 0);
+  };
+
+  const addToSearchHistory = (query: string) => {
+    if (query.trim()) {
+      const updated = [query, ...searchHistory.filter((q) => q !== query)].slice(0, 5);
+      setSearchHistory(updated);
+      localStorage.setItem("searchHistory", JSON.stringify(updated));
+    }
+  };
+
+  const clearSearchHistory = () => {
+    setSearchHistory([]);
+    localStorage.removeItem("searchHistory");
+  };
+
+  // Filter tools based on search query
+  const filteredTools = searchQuery
+    ? aiTools
+        .map((tool) => {
+          const nameMatch = fuzzyMatch(searchQuery, tool.name);
+          const descMatch = fuzzyMatch(searchQuery, tool.description);
+          const keywordMatch = tool.keywords.some(
+            (kw) => fuzzyMatch(searchQuery, kw) > 0
+          )
+            ? 50
+            : -1;
+
+          const score = Math.max(nameMatch, descMatch, keywordMatch);
+          return { ...tool, score };
+        })
+        .filter((tool) => tool.score > 0)
+        .sort((a, b) => b.score - a.score)
+    : [];
+
+  const handleToolClick = (toolName: string) => {
+    addToSearchHistory(toolName);
+    setSearchQuery("");
+    setShowSearchDropdown(false);
+  };
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
+        <div className="animate-pulse text-muted-foreground">Loading LERNORY...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
@@ -75,16 +174,114 @@ export default function AdvancedDashboard() {
               </h1>
             </div>
 
-            {/* Search Bar */}
+            {/* Advanced Search Bar */}
             <div className="hidden md:flex flex-1 max-w-md mx-8 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder="Search modes, projects, tutorials..."
+                ref={searchInputRef}
+                placeholder="Search tools... (Cmd+K)"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-secondary/50 border-primary/20 focus:border-primary/50"
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => setShowSearchDropdown(true)}
+                className="pl-10 pr-8 bg-secondary/50 border-primary/20 focus:border-primary/50"
                 data-testid="input-search-dashboard"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setShowSearchDropdown(false);
+                  }}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 hover-elevate"
+                  data-testid="button-clear-search"
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              )}
+
+              {/* Search Dropdown */}
+              {showSearchDropdown && (
+                <Card className="absolute top-full left-0 right-0 mt-2 shadow-xl border-primary/20 max-h-96 overflow-y-auto">
+                  {/* Search Results */}
+                  {filteredTools.length > 0 && (
+                    <div>
+                      <div className="px-3 py-2 border-b border-primary/10">
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          {filteredTools.length} result{filteredTools.length !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <div className="divide-y divide-primary/10">
+                        {filteredTools.map((tool) => {
+                          const ToolIcon = tool.icon;
+                          return (
+                            <Link
+                              key={tool.id}
+                              href={tool.href}
+                              onClick={() => handleToolClick(tool.name)}
+                            >
+                              <button
+                                className="w-full px-3 py-2 hover:bg-secondary/50 transition-colors text-left flex items-center gap-3 group"
+                                data-testid={`button-search-result-${tool.id}`}
+                              >
+                                <ToolIcon className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">{tool.name}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{tool.description}</p>
+                                </div>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                              </button>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No Results */}
+                  {searchQuery && filteredTools.length === 0 && (
+                    <div className="px-4 py-8 text-center">
+                      <Search className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No tools found for "{searchQuery}"</p>
+                      <p className="text-xs text-muted-foreground mt-1">Try searching for chat, website, exam, or memory</p>
+                    </div>
+                  )}
+
+                  {/* Search History */}
+                  {!searchQuery && searchHistory.length > 0 && (
+                    <div>
+                      <div className="px-3 py-2 flex items-center justify-between border-b border-primary/10">
+                        <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                          <History className="h-3 w-3" />
+                          Recent searches
+                        </p>
+                        <button
+                          onClick={clearSearchHistory}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          data-testid="button-clear-search-history"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="divide-y divide-primary/10">
+                        {searchHistory.map((query, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setSearchQuery(query);
+                              handleToolClick(query);
+                            }}
+                            className="w-full px-3 py-2 hover:bg-secondary/50 transition-colors text-left flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                            data-testid={`button-history-${idx}`}
+                          >
+                            <History className="h-3 w-3" />
+                            {query}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
             </div>
 
             {/* Right Controls */}
@@ -121,7 +318,7 @@ export default function AdvancedDashboard() {
           </div>
           <p className="text-muted-foreground flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            {new Date().toLocaleDateString()} • Ready to learn something new?
+            {new Date().toLocaleDateString()} • Try searching with Cmd+K or Ctrl+K
           </p>
         </div>
 
