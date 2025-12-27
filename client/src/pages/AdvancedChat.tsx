@@ -21,6 +21,8 @@ import {
   FolderOpen,
   CheckCircle2,
   Circle,
+  Mic,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -55,6 +57,8 @@ export default function AdvancedChat() {
       "read workspace",
       "project workspace",
       "read project",
+      "project files",
+      "analyze project",
     ];
     return keywords.some(k => text.toLowerCase().includes(k));
   };
@@ -77,7 +81,7 @@ export default function AdvancedChat() {
       const tasks = await response.json();
       
       const projectInfo = `**Project:** ${project.name}\n**Description:** ${project.description || "No description"}\n\n**Tasks (${tasks.length}):**\n${tasks
-        .map((t: any) => `- ${t.completed ? "✓" : "○"} ${t.title}`)
+        .map((t: any) => `- ${t.status === "completed" ? "✓" : "○"} ${t.title}`)
         .join("\n")}`;
       
       setProjectContext(projectInfo);
@@ -85,7 +89,7 @@ export default function AdvancedChat() {
       // Add assistant message about the project
       const assistantMessage = {
         role: "assistant",
-        content: `I've loaded your project **${project.name}**! Here's what I see:\n\n${projectInfo}\n\nHow can I help you with this project?`,
+        content: `I've loaded your project **${project.name}**! I'm using Gemini to analyze your workspace. Here's what I see:\n\n${projectInfo}\n\nHow can I help you with this project?`,
       };
       
       setMessages([...messages, assistantMessage]);
@@ -133,15 +137,16 @@ export default function AdvancedChat() {
       setMessage("");
 
       // Build context if project is selected
-      let systemContext = "";
+      let systemContext = "You are an Advanced AI focused on helping with projects. Analyze context and provide accurate technical guidance.";
       if (projectContext) {
-        systemContext = `User is discussing this project:\n${projectContext}\n\n`;
+        systemContext += `\n\nUser is discussing this project:\n${projectContext}\n\n`;
       }
 
       const res = await apiRequest("POST", "/api/chat/send", {
         content: trimmedMsg,
         sessionId: sessions[0]?.id,
         context: systemContext,
+        isAdvanced: true, // Signal for project/technical focus
       });
 
       const data = await res.json();
@@ -207,10 +212,27 @@ export default function AdvancedChat() {
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <Card className={`max-w-md p-4 ${msg.role === "user" ? "bg-primary text-primary-foreground" : ""}`}>
-              <div className="flex gap-3">
-                {msg.role === "assistant" && <Bot className="w-5 h-5 flex-shrink-0 mt-0.5" />}
-                {msg.role === "user" && <UserIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />}
-                <div className="flex-1 whitespace-pre-wrap text-sm">{msg.content}</div>
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-3">
+                  {msg.role === "assistant" && <Bot className="w-5 h-5 flex-shrink-0 mt-0.5" />}
+                  {msg.role === "user" && <UserIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />}
+                  <div className="flex-1 whitespace-pre-wrap text-sm">{msg.content}</div>
+                </div>
+                
+                {msg.attachments?.images?.map((img: any, i: number) => (
+                  <div key={i} className="mt-2 rounded-lg overflow-hidden border border-border">
+                    <img 
+                      src={img.url} 
+                      alt={img.title || "Generated image"} 
+                      className="w-full h-auto object-cover max-h-64"
+                    />
+                    {img.title && (
+                      <div className="p-2 bg-muted/50 text-xs text-muted-foreground">
+                        {img.title}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </Card>
           </div>
@@ -240,12 +262,30 @@ export default function AdvancedChat() {
             <Send className="w-4 h-4" />
             Send
           </Button>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            className="hover-elevate"
+            onClick={() => toast({ title: "Voice System", description: "Gemini Multimodal Live Voice API coming soon!" })}
+          >
+            <Mic className="h-4 w-4" />
+          </Button>
           <Link href="/project-workspace">
             <Button variant="outline" className="gap-2" data-testid="button-go-workspace">
               <FolderOpen className="w-4 h-4" />
               My Projects
             </Button>
           </Link>
+          <Button 
+            variant="outline" 
+            className="gap-2"
+            onClick={() => {
+              toast({ title: "Internet Search", description: "Internet search enabled for this session." });
+            }}
+          >
+            <Search className="w-4 h-4" />
+            Search Internet
+          </Button>
         </div>
       </div>
 

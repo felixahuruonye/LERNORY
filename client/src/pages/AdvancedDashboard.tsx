@@ -62,7 +62,7 @@ export default function AdvancedDashboard() {
   const [selectedImage, setSelectedImage] = useState<any>(null);
   const [scrollPos, setScrollPos] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   // AI Tools Hub
   const aiTools = [
@@ -78,10 +78,10 @@ export default function AdvancedDashboard() {
 
   // Quick Actions
   const quickActions = [
-    { label: "Ask LEARNORY", icon: MessageSquare, href: "/advanced-chat", color: "bg-blue-500/10" },
+    { label: "Ask LEARNORY", icon: MessageSquare, href: "/chat", color: "bg-blue-500/10" },
+    { label: "Advanced Chat", icon: Sparkles, href: "/advanced-chat", color: "bg-purple-500/10" },
     { label: "Generate Website", icon: Code2, href: "/website-generator", color: "bg-emerald-500/10" },
     { label: "Live Session", icon: Mic, href: "/live-session", color: "bg-rose-500/10" },
-    { label: "Generate Image", icon: ImageIcon, href: "/image-gen", color: "bg-orange-500/10" },
   ];
 
   // Search Categories
@@ -408,7 +408,7 @@ export default function AdvancedDashboard() {
                 </div>
               )}
               <Link href="/pricing">
-                <Button variant="outline" size="sm" className="gap-2 hidden sm:flex" data-testid="button-upgrade">
+                <Button variant="outline" size="sm" className="gap-2 flex sm:flex" data-testid="button-upgrade">
                   <Zap className="h-4 w-4" />
                   Upgrade
                 </Button>
@@ -470,20 +470,16 @@ export default function AdvancedDashboard() {
             What do you want to search today?
           </h3>
           <div className="relative flex items-center gap-2">
-            <button
-              onClick={() => scrollCategories("left")}
-              className="absolute left-0 z-10 p-2 bg-background/80 hover-elevate rounded-full"
-              data-testid="button-scroll-categories-left"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
             <div
-              ref={categoryScrollRef}
               className="flex gap-3 overflow-x-auto scroll-smooth px-12"
               data-testid="scroll-categories"
             >
               {searchCategories.map((cat) => {
                 const CatIcon = cat.icon;
+                
+                // Show "All" always, others only if showAllCategories is true
+                if (cat.value !== 'all' && !showAllCategories) return null;
+
                 const categoryLinks: Record<string, string> = {
                   all: "/advanced-chat",
                   chat: "/advanced-chat",
@@ -503,6 +499,12 @@ export default function AdvancedDashboard() {
                     <button
                       className="flex items-center gap-2 px-4 py-2 bg-secondary/50 hover:bg-secondary border border-primary/20 rounded-full whitespace-nowrap hover-elevate transition-all"
                       data-testid={`button-category-${cat.value}`}
+                      onClick={(e) => {
+                        if (cat.value === 'all') {
+                          e.preventDefault();
+                          setShowAllCategories(true);
+                        }
+                      }}
                     >
                       <CatIcon className="h-4 w-4" />
                       {cat.label}
@@ -511,13 +513,6 @@ export default function AdvancedDashboard() {
                 );
               })}
             </div>
-            <button
-              onClick={() => scrollCategories("right")}
-              className="absolute right-0 z-10 p-2 bg-background/80 hover-elevate rounded-full"
-              data-testid="button-scroll-categories-right"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
           </div>
         </div>
 

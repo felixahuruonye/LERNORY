@@ -198,15 +198,6 @@ export default function Landing() {
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </a>
               </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="h-12 px-8 text-lg hover-elevate active-elevate-2"
-                data-testid="button-for-schools"
-              >
-                <a href="/api/login">For Schools</a>
-              </Button>
             </div>
           </ScrollReveal>
 

@@ -126,7 +126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/chat/send', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
-      let { content, sessionId, includeUserContext } = req.body;
+      let { content, sessionId, includeUserContext, context: extraContext, isAdvanced } = req.body;
 
       if (!content?.trim()) {
         return res.status(400).json({ message: "Message content is required" });
@@ -255,6 +255,14 @@ If they ask about similar topics or reference past conversations, remind them wh
         systemMessage += `\n\n## Recent Performance:
 - Last exam: ${lastExam.examName} (${lastExam.score}%)
 - Focus on weak areas identified in exams`;
+      }
+
+      if (extraContext) {
+        systemMessage += `\n\n## ADDITIONAL CONTEXT:\n${extraContext}`;
+      }
+
+      if (isAdvanced) {
+        systemMessage += `\n\n## ADVANCED MODE:\nYou are acting as a Technical/Project Specialist. Provide deep analysis, accurate solutions, and help with complex technical tasks.`;
       }
       
       systemMessage += `\n\nYour PRIMARY goal: Answer the current question thoroughly while remembering EVERYTHING from this session AND relevant learning from previous sessions.`;
@@ -463,6 +471,31 @@ If they ask about similar topics or reference past conversations, remind them wh
       res.json({ success: true, message: "Memory cleared" });
     } catch (error) {
       res.status(500).json({ message: "Clear failed" });
+    }
+  });
+
+  // Admin routes
+  app.get('/api/admin/users', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      // In a real app, check admin flag on user
+      const users = await storage.getUsers?.() || [];
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get('/api/admin/stats', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const users = await storage.getUsers?.() || [];
+      const revenue = users.reduce((acc: number, u: any) => {
+        if (u.subscriptionTier === 'pro') return acc + 500000;
+        if (u.subscriptionTier === 'premium') return acc + 1500000;
+        return acc;
+      }, 0);
+      res.json({ revenue, activeUsers: users.length });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch stats" });
     }
   });
 

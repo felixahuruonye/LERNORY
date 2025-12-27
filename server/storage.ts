@@ -257,6 +257,9 @@ export interface IStorage {
   getGeneratedLessonsByUser(userId: string): Promise<GeneratedLesson[]>;
   deleteGeneratedLesson(id: string): Promise<void>;
 
+  // User management for admin
+  getUsers(): Promise<User[]>;
+
   // Project Workspace operations
   getProjectsByUser(userId: string): Promise<any[]>;
   createProject(project: any): Promise<any>;
@@ -278,6 +281,10 @@ export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {

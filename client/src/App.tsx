@@ -32,6 +32,7 @@ import Notifications from "@/pages/Notifications";
 import LiveAI from "@/pages/LiveAI";
 import CBTMode from "@/pages/CBTMode";
 import GeneratedLessons from "@/pages/GeneratedLessons";
+import AdminDashboard from "@/pages/AdminDashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -45,6 +46,7 @@ function Router() {
         <>
           <Route path="/" component={AdvancedDashboard} />
           <Route path="/dashboard" component={AdvancedDashboard} />
+          <Route path="/admin" component={AdminDashboard} />
           <Route path="/old-dashboard" component={Dashboard} />
           <Route path="/chat" component={Chat} />
           <Route path="/advanced-chat" component={AdvancedChat} />
