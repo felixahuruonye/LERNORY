@@ -18,7 +18,7 @@ const ai = new GoogleGenAI({
 
 export function registerChatRoutes(app: Express): void {
   // Get all conversations
-  app.get("/api/conversations", async (req: Request, res: Response) => {
+  app.get("/api/replit-chat/conversations", async (req: Request, res: Response) => {
     try {
       const conversations = await chatStorage.getAllConversations();
       res.json(conversations);
@@ -29,9 +29,9 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Get single conversation with messages
-  app.get("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.get("/api/replit-chat/conversations/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
@@ -45,10 +45,12 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Create new conversation
-  app.post("/api/conversations", async (req: Request, res: Response) => {
+  app.post("/api/replit-chat/conversations", async (req: Request, res: Response) => {
     try {
       const { title } = req.body;
-      const conversation = await chatStorage.createConversation(title || "New Chat");
+      const userId = (req.user as any)?.id;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const conversation = await chatStorage.createConversation(title || "New Chat", userId);
       res.status(201).json(conversation);
     } catch (error) {
       console.error("Error creating conversation:", error);
@@ -57,9 +59,9 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Delete conversation
-  app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.delete("/api/replit-chat/conversations/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
       await chatStorage.deleteConversation(id);
       res.status(204).send();
     } catch (error) {
@@ -69,18 +71,20 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Send message and get AI response (streaming)
-  app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
+  app.post("/api/replit-chat/conversations/:id/messages", async (req: Request, res: Response) => {
     try {
-      const conversationId = parseInt(req.params.id);
+      const conversationId = req.params.id;
       const { content } = req.body;
+      const userId = (req.user as any)?.id;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
       // Save user message
-      await chatStorage.createMessage(conversationId, "user", content);
+      await chatStorage.createMessage(conversationId, "user", content, userId);
 
       // Get conversation history for context
       const messages = await chatStorage.getMessagesByConversation(conversationId);
       const chatMessages = messages.map((m) => ({
-        role: m.role as "user" | "model",
+        role: m.role === "user" ? "user" : "model",
         parts: [{ text: m.content }],
       }));
 
@@ -92,7 +96,7 @@ export function registerChatRoutes(app: Express): void {
       // Stream response from Gemini
       const stream = await ai.models.generateContentStream({
         model: "gemini-2.5-flash",
-        contents: chatMessages,
+        contents: chatMessages as any,
       });
 
       let fullResponse = "";
@@ -106,7 +110,7 @@ export function registerChatRoutes(app: Express): void {
       }
 
       // Save assistant message
-      await chatStorage.createMessage(conversationId, "assistant", fullResponse);
+      await chatStorage.createMessage(conversationId, "assistant", fullResponse, userId);
 
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
       res.end();

@@ -100,6 +100,8 @@ export default function AdvancedChat() {
     }
   };
 
+  const [searchInternet, setSearchInternet] = useState(false);
+
   const handleSendMessage = async () => {
     const trimmedMsg = message.trim();
     if (!trimmedMsg || isLoading) return;
@@ -147,6 +149,7 @@ export default function AdvancedChat() {
         sessionId: sessions[0]?.id,
         context: systemContext,
         isAdvanced: true, // Signal for project/technical focus
+        searchInternet: searchInternet, // Pass manual toggle state
       });
 
       const data = await res.json();
@@ -277,11 +280,17 @@ export default function AdvancedChat() {
             </Button>
           </Link>
           <Button 
-            variant="outline" 
+            variant={searchInternet ? "default" : "outline"}
             className="gap-2"
             onClick={() => {
-              toast({ title: "Internet Search", description: "Internet search enabled for this session." });
+              const newState = !searchInternet;
+              setSearchInternet(newState);
+              toast({ 
+                title: "Internet Search", 
+                description: newState ? "Internet search enabled for this session." : "Internet search disabled." 
+              });
             }}
+            data-testid="button-toggle-search"
           >
             <Search className="w-4 h-4" />
             Search Internet

@@ -88,7 +88,8 @@ export async function chatWithAI(messages: Array<{role: string; content: string}
   };
   
   let detectedSubject = "general";
-  const messageText = lastMessage.toLowerCase();
+  const lastMessageForSubject = messages[messages.length - 1]?.content || "";
+  const messageText = lastMessageForSubject.toLowerCase();
   for (const [subject, keywords] of Object.entries(subjectKeywords)) {
     if (keywords.some(kw => messageText.includes(kw))) {
       detectedSubject = subject;
@@ -117,8 +118,15 @@ export async function chatWithAI(messages: Array<{role: string; content: string}
       ]
     : messages;
 
+  const lastMessageForStudyPlan = messages[messages.length - 1]?.content || "";
+  const isStudyPlanRequest = /study\s+plan|learning\s+path/i.test(lastMessageForStudyPlan);
+
   try {
-    console.log("Trying OpenAI API...");
+    if (isStudyPlanRequest) {
+      console.log("Study plan detected, using primary AI flow...");
+    } else {
+      console.log("Trying OpenAI API...");
+    }
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: messagesWithSystem as any,

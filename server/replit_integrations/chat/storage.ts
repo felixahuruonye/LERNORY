@@ -1,18 +1,18 @@
 import { db } from "../../db";
-import { conversations, messages } from "@shared/schema";
+import { chatMessages as messages, chatSessions as conversations } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
 export interface IChatStorage {
-  getConversation(id: number): Promise<typeof conversations.$inferSelect | undefined>;
-  getAllConversations(): Promise<(typeof conversations.$inferSelect)[]>;
-  createConversation(title: string): Promise<typeof conversations.$inferSelect>;
-  deleteConversation(id: number): Promise<void>;
-  getMessagesByConversation(conversationId: number): Promise<(typeof messages.$inferSelect)[]>;
-  createMessage(conversationId: number, role: string, content: string): Promise<typeof messages.$inferSelect>;
+  getConversation(id: string): Promise<any>;
+  getAllConversations(): Promise<any[]>;
+  createConversation(title: string, userId: string): Promise<any>;
+  deleteConversation(id: string): Promise<void>;
+  getMessagesByConversation(conversationId: string): Promise<any[]>;
+  createMessage(conversationId: string, role: string, content: string, userId: string): Promise<any>;
 }
 
 export const chatStorage: IChatStorage = {
-  async getConversation(id: number) {
+  async getConversation(id: string) {
     const [conversation] = await db.select().from(conversations).where(eq(conversations.id, id));
     return conversation;
   },
@@ -21,22 +21,22 @@ export const chatStorage: IChatStorage = {
     return db.select().from(conversations).orderBy(desc(conversations.createdAt));
   },
 
-  async createConversation(title: string) {
-    const [conversation] = await db.insert(conversations).values({ title }).returning();
+  async createConversation(title: string, userId: string) {
+    const [conversation] = await db.insert(conversations).values({ title, userId }).returning();
     return conversation;
   },
 
-  async deleteConversation(id: number) {
-    await db.delete(messages).where(eq(messages.conversationId, id));
+  async deleteConversation(id: string) {
+    await db.delete(messages).where(eq(messages.sessionId, id));
     await db.delete(conversations).where(eq(conversations.id, id));
   },
 
-  async getMessagesByConversation(conversationId: number) {
-    return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+  async getMessagesByConversation(conversationId: string) {
+    return db.select().from(messages).where(eq(messages.sessionId, conversationId)).orderBy(messages.createdAt);
   },
 
-  async createMessage(conversationId: number, role: string, content: string) {
-    const [message] = await db.insert(messages).values({ conversationId, role, content }).returning();
+  async createMessage(conversationId: string, role: string, content: string, userId: string) {
+    const [message] = await db.insert(messages).values({ sessionId: conversationId, role, content, userId }).returning();
     return message;
   },
 };

@@ -524,32 +524,36 @@ export default function AdvancedDashboard() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {aiTools.map((tool) => (
-              <Card
-                key={tool.id}
-                className="hover-elevate cursor-pointer transition-all group relative overflow-hidden"
-                onMouseEnter={() => setHoveredCard(tool.id)}
-                onMouseLeave={() => setHoveredCard(null)}
-                data-testid={`card-tool-${tool.id}`}
-              >
-                <div className={`absolute inset-0 bg-gradient-to-br ${tool.color} opacity-0 group-hover:opacity-10 transition-opacity`}></div>
-                <CardHeader className="relative">
-                  <div className={`inline-flex p-3 rounded-lg bg-gradient-to-br ${tool.color} mb-3`}>
-                    <tool.icon className="h-6 w-6 text-white" />
-                  </div>
-                  <CardTitle className="text-lg">{tool.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="relative">
-                  <p className="text-sm text-muted-foreground mb-4">{tool.description}</p>
-                  <Button
-                    size="sm"
-                    className="w-full hover-elevate"
-                    asChild
-                    data-testid={`button-open-${tool.id}`}
-                  >
-                    <Link href={tool.href || "/advanced-chat"}>Open</Link>
-                  </Button>
-                </CardContent>
-              </Card>
+              <Link key={tool.id} href={tool.href || "/advanced-chat"} className="block">
+                <Card
+                  className="hover-elevate cursor-pointer h-full transition-all group relative overflow-hidden"
+                  onMouseEnter={() => setHoveredCard(tool.id)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  data-testid={`card-tool-${tool.id}`}
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-br ${tool.color} opacity-0 group-hover:opacity-10 transition-opacity`}></div>
+                  <CardHeader className="relative">
+                    <div className={`inline-flex p-3 rounded-lg bg-gradient-to-br ${tool.color} mb-3`}>
+                      <tool.icon className="h-6 w-6 text-white" />
+                    </div>
+                    <CardTitle className="text-lg">{tool.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="relative">
+                    <p className="text-sm text-muted-foreground mb-4">{tool.description}</p>
+                    <Button
+                      size="sm"
+                      className="w-full hover-elevate"
+                      asChild
+                      data-testid={`button-open-${tool.id}`}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        Open
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>

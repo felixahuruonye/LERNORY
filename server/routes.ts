@@ -28,7 +28,14 @@ import { learnFromUserMessage, mergePreferences } from "./memoryLearner";
 import { initializePayment, verifyPayment, convertNairaToKobo } from "./paystack";
 import { nanoid as generateId } from "nanoid";
 
+import { registerChatRoutes } from "./replit_integrations/chat";
+import { registerImageRoutes } from "./replit_integrations/image";
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Wire up Replit AI Integrations
+  registerChatRoutes(app);
+  registerImageRoutes(app);
+
   // Auth middleware
   await setupAuth(app);
 
