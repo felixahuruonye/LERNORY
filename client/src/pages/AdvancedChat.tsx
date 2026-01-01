@@ -184,9 +184,9 @@ export default function AdvancedChat() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background transition-all duration-700 ease-in-out animate-in fade-in slide-in-from-bottom-4">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
+      <div className="flex items-center justify-between p-4 border-b border-border glassmorphism shadow-sm relative z-10">
         <div>
           <h1 className="text-2xl font-bold">Advanced Chat</h1>
           <p className="text-sm text-muted-foreground">
@@ -214,12 +214,12 @@ export default function AdvancedChat() {
 
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <Card className={`max-w-md p-4 ${msg.role === "user" ? "bg-primary text-primary-foreground" : ""}`}>
+            <Card className={`max-w-[85%] p-4 glassmorphism border-primary/10 shadow-md transition-all duration-300 hover:shadow-primary/5 ${msg.role === "user" ? "bg-primary/10 ml-auto border-primary/30" : "mr-auto"}`}>
               <div className="flex flex-col gap-3">
                 <div className="flex gap-3">
-                  {msg.role === "assistant" && <Bot className="w-5 h-5 flex-shrink-0 mt-0.5" />}
-                  {msg.role === "user" && <UserIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />}
-                  <div className="flex-1 whitespace-pre-wrap text-sm">{msg.content}</div>
+                  {msg.role === "assistant" && <Bot className="w-5 h-5 flex-shrink-0 mt-0.5 text-primary" />}
+                  {msg.role === "user" && <UserIcon className="w-5 h-5 flex-shrink-0 mt-0.5 text-secondary" />}
+                  <div className="flex-1 whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</div>
                 </div>
                 
                 {msg.attachments?.images?.map((img: any, i: number) => (
@@ -245,13 +245,13 @@ export default function AdvancedChat() {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-border space-y-2">
+      <div className="p-4 border-t border-border space-y-2 glassmorphism bg-background/50 backdrop-blur-xl">
         <Textarea
-          placeholder='Try "read my project workspace"...'
+          placeholder='Try "read my project workspace" to analyze your tasks...'
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="resize-none"
+          className="resize-none bg-background/50 border-primary/20 focus-visible:ring-primary/30 transition-all duration-300"
           rows={3}
           data-testid="textarea-chat-input"
         />

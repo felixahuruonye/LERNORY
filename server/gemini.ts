@@ -2,7 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "";
+const ai = new GoogleGenAI({ apiKey });
 
 interface GeneratedWebsite {
   html: string;

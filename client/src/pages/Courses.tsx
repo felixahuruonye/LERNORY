@@ -37,7 +37,12 @@ export default function Courses() {
     }
   }, [user, authLoading, toast]);
 
-  if (authLoading || !user) {
+  const { data: courses = [], isLoading: coursesLoading } = useQuery<any[]>({
+    queryKey: ["/api/courses"],
+    enabled: !!user,
+  });
+
+  if (authLoading || !user || coursesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -47,10 +52,42 @@ export default function Courses() {
 
   const isTeacher = user.role === "teacher" || user.role === "lecturer" || user.role === "school";
 
+  const displayCourses = courses.length > 0 ? courses : [
+    {
+      id: "1",
+      title: "Introduction to Physics",
+      description: "Fundamental concepts and principles of physics",
+      students: 45,
+      duration: "8 weeks",
+      rating: 4.8,
+    },
+    {
+      id: "2",
+      title: "Advanced Mathematics",
+      description: "Calculus, algebra, and trigonometry",
+      students: 32,
+      duration: "10 weeks",
+      rating: 4.9,
+    },
+    {
+      id: "3",
+      title: "Chemistry Basics",
+      description: "Atoms, molecules, and chemical reactions",
+      students: 38,
+      duration: "6 weeks",
+      rating: 4.7,
+    },
+  ];
+
+  const filteredCourses = displayCourses.filter(course => 
+    course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    course.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background transition-all duration-700 ease-in-out animate-in fade-in zoom-in-95">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/50 backdrop-blur-lg bg-background/80">
+      <header className="sticky top-0 z-50 border-b border-border/50 backdrop-blur-lg bg-background/80 transition-all duration-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
@@ -92,93 +129,72 @@ export default function Courses() {
         </div>
 
         {/* Empty State */}
-        <div className="text-center py-16">
-          <ScrollReveal>
-            <div className="max-w-md mx-auto">
-              <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <BookOpen className="h-10 w-10 text-primary" />
-              </div>
-              <h2 className="text-2xl font-display font-semibold mb-3">
-                {isTeacher ? "Create Your First Course" : "No Courses Yet"}
-              </h2>
-              <p className="text-muted-foreground mb-6">
-                {isTeacher
-                  ? "Use AI to generate comprehensive course syllabi from simple topics"
-                  : "Enroll in courses to start your learning journey"}
-              </p>
-              {isTeacher && (
-                <Button
-                  size="lg"
-                  className="hover-elevate active-elevate-2"
-                  data-testid="button-get-started"
-                >
-                  <Sparkles className="h-5 w-5 mr-2" />
-                  Generate with AI
-                </Button>
-              )}
-            </div>
-          </ScrollReveal>
-        </div>
-
-        {/* Sample Course Cards (for demonstration) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-          {[
-            {
-              title: "Introduction to Physics",
-              description: "Fundamental concepts and principles of physics",
-              students: 45,
-              duration: "8 weeks",
-              rating: 4.8,
-            },
-            {
-              title: "Advanced Mathematics",
-              description: "Calculus, algebra, and trigonometry",
-              students: 32,
-              duration: "10 weeks",
-              rating: 4.9,
-            },
-            {
-              title: "Chemistry Basics",
-              description: "Atoms, molecules, and chemical reactions",
-              students: 38,
-              duration: "6 weeks",
-              rating: 4.7,
-            },
-          ].map((course, index) => (
-            <ScrollReveal key={index} delay={index * 100}>
-              <Card className="hover-elevate active-elevate-2 cursor-pointer h-full" data-testid={`card-course-${index}`}>
-                <CardHeader>
-                  <div className="h-32 bg-gradient-to-br from-primary/20 to-chart-2/20 rounded-lg mb-4 flex items-center justify-center">
-                    <BookOpen className="h-12 w-12 text-primary" />
-                  </div>
-                  <CardTitle className="text-xl">{course.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {course.description}
-                  </p>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                    <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      <span>{course.students}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      <span>{course.duration}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                      <span>{course.rating}</span>
-                    </div>
-                  </div>
-                  <Button className="w-full hover-elevate active-elevate-2">
-                    View Course
+        {filteredCourses.length === 0 ? (
+          <div className="text-center py-16">
+            <ScrollReveal>
+              <div className="max-w-md mx-auto">
+                <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                  <BookOpen className="h-10 w-10 text-primary" />
+                </div>
+                <h2 className="text-2xl font-display font-semibold mb-3">
+                  {isTeacher ? "Create Your First Course" : "No Courses Found"}
+                </h2>
+                <p className="text-muted-foreground mb-6">
+                  {isTeacher
+                    ? "Use AI to generate comprehensive course syllabi from simple topics"
+                    : "Try searching for another topic or check back later"}
+                </p>
+                {isTeacher && (
+                  <Button
+                    size="lg"
+                    className="hover-elevate active-elevate-2"
+                    data-testid="button-get-started"
+                  >
+                    <Sparkles className="h-5 w-5 mr-2" />
+                    Generate with AI
                   </Button>
-                </CardContent>
-              </Card>
+                )}
+              </div>
             </ScrollReveal>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+            {filteredCourses.map((course, index) => (
+              <ScrollReveal key={course.id} delay={index * 100}>
+                <Card className="hover-elevate active-elevate-2 cursor-pointer h-full glassmorphism border-primary/10 shadow-lg hover:shadow-primary/20 transition-all duration-300" data-testid={`card-course-${index}`}>
+                  <CardHeader>
+                    <div className="h-32 bg-gradient-to-br from-primary/20 to-chart-2/20 rounded-lg mb-4 flex items-center justify-center">
+                      <BookOpen className="h-12 w-12 text-primary" />
+                    </div>
+                    <CardTitle className="text-xl">{course.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {course.description}
+                    </p>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+                      <div className="flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        <span>{course.students}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        <span>{course.duration}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        <span>{course.rating}</span>
+                      </div>
+                    </div>
+                    <Button className="w-full hover-elevate active-elevate-2">
+                      View Course
+                    </Button>
+                  </CardContent>
+                </Card>
+              </ScrollReveal>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );

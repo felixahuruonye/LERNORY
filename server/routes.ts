@@ -601,7 +601,35 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  // Chat Session routes
+  // Courses routes
+  app.get('/api/courses', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const courses = await storage.getAllCourses();
+      res.json(courses);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch courses" });
+    }
+  });
+
+  // Project routes
+  app.get('/api/projects', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const userId = req.user.claims.sub;
+      const projects = await storage.getProjectsByUser(userId);
+      res.json(projects);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch projects" });
+    }
+  });
+
+  app.get('/api/projects/:id/tasks', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const tasks = await storage.getTasksByProject(req.params.id);
+      res.json(tasks);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch tasks" });
+    }
+  });
   app.get('/api/chat/sessions', isAuthenticated, async (req: any, res: Response) => {
     try {
       const userId = req.user.claims.sub;
