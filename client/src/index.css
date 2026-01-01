@@ -172,6 +172,20 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+@layer utilities {
+  .glassmorphism {
+    @apply bg-white/10 dark:bg-black/20 backdrop-blur-lg border border-white/20 dark:border-white/10;
+  }
+
+  .neon-glow {
+    text-shadow: 0 0 10px rgba(var(--primary), 0.5), 0 0 20px rgba(var(--primary), 0.3);
+  }
+
+  .page-transition {
+    @apply transition-all duration-700 ease-in-out animate-in fade-in zoom-in-95;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

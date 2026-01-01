@@ -187,6 +187,8 @@ export default function Chat() {
       "internet search",
       "google",
       "web search",
+      "who are you",
+      "about you"
     ];
 
     const lowerText = text.toLowerCase();
@@ -277,7 +279,8 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="min-h-screen bg-background transition-all duration-700 ease-in-out animate-in fade-in zoom-in-95">
+      <div className="flex h-screen glassmorphism shadow-2xl relative z-10">
       {/* Sidebar */}
       <div
         className={`${

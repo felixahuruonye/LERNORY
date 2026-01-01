@@ -45,6 +45,23 @@ export default function AdvancedChat() {
   });
 
   useEffect(() => {
+    if (user && sessions.length === 0 && !isLoading) {
+      const initChat = async () => {
+        try {
+          await apiRequest("POST", "/api/chat/sessions", {
+            title: "Advanced AI Workspace",
+            mode: "chat",
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+        } catch (err) {
+          console.error("Failed to initialize session", err);
+        }
+      };
+      initChat();
+    }
+  }, [user, sessions]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 

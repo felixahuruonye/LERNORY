@@ -235,7 +235,7 @@ export default function AdvancedDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 transition-all duration-1000 ease-in-out animate-in fade-in zoom-in-95">
       {/* Floating background elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 right-20 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-pulse"></div>
@@ -243,7 +243,7 @@ export default function AdvancedDashboard() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-primary/10">
+      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-primary/10 glassmorphism transition-all duration-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -526,7 +526,7 @@ export default function AdvancedDashboard() {
             {aiTools.map((tool) => (
               <Link key={tool.id} href={tool.href || "/advanced-chat"} className="block">
                 <Card
-                  className="hover-elevate cursor-pointer h-full transition-all group relative overflow-hidden"
+                  className="hover-elevate cursor-pointer h-full transition-all group relative overflow-hidden glassmorphism border-primary/10 hover:border-primary/30 shadow-lg hover:shadow-primary/20 hover:-translate-y-2"
                   onMouseEnter={() => setHoveredCard(tool.id)}
                   onMouseLeave={() => setHoveredCard(null)}
                   data-testid={`card-tool-${tool.id}`}
