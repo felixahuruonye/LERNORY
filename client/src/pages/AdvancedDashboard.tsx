@@ -262,7 +262,6 @@ export default function AdvancedDashboard() {
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => setShowSearchDropdown(true)}
-                data-testid="input-search"
                 className="pl-10 pr-8 bg-secondary/50 border-primary/20 focus:border-primary/50"
                 data-testid="input-search-dashboard"
               />

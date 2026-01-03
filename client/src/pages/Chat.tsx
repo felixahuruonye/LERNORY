@@ -352,7 +352,7 @@ export default function Chat() {
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm(\`Delete "${session.title}"?\`)) {
+                          if (window.confirm("Delete " + session.title + "?")) {
                             deleteChat(session.id);
                           }
                         }}
@@ -384,7 +384,7 @@ export default function Chat() {
                         <Square className="w-4 h-4 text-muted-foreground" />
                       )}
                       <span className="text-xs">
-                        {selectedChatsForDelete.size > 0 ? \`\${selectedChatsForDelete.size} selected\` : "Select All"}
+                        {selectedChatsForDelete.size > 0 ? `${selectedChatsForDelete.size} selected` : "Select All"}
                       </span>
                     </button>
 
@@ -397,7 +397,7 @@ export default function Chat() {
                         <button
                           onClick={() => toggleChatSelection(session.id)}
                           className="flex-shrink-0"
-                          data-testid={`checkbox-session-\${session.id}`}
+                          data-testid={`checkbox-session-${session.id}`}
                         >
                           {selectedChatsForDelete.has(session.id) ? (
                             <CheckSquare className="w-4 h-4 text-primary" />
@@ -554,7 +554,7 @@ export default function Chat() {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block p-3 bg-slate-800/50 hover:bg-slate-700/50 rounded border border-slate-700 transition-colors group"
-                          data-testid={\`search-result-\${idx}\`}
+                          data-testid={`search-result-${idx}`}
                         >
                           <div className="flex items-start gap-2">
                             <ExternalLink className="w-4 h-4 text-blue-400 flex-shrink-0 mt-1" />
@@ -605,10 +605,10 @@ export default function Chat() {
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={\`flex gap-3 \${
+                    className={`flex gap-3 ${
                       msg.role === "user" ? "justify-end" : "justify-start"
-                    }\`}
-                    data-testid={\`message-\${msg.role}-\${msg.id}\`}
+                    }`}
+                    data-testid={`message-${msg.role}-${msg.id}`}
                   >
                     {msg.role === "assistant" && (
                       <div className="flex-shrink-0">
@@ -619,17 +619,17 @@ export default function Chat() {
                     )}
 
                     <div
-                      className={\`max-w-2xl rounded-lg p-4 backdrop-blur-md transition-all duration-300 \${
+                      className={`max-w-2xl rounded-lg p-4 backdrop-blur-md transition-all duration-300 ${
                         msg.role === "user"
                           ? "bg-gradient-to-br from-primary/90 to-primary/70 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/40"
                           : "bg-gradient-to-br from-muted/80 to-muted/60 text-foreground border border-border/50 shadow-lg shadow-black/10 dark:shadow-black/30 hover:shadow-black/20 dark:hover:shadow-black/40"
-                      }\`}
-                      data-testid={\`card-message-\${msg.id}\`}
+                      }`}
+                      data-testid={`card-message-${msg.id}`}
                     >
                       {msg.attachments?.images && msg.attachments.images.length > 0 && (
                         <div className="mb-3 space-y-2">
                           {msg.attachments.images.map((img: any, idx: number) => (
-                            <div key={idx} className="rounded-lg overflow-hidden" data-testid={\`image-\${msg.id}-\${idx}\`}>
+                            <div key={idx} className="rounded-lg overflow-hidden" data-testid={`image-${msg.id}-${idx}`}>
                               <img
                                 src={img.url}
                                 alt={img.title || "Generated image"}
@@ -655,15 +655,15 @@ export default function Chat() {
                               );
                               toggleSpeak(msg.content);
                             }}
-                            className={\`flex-shrink-0 p-2 rounded-lg transition-all duration-200 \${
+                            className={`flex-shrink-0 p-2 rounded-lg transition-all duration-200 ${
                               playingMessageId === msg.id
                                 ? "bg-primary text-primary-foreground"
                                 : "hover:bg-primary/20"
-                            }\`}
+                            }`}
                             title={
                               playingMessageId === msg.id ? "Stop" : "Read aloud"
                             }
-                            data-testid={\`button-speak-\${msg.id}\`}
+                            data-testid={`button-speak-${msg.id}`}
                           >
                             {playingMessageId === msg.id ? (
                               <VolumeX className="w-4 h-4" />
