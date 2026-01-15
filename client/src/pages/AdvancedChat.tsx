@@ -23,6 +23,7 @@ import {
   Circle,
   Mic,
   Image as ImageIcon,
+  Search,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -39,13 +40,13 @@ export default function AdvancedChat() {
   const [projectContext, setProjectContext] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: sessions = [] } = useQuery({
+  const { data: sessions = [] } = useQuery<any[]>({
     queryKey: ["/api/chat/sessions"],
     enabled: !!user,
   });
 
   useEffect(() => {
-    if (user && sessions.length === 0 && !isLoading) {
+    if (user && (sessions as any[]).length === 0 && !isLoading) {
       const initChat = async () => {
         try {
           await apiRequest("POST", "/api/chat/sessions", {

@@ -33,6 +33,7 @@ import LiveAI from "@/pages/LiveAI";
 import CBTMode from "@/pages/CBTMode";
 import GeneratedLessons from "@/pages/GeneratedLessons";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AuthCallback from "@/pages/AuthCallback";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -40,6 +41,7 @@ function Router() {
 
   return (
     <Switch>
+      <Route path="/auth/callback" component={AuthCallback} />
       {isLoading || !isAuthenticated ? (
         <Route path="/" component={Landing} />
       ) : (

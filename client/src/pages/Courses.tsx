@@ -18,6 +18,7 @@ import {
 import { Link } from "wouter";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Courses() {
   const { user, isLoading: authLoading } = useAuth();
