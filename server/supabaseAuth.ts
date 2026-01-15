@@ -1,5 +1,8 @@
 import type { RequestHandler, Request, Response, NextFunction } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import { db } from './db';
+import { users } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 // Prioritize VITE_SUPABASE_URL since it's confirmed working for frontend
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
@@ -23,6 +26,32 @@ const supabase = supabaseUrl && supabaseServiceKey ? createClient(supabaseUrl, s
 export interface AuthenticatedRequest extends Request {
   userId?: string;
   userEmail?: string;
+}
+
+// Helper function to ensure user exists in local database
+async function ensureUserExists(supabaseUser: any): Promise<void> {
+  try {
+    // Check if user exists in local database
+    const existingUser = await db.select().from(users).where(eq(users.id, supabaseUser.id)).limit(1);
+    
+    if (existingUser.length === 0) {
+      // Create user in local database with Supabase user data
+      const userMetadata = supabaseUser.user_metadata || {};
+      await db.insert(users).values({
+        id: supabaseUser.id,
+        email: supabaseUser.email,
+        firstName: userMetadata.full_name?.split(' ')[0] || userMetadata.name?.split(' ')[0] || null,
+        lastName: userMetadata.full_name?.split(' ').slice(1).join(' ') || null,
+        profileImageUrl: userMetadata.avatar_url || userMetadata.picture || null,
+        role: 'student',
+        subscriptionTier: 'free',
+      });
+      console.log('Created local user record for:', supabaseUser.email);
+    }
+  } catch (error) {
+    // Log but don't fail - user might already exist from a race condition
+    console.log('User sync note:', (error as Error).message);
+  }
 }
 
 export const supabaseAuth: RequestHandler = async (
@@ -62,6 +91,9 @@ export const supabaseAuth: RequestHandler = async (
       console.error('Supabase getUser returned no user');
       return res.status(401).json({ message: 'Unauthorized - No user found' });
     }
+    
+    // Ensure user exists in local database (auto-sync from Supabase Auth)
+    await ensureUserExists(user);
     
     console.log('Auth success for user:', user.email);
 
