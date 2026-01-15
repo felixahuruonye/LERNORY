@@ -1,4 +1,4 @@
-import { chatWithAI } from "./openai";
+import { chatWithAI } from "./gemini";
 
 interface LearnedPreferences {
   subjects: string[];

@@ -274,6 +274,19 @@ export interface IStorage {
   createTask(task: any): Promise<any>;
   updateTask(id: string, updates: any): Promise<any>;
   deleteTask(id: string): Promise<void>;
+
+  // CBT Exam operations
+  createCbtExamHistory(exam: any): Promise<any>;
+  getCbtExamHistoryByUser(userId: string): Promise<any[]>;
+  deleteCbtExamHistory(id: string): Promise<void>;
+  updateCbtAnalytics(userId: string, topic: string, isStrong: boolean): Promise<any>;
+  getCbtAnalyticsByUser(userId: string): Promise<any>;
+  createCbtQuestion(question: any): Promise<any>;
+  createCbtQuestionLicensing(licensing: any): Promise<any>;
+  getCbtQuestionLicensing(questionId: string): Promise<any>;
+
+  // User update operation
+  updateUser(id: string, updates: any): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1287,6 +1300,39 @@ class MemoryStorage implements IStorage {
 
   async deleteTask(id: string) {
     this.data.projectTasks.delete(id);
+  }
+
+  // CBT Question operations (not already defined above)
+  async createCbtQuestion(question: any) {
+    const id = `cbtq_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const fullQuestion = { id, ...question, createdAt: new Date() };
+    if (!this.data.cbtQuestions) this.data.cbtQuestions = new Map();
+    this.data.cbtQuestions.set(id, fullQuestion);
+    return fullQuestion;
+  }
+
+  async createCbtQuestionLicensing(licensing: any) {
+    const id = `cbtl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const fullLicensing = { id, ...licensing, createdAt: new Date() };
+    if (!this.data.cbtLicensing) this.data.cbtLicensing = new Map();
+    this.data.cbtLicensing.set(id, fullLicensing);
+    return fullLicensing;
+  }
+
+  async getCbtQuestionLicensing(questionId: string) {
+    if (!this.data.cbtLicensing) return undefined;
+    return Array.from(this.data.cbtLicensing.values()).find((l: any) => l.questionId === questionId);
+  }
+
+  // User update operation
+  async updateUser(id: string, updates: any): Promise<User | undefined> {
+    const user = this.data.users.get(id);
+    if (user) {
+      const updated = { ...user, ...updates, updatedAt: new Date() };
+      this.data.users.set(id, updated);
+      return updated as User;
+    }
+    return undefined;
   }
 }
 

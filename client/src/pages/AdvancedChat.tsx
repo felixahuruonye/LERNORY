@@ -190,18 +190,18 @@ export default function AdvancedChat() {
 
   return (
     <div className="flex flex-col h-screen bg-background transition-all duration-700 ease-in-out animate-in fade-in slide-in-from-bottom-4">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border glassmorphism shadow-sm relative z-10">
-        <div>
-          <h1 className="text-2xl font-bold">Advanced Chat</h1>
-          <p className="text-sm text-muted-foreground">
-            Try: "read my project workspace" to discuss your projects
+      {/* Header - Mobile responsive */}
+      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-border glassmorphism shadow-sm relative z-10">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-lg sm:text-2xl font-bold">Advanced Chat</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground truncate">
+            Try: "read my project workspace"
           </p>
         </div>
         {projectContext && (
-          <Badge variant="outline" className="gap-2">
-            <FolderOpen className="w-4 h-4" />
-            Project Active
+          <Badge variant="outline" className="gap-1 sm:gap-2 text-xs flex-shrink-0 ml-2">
+            <FolderOpen className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Project Active</span>
           </Badge>
         )}
       </div>
@@ -249,26 +249,26 @@ export default function AdvancedChat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-border space-y-2 glassmorphism bg-background/50 backdrop-blur-xl">
+      {/* Input - Mobile responsive */}
+      <div className="p-3 sm:p-4 border-t border-border space-y-2 glassmorphism bg-background/50 backdrop-blur-xl">
         <Textarea
-          placeholder='Try "read my project workspace" to analyze your tasks...'
+          placeholder='Try "read my project workspace"...'
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="resize-none bg-background/50 border-primary/20 focus-visible:ring-primary/30 transition-all duration-300"
-          rows={3}
+          className="resize-none bg-background/50 border-primary/20 focus-visible:ring-primary/30 transition-all duration-300 text-sm sm:text-base"
+          rows={2}
           data-testid="textarea-chat-input"
         />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             onClick={handleSendMessage}
             disabled={!message.trim() || isLoading}
-            className="gap-2"
+            className="gap-1 sm:gap-2"
             data-testid="button-send-message"
           >
             <Send className="w-4 h-4" />
-            Send
+            <span className="hidden sm:inline">Send</span>
           </Button>
           <Button 
             variant="outline" 
@@ -279,14 +279,33 @@ export default function AdvancedChat() {
             <Mic className="h-4 w-4" />
           </Button>
           <Link href="/project-workspace">
-            <Button variant="outline" className="gap-2" data-testid="button-go-workspace">
+            <Button variant="outline" size="icon" className="sm:hidden" data-testid="button-go-workspace-mobile">
+              <FolderOpen className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" className="gap-2 hidden sm:flex" data-testid="button-go-workspace">
               <FolderOpen className="w-4 h-4" />
               My Projects
             </Button>
           </Link>
           <Button 
             variant={searchInternet ? "default" : "outline"}
-            className="gap-2"
+            size="icon"
+            className="sm:hidden"
+            onClick={() => {
+              const newState = !searchInternet;
+              setSearchInternet(newState);
+              toast({ 
+                title: "Internet Search", 
+                description: newState ? "Internet search enabled." : "Search disabled." 
+              });
+            }}
+            data-testid="button-toggle-search-mobile"
+          >
+            <Search className="w-4 h-4" />
+          </Button>
+          <Button 
+            variant={searchInternet ? "default" : "outline"}
+            className="gap-2 hidden sm:flex"
             onClick={() => {
               const newState = !searchInternet;
               setSearchInternet(newState);
@@ -298,7 +317,7 @@ export default function AdvancedChat() {
             data-testid="button-toggle-search"
           >
             <Search className="w-4 h-4" />
-            Search Internet
+            Search
           </Button>
         </div>
       </div>

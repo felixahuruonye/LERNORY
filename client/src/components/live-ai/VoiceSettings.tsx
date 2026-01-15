@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -8,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { X } from "lucide-react";
+import { X, Sparkles } from "lucide-react";
 
 interface VoiceSettingsProps {
   onClose: () => void;
@@ -21,6 +22,14 @@ interface VoiceSettingsProps {
   onLanguageChange: (language: string) => void;
   onToneChange: (tone: string) => void;
 }
+
+const GEMINI_VOICES = [
+  { id: "Aoede", name: "Aoede", description: "Bright & melodic", gender: "female" },
+  { id: "Charon", name: "Charon", description: "Deep & authoritative", gender: "male" },
+  { id: "Fenrir", name: "Fenrir", description: "Strong & commanding", gender: "male" },
+  { id: "Kore", name: "Kore", description: "Warm & nurturing", gender: "female" },
+  { id: "Puck", name: "Puck", description: "Playful & energetic", gender: "neutral" },
+];
 
 export function VoiceSettings({
   onClose,
@@ -36,7 +45,13 @@ export function VoiceSettings({
   return (
     <Card className="p-4 bg-slate-800 border-slate-700">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-white">Voice Settings</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold text-white">Voice Settings</h3>
+          <Badge variant="outline" className="gap-1 text-xs border-purple-500/50 text-purple-400">
+            <Sparkles className="w-3 h-3" />
+            Gemini 2.0
+          </Badge>
+        </div>
         <Button
           variant="ghost"
           size="icon"
@@ -48,21 +63,29 @@ export function VoiceSettings({
       </div>
 
       <div className="space-y-4">
-        {/* Voice Selection */}
+        {/* Gemini 2.0 Voice Selection */}
         <div>
           <label className="text-sm font-medium text-slate-300 block mb-2">
-            AI Voice
+            Gemini AI Voice
           </label>
           <Select value={voice} onValueChange={onVoiceChange}>
             <SelectTrigger data-testid="select-voice">
-              <SelectValue />
+              <SelectValue placeholder="Select a voice" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="female">Female</SelectItem>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="child">Child</SelectItem>
+              {GEMINI_VOICES.map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{v.name}</span>
+                    <span className="text-xs text-muted-foreground">- {v.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-slate-500 mt-1">
+            Gemini 2.0 Live API integration coming soon
+          </p>
         </div>
 
         {/* Speed */}

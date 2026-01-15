@@ -1,14 +1,13 @@
 // Gemini AI integration blueprint reference: javascript_gemini
 import { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
 
-// Try different API key environment variables
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "";
+// Use GOOGLE_API_KEY as the primary key (user's new valid key)
+const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "";
 
 // Log which key is being used (without revealing the actual key)
 if (apiKey) {
-  const keySource = process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' : 
-                    process.env.GOOGLE_API_KEY ? 'GOOGLE_API_KEY' : 
+  const keySource = process.env.GOOGLE_API_KEY ? 'GOOGLE_API_KEY' : 
+                    process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' : 
                     process.env.AI_INTEGRATIONS_GEMINI_API_KEY ? 'AI_INTEGRATIONS_GEMINI_API_KEY' : 'none';
   console.log(`Gemini API initialized with ${keySource} (key length: ${apiKey.length} chars)`);
 } else {
@@ -45,8 +44,8 @@ export async function generateQuestionsWithLEARNORY(
   Array<{ id: string; question: string; options: string[]; correct: string; explanation: string }>
 > {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY not configured");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY.");
     }
 
     const totalCount = Math.min(count, 250); // Support up to 250 questions
@@ -212,8 +211,8 @@ export async function gradeAnswersWithLEARNORY(
   recommendations: string[];
 }> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY not configured");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     // Calculate score locally first
@@ -296,8 +295,8 @@ Analyze the answers and return ONLY valid JSON (no other text):
 // Internet search with Gemini (returns web search results with sources)
 export async function searchInternetWithGemini(query: string): Promise<WebSearchResponse> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY not configured");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     console.log("🔍 Searching internet for:", query);
@@ -352,8 +351,8 @@ Response format (ONLY output valid JSON, no other text):
 }`;
 
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     console.log("Calling LEARNORY AI with prompt length:", prompt.length);
@@ -409,8 +408,8 @@ ${codeSnippet}
 Explain it like you're teaching someone who has never written code before. Be detailed but simple.`;
 
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     console.log("Calling LEARNORY AI to explain code...");
@@ -445,8 +444,8 @@ interface DebugResult {
 
 export async function debugCodeWithLEARNORY(html: string, css: string, js: string, debugPrompt: string): Promise<DebugResult> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     const prompt = `You are an expert web developer. The user's request: "${debugPrompt}"
@@ -524,8 +523,8 @@ export async function explainTopicWithLEARNORY(subject: string, topic: string, d
 Format: {"explanation": "...", "examples": ["ex1", "ex2"], "relatedTopics": ["topic1", "topic2"]}`;
 
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     const response = await ai.models.generateContent({
@@ -553,8 +552,8 @@ interface ImageGenerationResult {
 
 export async function generateImageWithLEARNORY(prompt: string): Promise<ImageGenerationResult> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     console.log("🎨 LEARNORY: Generating image with Stability AI for:", prompt);
@@ -680,8 +679,8 @@ function generateColorPaletteFromPrompt(prompt: string): [string, string, string
 
 export async function chatWithGemini(messages: Array<{ role: string; content: string }>): Promise<string> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     const response = await ai.models.generateContent({
@@ -706,8 +705,8 @@ export async function chatWithGemini(messages: Array<{ role: string; content: st
 
 export async function generateSmartChatTitle(messages: Array<{ role: string; content: string }>): Promise<string> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     const conversationSnippet = messages
@@ -734,8 +733,8 @@ Respond with ONLY the title, no quotes or extra text.`
 
 export async function analyzeFileWithGeminiVision(buffer: Buffer, mimeType: string, fileName: string): Promise<{ extractedText: string }> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     const base64Data = buffer.toString('base64');
@@ -775,8 +774,8 @@ interface GeneratedLessonData {
 
 export async function fixTextWithLEARNORY(text: string): Promise<{ correctedText: string; explanation: string }> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY not configured");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     console.log("🔧 Fixing text with LEARNORY AI...");
@@ -808,8 +807,8 @@ ${text}`,
 
 export async function generateLessonFromTextWithGemini(text: string): Promise<GeneratedLessonData> {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable is not set");
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured");
     }
 
     console.log("🎓 Generating lesson from text with Gemini...");
@@ -858,6 +857,275 @@ Make the objectives, key points, and summary educational, clear, and useful for 
     };
   } catch (error) {
     console.error("❌ Error generating lesson from text:", error);
+    throw error;
+  }
+}
+
+// Main chat function with LEARNORY system integration
+export async function chatWithAI(messages: Array<{role: string; content: string}>): Promise<string> {
+  const { generateLEARNORYSystemPrompt } = await import("./learnorySystem");
+  
+  const lastMessage = messages[messages.length - 1]?.content || "";
+  
+  // Detect subject from message
+  const subjectKeywords: Record<string, string[]> = {
+    mathematics: ["math", "algebra", "calculus", "geometry", "equation", "formula"],
+    physics: ["physics", "force", "motion", "energy", "wave", "velocity"],
+    chemistry: ["chemistry", "reaction", "element", "molecule", "bond", "compound"],
+    biology: ["biology", "cell", "organism", "dna", "gene", "photosynthesis"],
+    english: ["english", "grammar", "essay", "literature", "writing"],
+    government: ["government", "constitution", "politics", "civic"],
+  };
+  
+  let detectedSubject = "general";
+  const messageText = lastMessage.toLowerCase();
+  for (const [subject, keywords] of Object.entries(subjectKeywords)) {
+    if (keywords.some(kw => messageText.includes(kw))) {
+      detectedSubject = subject;
+      break;
+    }
+  }
+
+  // Generate comprehensive LEARNORY system prompt
+  const systemPrompt = generateLEARNORYSystemPrompt({
+    subject: detectedSubject,
+    userLevel: "intermediate",
+    weakTopics: [],
+    examType: "jamb",
+    daysUntilExam: 30,
+    currentStreak: 0,
+    averageScore: 0,
+  });
+
+  const messagesWithSystem = messages[0]?.role !== "system" 
+    ? [{ role: "system", content: systemPrompt }, ...messages]
+    : messages;
+
+  return chatWithGemini(messagesWithSystem);
+}
+
+// Smart fallback - now just uses Gemini directly
+export async function chatWithAISmartFallback(messages: any[]): Promise<string> {
+  try {
+    console.log("Using Gemini API for chat...");
+    const response = await chatWithGemini(messages);
+    console.log("✓ Gemini succeeded with response:", response.substring(0, 100));
+    return response;
+  } catch (err) {
+    console.error("✗ Gemini failed:", (err as any)?.message);
+    return "I'm having trouble connecting to my AI services right now. Please try again.";
+  }
+}
+
+// Generate lesson from transcript
+export async function generateLesson(transcriptText: string): Promise<any> {
+  try {
+    const prompt = `Create a lesson from the transcript. Respond with ONLY valid JSON:
+{
+  "title": "Lesson title",
+  "objectives": ["objective 1", "objective 2"],
+  "keyPoints": ["key point 1", "key point 2"],
+  "summary": "Brief summary"
+}
+
+Transcript:
+${transcriptText.slice(0, 2000)}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const text = response.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return {
+        title: "Untitled Lesson",
+        objectives: [],
+        keyPoints: [],
+        summary: "",
+      };
+    }
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error("Error generating lesson:", error);
+    throw error;
+  }
+}
+
+// Generate course syllabus
+export async function generateSyllabus(topic: string): Promise<any> {
+  try {
+    const prompt = `You are an expert curriculum designer. Generate a comprehensive course syllabus for: ${topic}
+
+Respond with ONLY valid JSON:
+{
+  "title": "Course Title",
+  "description": "Course description",
+  "modules": [
+    {
+      "title": "Module Title",
+      "lessons": [
+        {
+          "title": "Lesson Title",
+          "description": "Lesson description",
+          "duration": "30 minutes"
+        }
+      ]
+    }
+  ]
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const text = response.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { title: topic, description: "", modules: [] };
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error("Error generating syllabus:", error);
+    throw error;
+  }
+}
+
+// Grade quiz answers
+export async function gradeQuiz(answers: any, rubric: any): Promise<any> {
+  try {
+    const prompt = `You are an expert grader. Evaluate the student's answers according to the rubric and provide detailed feedback.
+
+Answers: ${JSON.stringify(answers)}
+Rubric: ${JSON.stringify(rubric)}
+
+Respond with ONLY valid JSON:
+{
+  "score": number,
+  "totalPoints": number,
+  "feedback": [
+    {
+      "question": 1,
+      "points": number,
+      "comment": "Feedback comment"
+    }
+  ]
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const text = response.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { score: 0, totalPoints: 0, feedback: [] };
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error("Error grading quiz:", error);
+    throw error;
+  }
+}
+
+// Transcribe audio using Gemini's multimodal capabilities
+export async function transcribeAudio(audioFilePath: string): Promise<{ text: string, duration: number }> {
+  try {
+    const fs = await import('fs');
+    const audioBuffer = fs.readFileSync(audioFilePath);
+    const base64Audio = audioBuffer.toString('base64');
+    
+    // Determine mime type from file extension
+    const ext = audioFilePath.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      'mp3': 'audio/mp3',
+      'wav': 'audio/wav',
+      'webm': 'audio/webm',
+      'ogg': 'audio/ogg',
+      'm4a': 'audio/mp4',
+    };
+    const mimeType = mimeTypes[ext || ''] || 'audio/wav';
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Audio
+          }
+        },
+        {
+          text: "Please transcribe all the spoken words in this audio file accurately. Return only the transcription text, nothing else."
+        }
+      ] as any
+    });
+
+    return {
+      text: response.text || "",
+      duration: 0,
+    };
+  } catch (error: any) {
+    console.error("Transcription error with Gemini:", error);
+    return {
+      text: "[Transcription unavailable - please try again]",
+      duration: 0,
+    };
+  }
+}
+
+// Generate speech placeholder - Gemini 2.0 Live API handles this natively
+export async function generateSpeech(text: string): Promise<Buffer> {
+  // Gemini 2.0 Multimodal Live API handles real-time speech directly
+  // This is a placeholder for backward compatibility
+  throw new Error("Use Gemini 2.0 Multimodal Live API for real-time speech");
+}
+
+// Summarize text
+export async function summarizeText(text: string, length: 'short' | 'medium' | 'long' = 'medium'): Promise<string> {
+  const lengthInstructions = {
+    short: "in 2-3 sentences",
+    medium: "in 1-2 paragraphs",
+    long: "in detail with multiple paragraphs"
+  };
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Please summarize the following text ${lengthInstructions[length]}:\n\n${text}`,
+    });
+    return response.text || "";
+  } catch (error) {
+    console.error("Error summarizing text:", error);
+    throw error;
+  }
+}
+
+// Generate flashcards
+export async function generateFlashcards(text: string): Promise<any> {
+  try {
+    const prompt = `You are an expert at creating study flashcards. Generate flashcards from the provided text.
+
+Text:
+${text}
+
+Respond with ONLY valid JSON:
+{
+  "flashcards": [
+    { "front": "Question or term", "back": "Answer or definition" }
+  ]
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const responseText = response.text || "";
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { flashcards: [] };
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error("Error generating flashcards:", error);
     throw error;
   }
 }

@@ -20,8 +20,20 @@ import {
   generateSpeech,
   summarizeText,
   generateFlashcards,
-} from "./openai";
-import { generateWebsiteWithGemini, explainCodeForBeginners, debugCodeWithLEARNORY, explainTopicWithLEARNORY, generateImageWithLEARNORY, generateSmartChatTitle, analyzeFileWithGeminiVision, searchInternetWithGemini, generateLessonFromTextWithGemini, fixTextWithLEARNORY, gradeAnswersWithLEARNORY, generateQuestionsWithLEARNORY } from "./gemini";
+  generateWebsiteWithGemini,
+  explainCodeForBeginners,
+  debugCodeWithLEARNORY,
+  explainTopicWithLEARNORY,
+  generateImageWithLEARNORY,
+  generateSmartChatTitle,
+  analyzeFileWithGeminiVision,
+  searchInternetWithGemini,
+  generateLessonFromTextWithGemini,
+  fixTextWithLEARNORY,
+  gradeAnswersWithLEARNORY,
+  generateQuestionsWithLEARNORY,
+  chatWithGemini,
+} from "./gemini";
 import { nanoid } from "nanoid";
 import { learnFromUserMessage, mergePreferences } from "./memoryLearner";
 import { initializePayment, verifyPayment, convertNairaToKobo } from "./paystack";
@@ -2386,10 +2398,8 @@ KEY_WORDS: [keywords separated by commas]`,
         return res.status(404).json({ message: 'Exam not found' });
       }
 
-      // Delete the exam - implementation depends on storage type
-      if (storage.deleteCbtExamHistory) {
-        await (storage as any).deleteCbtExamHistory(id);
-      }
+      // Delete the exam
+      await storage.deleteCbtExamHistory(id);
       
       console.log(`✅ Exam ${id} deleted by user ${userId}`);
       res.json({ message: 'Exam deleted successfully', id });
@@ -2618,8 +2628,8 @@ KEY_WORDS: [keywords separated by commas]`,
       // Search Generated Lessons
       const lessons = await storage.getGeneratedLessonsByUser(userId);
       const lessonResults = lessons
-        .filter(l => l.title.toLowerCase().includes(query) || l.content?.toLowerCase().includes(query))
-        .map(l => ({ type: 'lesson', id: l.id, title: l.title, description: l.content.substring(0, 50), icon: 'BookOpen', href: `/advanced-chat` }))
+        .filter(l => l.title.toLowerCase().includes(query) || l.summary?.toLowerCase().includes(query))
+        .map(l => ({ type: 'lesson', id: l.id, title: l.title, description: l.summary?.substring(0, 50) || '', icon: 'BookOpen', href: `/advanced-chat` }))
         .slice(0, 3);
       results.push(...lessonResults);
 
@@ -2691,7 +2701,7 @@ KEY_WORDS: [keywords separated by commas]`,
 
       const paystackResponse = await verifyPayment(reference);
 
-      if (paystackResponse.status === "success") {
+      if (paystackResponse.status && paystackResponse.data?.status === "success") {
         // Update user subscription
         const expiresAt = new Date();
         expiresAt.setMonth(expiresAt.getMonth() + 1);

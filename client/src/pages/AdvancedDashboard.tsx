@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useDashboardStats, useSubscription, useUnreadNotifications } from "@/hooks/useSupabaseData";
+import { useDashboardStats, useSubscription, useUnreadNotifications, useChatSessions } from "@/hooks/useSupabaseData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
@@ -65,6 +65,10 @@ export default function AdvancedDashboard() {
   const [scrollPos, setScrollPos] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [showChatHistoryModal, setShowChatHistoryModal] = useState(false);
+  
+  // Load chat sessions for history modal
+  const { data: chatSessions = [], isLoading: sessionsLoading } = useChatSessions();
 
   // AI Tools Hub
   const aiTools = [
@@ -268,10 +272,10 @@ export default function AdvancedDashboard() {
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-primary/10 glassmorphism transition-all duration-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-6 w-6 text-primary" />
-              <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
-                LERNORY ULTRA
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+              <h1 className="text-base sm:text-xl font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
+                LERNORY
               </h1>
             </div>
 
@@ -420,18 +424,18 @@ export default function AdvancedDashboard() {
               )}
             </div>
 
-            {/* Right Controls */}
-            <div className="flex items-center gap-3">
+            {/* Right Controls - Mobile optimized */}
+            <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
               {subscription?.pricing_tiers?.name && subscription.pricing_tiers.name !== 'free' && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs" data-testid="badge-subscription">
+                <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs" data-testid="badge-subscription">
                   <Crown className="h-3 w-3 text-primary" />
                   <span className="font-medium text-primary capitalize">{subscription.pricing_tiers.name}</span>
                 </div>
               )}
               <Link href="/pricing">
-                <Button variant="outline" size="sm" className="gap-2 flex sm:flex" data-testid="button-upgrade">
+                <Button variant="outline" size="sm" className="gap-1 sm:gap-2 px-2 sm:px-3" data-testid="button-upgrade">
                   <Zap className="h-4 w-4" />
-                  Upgrade
+                  <span className="hidden sm:inline">Upgrade</span>
                 </Button>
               </Link>
               <ThemeToggle />
@@ -443,15 +447,14 @@ export default function AdvancedDashboard() {
                   )}
                 </Link>
               </Button>
-              <Button variant="ghost" size="icon" asChild className="hover-elevate" data-testid="link-settings">
+              <Button variant="ghost" size="icon" asChild className="hover-elevate hidden sm:flex" data-testid="link-settings">
                 <Link href="/settings">
                   <Settings className="h-5 w-5" />
                 </Link>
               </Button>
-              <Button variant="ghost" asChild className="hover-elevate active-elevate-2" data-testid="button-logout">
-                <a href="/api/logout" className="gap-2">
+              <Button variant="ghost" size="icon" asChild className="hover-elevate active-elevate-2" data-testid="button-logout">
+                <a href="/api/logout">
                   <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">Logout</span>
                 </a>
               </Button>
             </div>
@@ -460,26 +463,26 @@ export default function AdvancedDashboard() {
       </header>
 
       <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-4xl font-bold">Welcome back, {user.firstName || user.email}!</h2>
-            <Sparkles className="h-8 w-8 text-primary animate-bounce" />
+        {/* Welcome Section - Mobile responsive */}
+        <div className="mb-8 sm:mb-12">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 flex-wrap">
+            <h2 className="text-2xl sm:text-4xl font-bold">Welcome back, {user.firstName || user.email}!</h2>
+            <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-primary animate-bounce" />
           </div>
-          <p className="text-muted-foreground flex items-center gap-2">
+          <p className="text-muted-foreground flex items-center gap-2 text-sm sm:text-base">
             <Clock className="h-4 w-4" />
-            {new Date().toLocaleDateString()} • Press Cmd+K to search everything
+            {new Date().toLocaleDateString()} <span className="hidden sm:inline">• Press Cmd+K to search everything</span>
           </p>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        {/* Quick Actions - Mobile optimized */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-6 sm:mb-8">
           {quickActions.map((action) => (
             <Link key={action.label} href={action.href}>
               <Card className={`${action.color} hover-elevate cursor-pointer h-full transition-all`} data-testid={`card-action-${action.label.toLowerCase().replace(" ", "-")}`}>
-                <div className="p-6 text-center">
-                  <action.icon className="h-8 w-8 mx-auto mb-2 text-foreground" />
-                  <p className="font-semibold text-sm">{action.label}</p>
+                <div className="p-3 sm:p-6 text-center">
+                  <action.icon className="h-6 w-6 sm:h-8 sm:w-8 mx-auto mb-1 sm:mb-2 text-foreground" />
+                  <p className="font-semibold text-xs sm:text-sm">{action.label}</p>
                 </div>
               </Card>
             </Link>
@@ -574,6 +577,9 @@ export default function AdvancedDashboard() {
                         if (cat.value === 'all') {
                           e.preventDefault();
                           setShowAllCategories(true);
+                        } else if (cat.value === 'chat') {
+                          e.preventDefault();
+                          setShowChatHistoryModal(true);
                         }
                       }}
                     >
@@ -659,6 +665,72 @@ export default function AdvancedDashboard() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Chat History Selection Modal */}
+      <Dialog open={showChatHistoryModal} onOpenChange={setShowChatHistoryModal}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden" data-testid="dialog-chat-history">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-primary" />
+              Chat History
+            </DialogTitle>
+            <DialogDescription>
+              Select a conversation to continue where you left off
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-96 space-y-2 pr-2">
+            {sessionsLoading ? (
+              <div className="space-y-2">
+                {[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-lg" />)}
+              </div>
+            ) : chatSessions.length === 0 ? (
+              <div className="text-center py-8 space-y-4">
+                <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground" />
+                <p className="text-muted-foreground">No chat history yet</p>
+                <Link href="/chat">
+                  <Button variant="outline" data-testid="button-start-chat">
+                    Start Your First Chat
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              chatSessions.map((session: any) => (
+                <Link key={session.id} href={`/chat?sessionId=${session.id}`}>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-3 h-auto p-4 text-left"
+                    onClick={() => setShowChatHistoryModal(false)}
+                    data-testid={`button-chat-session-${session.id}`}
+                  >
+                    <MessageSquare className="h-5 w-5 flex-shrink-0 text-primary" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{session.title || "Untitled Chat"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(session.updated_at || session.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  </Button>
+                </Link>
+              ))
+            )}
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Link href="/chat" className="flex-1">
+              <Button className="w-full gap-2" data-testid="button-new-chat">
+                <MessageSquare className="h-4 w-4" />
+                New Chat
+              </Button>
+            </Link>
+            <Link href="/advanced-chat" className="flex-1">
+              <Button variant="outline" className="w-full gap-2" data-testid="button-advanced-chat">
+                <Sparkles className="h-4 w-4" />
+                Advanced
+              </Button>
+            </Link>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

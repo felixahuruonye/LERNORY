@@ -1,14 +1,18 @@
 import { useCallback, useRef, useEffect, useState } from "react";
 
-// Available voices
-export const AVAILABLE_VOICES = [
-  { name: "Adam", lang: "en-US", gender: "male" },
-  { name: "Aria", lang: "en-US", gender: "female" },
-  { name: "Guy", lang: "en-US", gender: "male" },
-  { name: "Zira", lang: "en-US", gender: "female" },
+// Gemini 2.0 voices (Multimodal Live API)
+export const GEMINI_VOICES = [
+  { id: "Aoede", name: "Aoede", description: "Bright & melodic", gender: "female", lang: "en-US" },
+  { id: "Charon", name: "Charon", description: "Deep & authoritative", gender: "male", lang: "en-US" },
+  { id: "Fenrir", name: "Fenrir", description: "Strong & commanding", gender: "male", lang: "en-US" },
+  { id: "Kore", name: "Kore", description: "Warm & nurturing", gender: "female", lang: "en-US" },
+  { id: "Puck", name: "Puck", description: "Playful & energetic", gender: "neutral", lang: "en-US" },
 ];
 
-const DEFAULT_VOICE = "Adam";
+// Legacy browser TTS voices (fallback)
+export const AVAILABLE_VOICES = GEMINI_VOICES;
+
+const DEFAULT_VOICE = "Aoede";
 
 // Text preprocessing function - removes formatting, keeps only text
 function preprocessTextForSpeech(text: string): string {

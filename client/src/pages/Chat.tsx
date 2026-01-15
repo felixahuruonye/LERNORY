@@ -37,7 +37,7 @@ import {
   Code,
   Lightbulb,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -50,7 +50,12 @@ export default function Chat() {
   const { toast } = useToast();
   const { toggleSpeak, isPlaying } = useVoice();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  
+  // Get sessionId from URL query params
+  const searchString = useSearch();
+  const urlSessionId = new URLSearchParams(searchString).get("sessionId");
+  
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(urlSessionId);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
@@ -87,16 +92,22 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Set first session or create new one
+  // Set session from URL or first session or create new one
   useEffect(() => {
-    if (user && !currentSessionId) {
-      if (sessions.length > 0) {
-        setCurrentSessionId(sessions[0].id);
-      } else {
-        createNewChat();
+    if (user) {
+      // If URL has sessionId, use it
+      if (urlSessionId && sessions.some(s => s.id === urlSessionId)) {
+        setCurrentSessionId(urlSessionId);
+      } else if (!currentSessionId) {
+        // No URL session, use first session or create new
+        if (sessions.length > 0) {
+          setCurrentSessionId(sessions[0].id);
+        } else {
+          createNewChat();
+        }
       }
     }
-  }, [user, sessions, currentSessionId]);
+  }, [user, sessions, urlSessionId]);
 
   // Create new chat
   const createNewChat = async () => {
@@ -429,10 +440,10 @@ export default function Chat() {
 
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col min-w-0 bg-slate-950/20">
-          {/* Header */}
+          {/* Header - Mobile responsive */}
           <header className="border-b border-border bg-background/80 backdrop-blur-sm">
-            <div className="flex items-center justify-between h-14 px-4">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between h-14 px-2 sm:px-4">
+              <div className="flex items-center gap-1 sm:gap-3">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -445,7 +456,7 @@ export default function Chat() {
                     <Menu className="w-5 h-5" />
                   )}
                 </Button>
-                <h1 className="font-semibold text-lg">LEARNORY</h1>
+                <h1 className="font-semibold text-base sm:text-lg">LEARNORY</h1>
 
                 {/* Quick Action Menu */}
                 <DropdownMenu>
@@ -453,11 +464,11 @@ export default function Chat() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="hover-elevate ml-2"
+                      className="hover-elevate ml-1 sm:ml-2 px-2 sm:px-3"
                       data-testid="button-quick-actions"
                     >
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Quick Actions
+                      <Sparkles className="w-4 h-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Quick Actions</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-56 z-50">
@@ -506,9 +517,9 @@ export default function Chat() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <Link href="/settings">
-                  <Button variant="ghost" size="icon" data-testid="link-settings">
+                  <Button variant="ghost" size="icon" data-testid="link-settings" className="hidden sm:flex">
                     <Settings className="w-5 h-5" />
                   </Button>
                 </Link>
