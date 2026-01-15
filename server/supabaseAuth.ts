@@ -123,6 +123,8 @@ export const optionalSupabaseAuth: RequestHandler = async (
     const { data: { user } } = await supabase.auth.getUser(token);
 
     if (user) {
+      // Ensure user exists in local database
+      await ensureUserExists(user);
       req.userId = user.id;
       req.userEmail = user.email;
     }

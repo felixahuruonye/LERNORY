@@ -549,11 +549,11 @@ If they ask about similar topics or reference past conversations, remind them wh
         }
         return acc;
       }, [] as string[]) || [];
-      const uniqueWeakTopics = [...new Set(weakTopics)].slice(0, 5);
+      const uniqueWeakTopics = Array.from(new Set(weakTopics)).slice(0, 5);
       
       // Get streak (days studied in a row)
       const dates = learningHistory?.map((h: any) => new Date(h.createdAt).toDateString()) || [];
-      const uniqueDates = [...new Set(dates)];
+      const uniqueDates = Array.from(new Set(dates));
       const streak = uniqueDates.length;
       
       // Teacher-specific stats
@@ -562,8 +562,8 @@ If they ask about similar topics or reference past conversations, remind them wh
       
       if (isTeacher) {
         // Get courses created by teacher
-        const courses = await storage.getCoursesByCreator?.(userId) || [];
-        const liveSessions = await storage.getLiveSessionsByHost?.(userId) || [];
+        const courses = await storage.getCoursesByTeacher(userId) || [];
+        const liveSessions = await storage.getLiveSessionsByHost(userId) || [];
         
         // Calculate total students (placeholder - would need enrollment data)
         const totalStudents = courses.reduce((acc: number, c: any) => acc + (c.enrollmentCount || 0), 0);
@@ -1269,8 +1269,9 @@ Respond in this JSON format:
 }`;
 
       const aiResponse = await chatWithGemini([
+        { role: "system", content: "You are an expert educational planner. Generate structured, realistic study plans optimized for exam success. Always respond with valid JSON." },
         { role: "user", content: prompt }
-      ], "You are an expert educational planner. Generate structured, realistic study plans optimized for exam success. Always respond with valid JSON.");
+      ]);
 
       // Parse AI response
       let schedule;
@@ -1471,6 +1472,7 @@ Respond in this JSON format:
 
         try {
           const syllabusResponse = await chatWithGemini([
+            { role: "system", content: "You are an educational curriculum designer. Generate structured syllabi from course materials." },
             { role: "user", content: `Based on these course materials, generate a structured syllabus in JSON format:
 
 Materials content:
@@ -1482,7 +1484,7 @@ Generate a syllabus with:
   "learningOutcomes": ["..."],
   "assessments": ["..."]
 }` }
-          ], "You are an educational curriculum designer. Generate structured syllabi from course materials.");
+          ]);
 
           const jsonMatch = syllabusResponse.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
