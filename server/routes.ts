@@ -9,7 +9,6 @@ import path from "path";
 // @ts-ignore - multer types not available but package is installed
 import multer from "multer";
 import { storage } from "./storage";
-import { setupAuth } from "./replitAuth";
 import { supabaseAuth, optionalSupabaseAuth, type AuthenticatedRequest } from "./supabaseAuth";
 import {
   chatWithAI,
@@ -36,10 +35,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerChatRoutes(app);
   registerImageRoutes(app);
 
-  // Auth middleware
-  await setupAuth(app);
-
-  // Auth routes
+  // Auth routes (using Supabase JWT authentication)
   app.get('/api/auth/user', supabaseAuth, async (req: any, res: Response) => {
     try {
       const userId = req.userId;

@@ -4,7 +4,14 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-const supabase = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
+if (!supabaseUrl) {
+  console.warn('Warning: SUPABASE_URL not set - authentication will not work');
+}
+if (!supabaseServiceKey) {
+  console.warn('Warning: SUPABASE_SERVICE_ROLE_KEY not set - authentication will not work');
+}
+
+const supabase = supabaseUrl && supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
