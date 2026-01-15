@@ -845,6 +845,139 @@ export class DatabaseStorage implements IStorage {
   async getCbtAnswersBySession(sessionId: string): Promise<CbtAnswer[]> {
     return await db.select().from(cbtAnswers).where(eq(cbtAnswers.sessionId, sessionId));
   }
+
+  // CBT Exam History operations
+  async createCbtExamHistory(exam: any): Promise<any> {
+    const [newExam] = await db.insert(cbtExamHistory).values(exam).returning();
+    return newExam;
+  }
+
+  async getCbtExamHistoryByUser(userId: string): Promise<any[]> {
+    return await db.select().from(cbtExamHistory).where(eq(cbtExamHistory.userId, userId)).orderBy(desc(cbtExamHistory.completedAt));
+  }
+
+  async deleteCbtExamHistory(id: string): Promise<void> {
+    await db.delete(cbtExamHistory).where(eq(cbtExamHistory.id, id));
+  }
+
+  // CBT Analytics operations
+  async updateCbtAnalytics(userId: string, topic: string, isStrong: boolean): Promise<any> {
+    const existing = await db.select().from(cbtAnalytics)
+      .where(and(eq(cbtAnalytics.userId, userId), eq(cbtAnalytics.topic, topic)));
+    
+    if (existing.length > 0) {
+      const [updated] = await db.update(cbtAnalytics)
+        .set({ isStrong, updatedAt: new Date() })
+        .where(and(eq(cbtAnalytics.userId, userId), eq(cbtAnalytics.topic, topic)))
+        .returning();
+      return updated;
+    } else {
+      const [newAnalytics] = await db.insert(cbtAnalytics)
+        .values({ userId, topic, isStrong })
+        .returning();
+      return newAnalytics;
+    }
+  }
+
+  async getCbtAnalyticsByUser(userId: string): Promise<any> {
+    return await db.select().from(cbtAnalytics).where(eq(cbtAnalytics.userId, userId));
+  }
+
+  // CBT Question operations
+  async createCbtQuestion(question: any): Promise<any> {
+    const [newQuestion] = await db.insert(cbtQuestions).values(question).returning();
+    return newQuestion;
+  }
+
+  async createCbtQuestionLicensing(licensing: any): Promise<any> {
+    const [newLicensing] = await db.insert(cbtQuestionLicensing).values(licensing).returning();
+    return newLicensing;
+  }
+
+  async getCbtQuestionLicensing(questionId: string): Promise<any> {
+    const [licensing] = await db.select().from(cbtQuestionLicensing).where(eq(cbtQuestionLicensing.questionId, questionId));
+    return licensing;
+  }
+
+  // User update operation
+  async updateUser(id: string, updates: any): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Project workspace operations (in-memory cache within DatabaseStorage for now)
+  private projectCache = new Map<string, any>();
+  private projectFileCache = new Map<string, any>();
+  private projectTaskCache = new Map<string, any>();
+  private projectIdCounter = 0;
+
+  async getProjectsByUser(userId: string): Promise<any[]> {
+    return Array.from(this.projectCache.values()).filter((p: any) => p.userId === userId);
+  }
+
+  async createProject(project: any): Promise<any> {
+    const id = `proj_${++this.projectIdCounter}_${Date.now()}`;
+    const fullProject = { id, ...project, createdAt: new Date(), updatedAt: new Date() };
+    this.projectCache.set(id, fullProject);
+    return fullProject;
+  }
+
+  async updateProject(id: string, updates: any): Promise<any> {
+    const project = this.projectCache.get(id);
+    if (project) {
+      const updated = { ...project, ...updates, updatedAt: new Date() };
+      this.projectCache.set(id, updated);
+      return updated;
+    }
+    return undefined;
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    this.projectCache.delete(id);
+  }
+
+  async getFilesByProject(projectId: string): Promise<any[]> {
+    return Array.from(this.projectFileCache.values()).filter((f: any) => f.projectId === projectId);
+  }
+
+  async createFile(file: any): Promise<any> {
+    const id = `file_${++this.projectIdCounter}_${Date.now()}`;
+    const fullFile = { id, ...file, createdAt: new Date() };
+    this.projectFileCache.set(id, fullFile);
+    return fullFile;
+  }
+
+  async deleteFile(id: string): Promise<void> {
+    this.projectFileCache.delete(id);
+  }
+
+  async getTasksByProject(projectId: string): Promise<any[]> {
+    return Array.from(this.projectTaskCache.values()).filter((t: any) => t.projectId === projectId);
+  }
+
+  async createTask(task: any): Promise<any> {
+    const id = `task_${++this.projectIdCounter}_${Date.now()}`;
+    const fullTask = { id, ...task, createdAt: new Date() };
+    this.projectTaskCache.set(id, fullTask);
+    return fullTask;
+  }
+
+  async updateTask(id: string, updates: any): Promise<any> {
+    const task = this.projectTaskCache.get(id);
+    if (task) {
+      const updated = { ...task, ...updates, updatedAt: new Date() };
+      this.projectTaskCache.set(id, updated);
+      return updated;
+    }
+    return undefined;
+  }
+
+  async deleteTask(id: string): Promise<void> {
+    this.projectTaskCache.delete(id);
+  }
 }
 
 // Fallback in-memory storage when database is unavailable
@@ -1336,7 +1469,7 @@ class MemoryStorage implements IStorage {
   }
 }
 
-// Use memory storage - safe fallback until database is properly configured
-export const storage = new MemoryStorage() as IStorage;
+// Use database storage for persistent data
+export const storage = new DatabaseStorage();
 
-console.log('✅ Using in-memory storage - data persists during this session');
+console.log('✅ Using PostgreSQL database storage - data persists permanently');
