@@ -424,6 +424,19 @@ VALUES
   ('premium', 5999, 59990, '{"chat_messages": "unlimited", "study_plans": "unlimited", "exams": "unlimited", "websites": "unlimited", "ai_images": "unlimited", "priority_support": true, "offline_mode": true}', true)
 ON CONFLICT (name) DO NOTHING;
 
+-- RPC function to increment message count (optional, can be used for atomic updates)
+CREATE OR REPLACE FUNCTION public.increment_message_count(session_id UUID)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.chat_sessions 
+  SET message_count = message_count + 1, updated_at = NOW()
+  WHERE id = session_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission
+GRANT EXECUTE ON FUNCTION public.increment_message_count(UUID) TO authenticated;
+
 -- Grant access to authenticated users
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;

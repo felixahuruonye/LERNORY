@@ -66,9 +66,23 @@ export const chatMessagesDb = {
       .select()
       .single();
     
-    // Update session message count
+    // Update session message count and updated_at manually
     if (message.session_id) {
-      await supabase.rpc('increment_message_count', { session_id: message.session_id });
+      const { data: session } = await supabase
+        .from('chat_sessions')
+        .select('message_count')
+        .eq('id', message.session_id)
+        .single();
+      
+      if (session) {
+        await supabase
+          .from('chat_sessions')
+          .update({ 
+            message_count: (session.message_count || 0) + 1,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', message.session_id);
+      }
     }
     
     return { data, error };
