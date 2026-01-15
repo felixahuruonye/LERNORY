@@ -41,6 +41,7 @@ import { nanoid as generateId } from "nanoid";
 
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
+import { handleGeminiLiveConnection, GEMINI_VOICES } from "./geminiLive";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Wire up Replit AI Integrations
@@ -1564,6 +1565,16 @@ KEY_WORDS: [keywords separated by commas]`,
 
   // WebSocket integration for real-time transcription
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+  // Gemini Live WebSocket for real-time voice chat
+  const geminiLiveWss = new WebSocketServer({ server: httpServer, path: '/ws/gemini-live' });
+
+  geminiLiveWss.on('connection', (ws: WebSocket, req) => {
+    console.log('New Gemini Live WebSocket connection');
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const userId = url.searchParams.get('userId') || 'anonymous';
+    handleGeminiLiveConnection(ws, userId);
+  });
 
   wss.on('connection', (ws: WebSocket) => {
     console.log('New WebSocket connection established');

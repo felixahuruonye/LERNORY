@@ -1,11 +1,7 @@
 // Database integration blueprint reference: javascript_database
-import { sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import { neon, neonConfig } from '@neondatabase/serverless';
-import ws from "ws";
+import { drizzle } from 'drizzle-orm/neon-http';
+import { neon } from '@neondatabase/serverless';
 import * as schema from "@shared/schema";
-
-neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -13,38 +9,21 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Create Neon client with error handling
-let queryClient: any = null;
-let dbInstance: any = null;
-let dbError: Error | null = null;
-let isDbAvailable = false;
+// Create Neon HTTP client (serverless-friendly, no WebSocket needed)
+const queryClient = neon(process.env.DATABASE_URL);
+export const db = drizzle(queryClient, { schema });
+console.log('✅ Database connection established');
 
-try {
-  queryClient = neon(process.env.DATABASE_URL);
-  dbInstance = drizzle({ client: queryClient, schema });
-  console.log('✅ Database connection established');
-  isDbAvailable = true;
-} catch (error: any) {
-  dbError = error;
-  console.warn('⚠️ Database connection warning:', error.message);
-  // Don't fail - allow fallback to memory storage
-}
-
-export const db = dbInstance;
-export const isDatabaseAvailable = () => isDbAvailable;
+export const isDatabaseAvailable = () => true;
 
 // Create a simple pool interface for backward compatibility
 export const pool = {
   query: async (text: string, values?: any[]) => {
     try {
-      if (dbError?.message?.includes('endpoint has been disabled')) {
-        console.error('❌ Neon database endpoint is disabled. App is using in-memory storage.');
-        return { rows: [] };
-      }
       const result = await queryClient(text, values);
       return { rows: result };
     } catch (error: any) {
-      console.warn('Database query failed, using fallback');
+      console.warn('Database query failed:', error.message);
       return { rows: [] };
     }
   },

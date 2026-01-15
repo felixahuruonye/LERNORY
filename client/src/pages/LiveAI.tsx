@@ -3,11 +3,13 @@ import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Volume2, VolumeX, Upload, X, Mic, MicOff, Phone, PhoneOff } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Send, Volume2, VolumeX, Upload, X, Mic, MicOff, Phone, PhoneOff, Settings, Shield, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ChatInterface } from "@/components/live-ai/ChatInterface";
 import { QuickActions } from "@/components/live-ai/QuickActions";
 import { AvatarDisplay } from "@/components/live-ai/AvatarDisplay";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Message {
   id: string;
@@ -16,8 +18,17 @@ interface Message {
   timestamp: number;
 }
 
+const GEMINI_VOICES = [
+  { id: "Aoede", name: "Aoede", description: "Bright & melodic" },
+  { id: "Charon", name: "Charon", description: "Deep & authoritative" },
+  { id: "Fenrir", name: "Fenrir", description: "Strong & commanding" },
+  { id: "Kore", name: "Kore", description: "Warm & nurturing" },
+  { id: "Puck", name: "Puck", description: "Playful & energetic" },
+];
+
 export default function LiveAI() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [voice] = useState<"female" | "male">("female");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -34,9 +45,15 @@ export default function LiveAI() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [fileDescription, setFileDescription] = useState("");
-  const [isMuted, setIsMuted] = useState(true); // Start MUTED - user must unmute to talk
+  const [isMuted, setIsMuted] = useState(true);
   const [isCallActive, setIsCallActive] = useState(true);
-  const [, setLocation] = useLocation(); // For redirecting to chat page
+  const [, setLocation] = useLocation();
+  
+  // Microphone permission and settings states
+  const [micPermission, setMicPermission] = useState<"granted" | "denied" | "prompt">("prompt");
+  const [showMicSettings, setShowMicSettings] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState("Aoede");
+  const [isGeminiConnected, setIsGeminiConnected] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -47,6 +64,139 @@ export default function LiveAI() {
   const mouthAnimationRef = useRef<boolean>(false);
   const sessionIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const geminiWsRef = useRef<WebSocket | null>(null);
+
+  // Check microphone permission on mount
+  useEffect(() => {
+    checkMicrophonePermission();
+  }, []);
+
+  const checkMicrophonePermission = async () => {
+    try {
+      const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      setMicPermission(result.state as "granted" | "denied" | "prompt");
+      
+      result.addEventListener("change", () => {
+        setMicPermission(result.state as "granted" | "denied" | "prompt");
+      });
+    } catch (error) {
+      console.log("Permission API not supported, will check on use");
+    }
+  };
+
+  const requestMicrophonePermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      setMicPermission("granted");
+      toast({
+        title: "Microphone Access Granted",
+        description: "You can now use voice features",
+      });
+      return true;
+    } catch (error) {
+      setMicPermission("denied");
+      toast({
+        title: "Microphone Access Denied",
+        description: "Please enable microphone in browser settings",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Connect to Gemini Live WebSocket
+  const connectToGeminiLive = () => {
+    if (geminiWsRef.current?.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/gemini-live?userId=${user?.id || 'anonymous'}`;
+    
+    const ws = new WebSocket(wsUrl);
+    geminiWsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("Connected to Gemini Live API");
+      setIsGeminiConnected(true);
+      toast({
+        title: "AI Voice Connected",
+        description: "Ready for real-time conversation",
+      });
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleGeminiMessage(data);
+      } catch (error) {
+        console.error("Error parsing Gemini message:", error);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("Disconnected from Gemini Live API");
+      setIsGeminiConnected(false);
+    };
+
+    ws.onerror = (error) => {
+      console.error("Gemini WebSocket error:", error);
+      setIsGeminiConnected(false);
+    };
+  };
+
+  const handleGeminiMessage = (data: any) => {
+    switch (data.type) {
+      case "session_started":
+        console.log("Gemini session started:", data.sessionId);
+        break;
+      case "processing_started":
+        setIsProcessing(true);
+        break;
+      case "processing_complete":
+        setIsProcessing(false);
+        break;
+      case "ai_response":
+        addMessage("assistant", data.text);
+        speakText(data.text);
+        break;
+      case "error":
+        toast({
+          title: "AI Error",
+          description: data.message,
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+        break;
+    }
+  };
+
+  const sendAudioToGemini = async (audioBase64: string) => {
+    if (geminiWsRef.current?.readyState !== WebSocket.OPEN) {
+      connectToGeminiLive();
+      setTimeout(() => sendAudioToGemini(audioBase64), 500);
+      return;
+    }
+
+    geminiWsRef.current.send(JSON.stringify({
+      type: "audio_input",
+      audio: audioBase64,
+    }));
+  };
+
+  const sendTextToGemini = (text: string) => {
+    if (geminiWsRef.current?.readyState !== WebSocket.OPEN) {
+      connectToGeminiLive();
+      setTimeout(() => sendTextToGemini(text), 500);
+      return;
+    }
+
+    geminiWsRef.current.send(JSON.stringify({
+      type: "text_input",
+      text,
+    }));
+  };
 
   useEffect(() => {
     // Load saved settings
@@ -584,6 +734,11 @@ export default function LiveAI() {
     }
   };
 
+  // Speak text using TTS (wrapper for playAudio used by Gemini Live)
+  const speakText = (text: string) => {
+    playAudio(text);
+  };
+
   const handleSendMessage = async (userText?: string) => {
     const text = userText || messageInput;
     if (!text.trim() || isProcessing) return;
@@ -958,6 +1113,111 @@ export default function LiveAI() {
                   End Call
                 </Button>
               </div>
+
+              {/* Voice Settings Button */}
+              <Button
+                onClick={() => setShowMicSettings(!showMicSettings)}
+                variant="outline"
+                size="sm"
+                className="w-full max-w-sm gap-2"
+                data-testid="button-voice-settings"
+              >
+                <Settings className="w-4 h-4" />
+                Voice & Microphone Settings
+              </Button>
+
+              {/* Microphone Settings Panel */}
+              {showMicSettings && (
+                <Card className={`w-full max-w-sm p-4 ${isDarkMode ? "bg-slate-800 border-slate-700" : ""}`}>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold">Voice Settings</h3>
+                      <Badge variant="outline" className="gap-1 text-xs">
+                        <Sparkles className="w-3 h-3" />
+                        Gemini 2.0
+                      </Badge>
+                    </div>
+
+                    {/* Microphone Permission */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Shield className="w-4 h-4" />
+                        Microphone Permission
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {micPermission === "granted" && "Access granted"}
+                          {micPermission === "denied" && "Access denied"}
+                          {micPermission === "prompt" && "Not requested yet"}
+                        </span>
+                        {micPermission !== "granted" && (
+                          <Button
+                            size="sm"
+                            onClick={requestMicrophonePermission}
+                            data-testid="button-request-mic"
+                          >
+                            Grant Access
+                          </Button>
+                        )}
+                        {micPermission === "granted" && (
+                          <Badge variant="secondary" className="bg-green-500/20 text-green-600">
+                            Enabled
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* AI Voice Selection */}
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">AI Voice</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {GEMINI_VOICES.map((v) => (
+                          <Button
+                            key={v.id}
+                            variant={selectedVoice === v.id ? "default" : "outline"}
+                            size="sm"
+                            className="justify-start text-left"
+                            onClick={() => {
+                              setSelectedVoice(v.id);
+                              if (geminiWsRef.current?.readyState === WebSocket.OPEN) {
+                                geminiWsRef.current.send(JSON.stringify({
+                                  type: "set_voice",
+                                  voice: v.id,
+                                }));
+                              }
+                            }}
+                            data-testid={`button-voice-${v.id}`}
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{v.name}</span>
+                              <span className="text-xs opacity-70">{v.description}</span>
+                            </div>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Connection Status */}
+                    <div className="flex items-center justify-between text-sm">
+                      <span>Gemini Live API</span>
+                      <Badge variant={isGeminiConnected ? "secondary" : "outline"}>
+                        {isGeminiConnected ? "Connected" : "Disconnected"}
+                      </Badge>
+                    </div>
+
+                    {!isGeminiConnected && (
+                      <Button
+                        size="sm"
+                        onClick={connectToGeminiLive}
+                        className="w-full"
+                        data-testid="button-connect-gemini"
+                      >
+                        Connect to AI Voice
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              )}
 
               {/* Theme Toggle */}
               <Button
