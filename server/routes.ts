@@ -515,6 +515,87 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
+  // Dashboard stats endpoint
+  app.get('/api/dashboard/stats', supabaseAuth, async (req: any, res: Response) => {
+    try {
+      const userId = req.userId;
+      const user = await storage.getUser(userId);
+      
+      // Get chat sessions count
+      const chatSessions = await storage.getChatSessionsByUser(userId);
+      const totalSessions = chatSessions?.length || 0;
+      
+      // Get learning history and progress
+      const learningHistory = await storage.getLearningHistoryByUser(userId);
+      const examResults = await storage.getExamResultsByUser(userId);
+      
+      // Calculate XP and level
+      const xp = learningHistory?.reduce((acc: number, h: any) => acc + (h.xpEarned || 0), 0) || 0;
+      const level = Math.floor(xp / 100) + 1;
+      
+      // Calculate completion percentage
+      const totalCompleted = learningHistory?.filter((h: any) => h.completed)?.length || 0;
+      const completionPercent = learningHistory?.length ? Math.round((totalCompleted / learningHistory.length) * 100) : 0;
+      
+      // Get exam average
+      const examScores = examResults?.map((e: any) => e.score) || [];
+      const avgExamScore = examScores.length ? Math.round(examScores.reduce((a: number, b: number) => a + b, 0) / examScores.length) : 0;
+      
+      // Get weak topics from exam results
+      const weakTopics = examResults?.reduce((acc: string[], e: any) => {
+        if (e.weakTopics) {
+          const topics = Array.isArray(e.weakTopics) ? e.weakTopics : [];
+          return [...acc, ...topics];
+        }
+        return acc;
+      }, [] as string[]) || [];
+      const uniqueWeakTopics = [...new Set(weakTopics)].slice(0, 5);
+      
+      // Get streak (days studied in a row)
+      const dates = learningHistory?.map((h: any) => new Date(h.createdAt).toDateString()) || [];
+      const uniqueDates = [...new Set(dates)];
+      const streak = uniqueDates.length;
+      
+      // Teacher-specific stats
+      const isTeacher = user?.role === "teacher" || user?.role === "lecturer" || user?.role === "school";
+      let teacherStats = null;
+      
+      if (isTeacher) {
+        // Get courses created by teacher
+        const courses = await storage.getCoursesByCreator?.(userId) || [];
+        const liveSessions = await storage.getLiveSessionsByHost?.(userId) || [];
+        
+        // Calculate total students (placeholder - would need enrollment data)
+        const totalStudents = courses.reduce((acc: number, c: any) => acc + (c.enrollmentCount || 0), 0);
+        
+        // Calculate earnings (from subscriptions/course sales)
+        const earnings = courses.reduce((acc: number, c: any) => acc + ((c.price || 0) * (c.enrollmentCount || 0)), 0);
+        
+        teacherStats = {
+          totalStudents,
+          activeCourses: courses.length,
+          liveSessions: liveSessions.length,
+          earnings,
+        };
+      }
+      
+      res.json({
+        totalSessions,
+        xp,
+        level,
+        streak,
+        completionPercent,
+        avgExamScore,
+        weakTopics: uniqueWeakTopics,
+        studyHours: Math.round((learningHistory?.length || 0) * 0.5), // Estimate 30 min per session
+        teacherStats,
+      });
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
+      res.status(500).json({ message: "Failed to fetch dashboard stats" });
+    }
+  });
+
   // Memory preferences routes
   app.get('/api/memory/learned-preferences', supabaseAuth, async (req: any, res: Response) => {
     try {
@@ -1080,6 +1161,189 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
+  // Study Plans routes
+  app.get('/api/study-plans', supabaseAuth, async (req: any, res: Response) => {
+    try {
+      const userId = req.userId;
+      const plans = await storage.getStudyPlansByUser(userId);
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching study plans:", error);
+      res.status(500).json({ message: "Failed to fetch study plans" });
+    }
+  });
+
+  app.get('/api/study-plans/:id', supabaseAuth, async (req: any, res: Response) => {
+    try {
+      const userId = req.userId;
+      const { id } = req.params;
+      const plan = await storage.getStudyPlan(id);
+      if (!plan) {
+        return res.status(404).json({ message: "Study plan not found" });
+      }
+      // Verify ownership
+      if (plan.userId !== userId) {
+        return res.status(403).json({ message: "Unauthorized access to study plan" });
+      }
+      res.json(plan);
+    } catch (error) {
+      console.error("Error fetching study plan:", error);
+      res.status(500).json({ message: "Failed to fetch study plan" });
+    }
+  });
+
+  app.post('/api/study-plans', supabaseAuth, async (req: any, res: Response) => {
+    try {
+      const userId = req.userId;
+      const { title, subjects, examType, deadline, hoursPerDay, weakAreas, schedule } = req.body;
+
+      if (!title || !subjects || subjects.length === 0) {
+        return res.status(400).json({ message: "Title and subjects are required" });
+      }
+
+      const plan = await storage.createStudyPlan({
+        userId,
+        title,
+        subjects,
+        examType,
+        deadline: deadline ? new Date(deadline) : null,
+        hoursPerDay,
+        weakAreas,
+        schedule,
+        progress: { completedDays: 0, totalDays: schedule?.days?.length || 0 },
+      });
+
+      res.json(plan);
+    } catch (error) {
+      console.error("Error creating study plan:", error);
+      res.status(500).json({ message: "Failed to create study plan" });
+    }
+  });
+
+  app.post('/api/study-plans/generate', supabaseAuth, async (req: any, res: Response) => {
+    try {
+      const userId = req.userId;
+      const { subjects, examType, deadline, hoursPerDay, weakAreas, goal } = req.body;
+
+      if (!subjects || subjects.length === 0) {
+        return res.status(400).json({ message: "Subjects are required" });
+      }
+
+      // Calculate days until deadline
+      const daysUntilDeadline = deadline 
+        ? Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 30; // Default 30 days
+
+      // Generate study plan with Gemini
+      const prompt = `Generate a detailed study plan for a student preparing for ${examType || 'exams'}.
+
+Subjects: ${subjects.join(', ')}
+Days available: ${daysUntilDeadline} days
+Study hours per day: ${hoursPerDay || 3} hours
+${weakAreas?.length ? `Weak areas to focus on: ${weakAreas.join(', ')}` : ''}
+${goal ? `Student's goal: ${goal}` : ''}
+
+Create a structured day-by-day study schedule with:
+1. Specific topics for each subject
+2. Time allocation for each topic
+3. Practice exercises and revision days
+4. Focus on weak areas
+
+Respond in this JSON format:
+{
+  "title": "Personalized Study Plan for [Exam Type]",
+  "summary": "Brief overview of the study plan",
+  "days": [
+    {
+      "day": 1,
+      "date": "Day 1",
+      "subjects": ["Math"],
+      "topics": ["Algebra - Quadratic Equations"],
+      "duration": 3,
+      "activities": ["Study theory", "Practice 10 problems", "Review notes"],
+      "focus": "Introduction"
+    }
+  ],
+  "tips": ["Study tip 1", "Study tip 2"],
+  "weeklyGoals": ["Week 1 goal", "Week 2 goal"]
+}`;
+
+      const aiResponse = await chatWithGemini([
+        { role: "user", content: prompt }
+      ], "You are an expert educational planner. Generate structured, realistic study plans optimized for exam success. Always respond with valid JSON.");
+
+      // Parse AI response
+      let schedule;
+      try {
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          schedule = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error("No JSON found in response");
+        }
+      } catch (parseError) {
+        console.error("Failed to parse AI study plan:", parseError);
+        // Create fallback schedule
+        schedule = {
+          title: `Study Plan for ${subjects.join(', ')}`,
+          summary: "Generated study plan",
+          days: subjects.map((subj: string, i: number) => ({
+            day: i + 1,
+            date: `Day ${i + 1}`,
+            subjects: [subj],
+            topics: [`${subj} fundamentals`],
+            duration: hoursPerDay || 3,
+            activities: ["Study", "Practice", "Review"],
+            focus: "Core concepts"
+          })),
+          tips: ["Stay consistent", "Take breaks", "Review regularly"],
+          weeklyGoals: ["Complete all topics", "Do practice tests"]
+        };
+      }
+
+      // Save to database
+      const plan = await storage.createStudyPlan({
+        userId,
+        title: schedule.title,
+        subjects,
+        examType,
+        deadline: deadline ? new Date(deadline) : null,
+        hoursPerDay,
+        weakAreas,
+        schedule,
+        progress: { completedDays: 0, totalDays: schedule.days?.length || 0 },
+      });
+
+      res.json(plan);
+    } catch (error) {
+      console.error("Error generating study plan:", error);
+      res.status(500).json({ message: "Failed to generate study plan" });
+    }
+  });
+
+  app.patch('/api/study-plans/:id', supabaseAuth, async (req: any, res: Response) => {
+    try {
+      const userId = req.userId;
+      const { id } = req.params;
+      const updates = req.body;
+
+      // Verify ownership before update
+      const existingPlan = await storage.getStudyPlan(id);
+      if (!existingPlan) {
+        return res.status(404).json({ message: "Study plan not found" });
+      }
+      if (existingPlan.userId !== userId) {
+        return res.status(403).json({ message: "Unauthorized to update this study plan" });
+      }
+
+      const plan = await storage.updateStudyPlan(id, updates);
+      res.json(plan);
+    } catch (error) {
+      console.error("Error updating study plan:", error);
+      res.status(500).json({ message: "Failed to update study plan" });
+    }
+  });
+
   // Setup multer for file uploads
   const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1163,19 +1427,90 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/courses', supabaseAuth, async (req: any, res: Response) => {
+  app.post('/api/courses', supabaseAuth, upload.array('materials', 10), async (req: any, res: Response) => {
     try {
       const userId = req.userId;
-      const { title, description, price } = req.body;
+      const { title, description, price, category, duration } = req.body;
+      const files = req.files as Express.Multer.File[];
+
+      // Process uploaded files
+      let materials: any[] = [];
+      if (files && files.length > 0) {
+        materials = await Promise.all(files.map(async (file) => {
+          // Analyze file content with Gemini Vision if it's a PDF
+          let extractedContent = null;
+          if (file.mimetype === 'application/pdf') {
+            try {
+              extractedContent = await analyzeFileWithGeminiVision(
+                file.buffer.toString('base64'),
+                file.mimetype,
+                "Extract key learning content, topics, and concepts from this educational material"
+              );
+            } catch (err) {
+              console.log("File analysis skipped:", err);
+            }
+          }
+
+          return {
+            name: file.originalname,
+            size: file.size,
+            type: file.mimetype,
+            uploadedAt: new Date().toISOString(),
+            extractedContent,
+          };
+        }));
+      }
+
+      // Generate syllabus from materials if available
+      let syllabus = null;
+      if (materials.length > 0 && materials.some(m => m.extractedContent)) {
+        const contentSummary = materials
+          .filter(m => m.extractedContent)
+          .map(m => m.extractedContent)
+          .join('\n\n');
+
+        try {
+          const syllabusResponse = await chatWithGemini([
+            { role: "user", content: `Based on these course materials, generate a structured syllabus in JSON format:
+
+Materials content:
+${contentSummary.substring(0, 5000)}
+
+Generate a syllabus with:
+{
+  "weeks": [{"week": 1, "title": "...", "topics": ["..."], "objectives": ["..."]}],
+  "learningOutcomes": ["..."],
+  "assessments": ["..."]
+}` }
+          ], "You are an educational curriculum designer. Generate structured syllabi from course materials.");
+
+          const jsonMatch = syllabusResponse.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            syllabus = JSON.parse(jsonMatch[0]);
+          }
+        } catch (err) {
+          console.log("Syllabus generation skipped:", err);
+        }
+      }
 
       const course = await storage.createCourse({
         teacherId: userId,
         title,
         description,
         price: price || '0',
-        syllabus: null,
-        isPublished: false,
+        syllabus,
+        isPublished: true,
         schoolId: null,
+      });
+
+      // Store additional course metadata
+      await storage.updateCourse(course.id, {
+        syllabus: {
+          ...syllabus,
+          category,
+          duration,
+          materials,
+        },
       });
 
       res.json(course);
