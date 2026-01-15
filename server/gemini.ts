@@ -2,7 +2,19 @@
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 
+// Try different API key environment variables
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "";
+
+// Log which key is being used (without revealing the actual key)
+if (apiKey) {
+  const keySource = process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' : 
+                    process.env.GOOGLE_API_KEY ? 'GOOGLE_API_KEY' : 
+                    process.env.AI_INTEGRATIONS_GEMINI_API_KEY ? 'AI_INTEGRATIONS_GEMINI_API_KEY' : 'none';
+  console.log(`Gemini API initialized with ${keySource} (key length: ${apiKey.length} chars)`);
+} else {
+  console.error('WARNING: No Gemini API key found. AI features will not work.');
+}
+
 const ai = new GoogleGenAI({ apiKey });
 
 interface GeneratedWebsite {

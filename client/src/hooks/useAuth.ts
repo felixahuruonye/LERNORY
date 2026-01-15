@@ -86,8 +86,11 @@ export function useAuth() {
           const userProfile = await fetchUserProfile(result.data.session.user);
           if (isMounted) setUser(userProfile);
         }
-      } catch (error) {
-        console.warn('Auth initialization error:', error);
+      } catch (error: any) {
+        // Only log actual errors, not expected timeout during testing
+        if (error?.message !== 'Auth timeout') {
+          console.warn('Auth initialization error:', error?.message || 'Unknown error');
+        }
         // Silent fail - just mark as not loading
       } finally {
         if (isMounted) setIsLoading(false);

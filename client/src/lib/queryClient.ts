@@ -10,11 +10,18 @@ async function throwIfResNotOk(res: Response) {
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('Failed to get auth session:', error.message);
+      return {};
+    }
     if (session?.access_token) {
       return { Authorization: `Bearer ${session.access_token}` };
     }
-  } catch {}
+    console.log('No active session - API calls will be unauthenticated');
+  } catch (err) {
+    console.warn('Error getting auth headers:', err);
+  }
   return {};
 }
 
