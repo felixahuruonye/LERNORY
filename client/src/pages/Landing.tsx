@@ -150,14 +150,14 @@ export default function Landing() {
                 className="hover-elevate active-elevate-2"
                 data-testid="button-login"
               >
-                <a href="/api/login">Log In</a>
+                <Link href="/login">Log In</Link>
               </Button>
               <Button
                 asChild
                 className="hover-elevate active-elevate-2"
                 data-testid="button-get-started"
               >
-                <a href="/api/login">Get Started</a>
+                <Link href="/signup">Get Started</Link>
               </Button>
             </div>
           </div>
@@ -193,10 +193,10 @@ export default function Landing() {
                 className="h-12 px-8 text-lg hover-elevate active-elevate-2 group"
                 data-testid="button-start-learning"
               >
-                <a href="/api/login">
+                <Link href="/signup">
                   Start Learning
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </a>
+                </Link>
               </Button>
             </div>
           </ScrollReveal>
@@ -413,10 +413,10 @@ export default function Landing() {
               className="h-14 px-12 text-lg hover-elevate active-elevate-2 group"
               data-testid="button-get-started-footer"
             >
-              <a href="/api/login">
+              <Link href="/signup">
                 Get Started Free
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </a>
+              </Link>
             </Button>
           </ScrollReveal>
         </div>

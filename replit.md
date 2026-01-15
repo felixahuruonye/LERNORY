@@ -46,8 +46,9 @@ A three-tier fallback system is implemented for AI:
 -   **Neon Database**: Serverless PostgreSQL (`@neondatabase/serverless`)
 
 ### Authentication & Session
--   **Replit Auth**: OpenID Connect provider
--   **Session Storage**: `connect-pg-simple`
+-   **Supabase Auth**: OAuth (Google) and email magic link authentication
+-   **Session Storage**: Supabase Auth handles session persistence
+-   **Auth Pages**: `/login` and `/signup` for user authentication
 
 ### AI Services
 -   **OpenAI**: GPT-3.5-turbo

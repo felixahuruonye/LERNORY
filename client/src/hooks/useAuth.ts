@@ -1,92 +1,95 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase, signInWithGoogle as supabaseGoogleSignIn, signInWithEmail as supabaseEmailSignIn, signOut as supabaseSignOut } from '@/lib/supabase';
 import type { User } from "@shared/schema";
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
-  const [supabaseLoading, setSupabaseLoading] = useState(true);
-  const [authMethod, setAuthMethod] = useState<'replit' | 'supabase' | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: replitUser, isLoading: replitLoading } = useQuery<User>({
-    queryKey: ["/api/auth/user"],
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-  });
+  const fetchUserProfile = useCallback(async (authUser: any) => {
+    try {
+      const { data: userProfile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching user profile:', error);
+        return null;
+      }
+
+      if (!userProfile) {
+        const newUser = {
+          id: authUser.id,
+          email: authUser.email || '',
+          first_name: authUser.user_metadata?.full_name?.split(' ')[0] || authUser.user_metadata?.name?.split(' ')[0] || '',
+          last_name: authUser.user_metadata?.full_name?.split(' ').slice(1).join(' ') || authUser.user_metadata?.name?.split(' ').slice(1).join(' ') || '',
+          profile_image_url: authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || '',
+          role: 'student',
+          subscription_tier: 'free',
+        };
+
+        const { data: created, error: insertError } = await supabase
+          .from('users')
+          .insert(newUser)
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Error creating user profile:', insertError);
+          return null;
+        }
+
+        return mapDbUserToUser(created);
+      }
+
+      return mapDbUserToUser(userProfile);
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
-    const initSupabaseAuth = async () => {
+    const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
-          const { data: userProfile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (userProfile) {
-            setSupabaseUser(mapDbUserToUser(userProfile));
-            setAuthMethod('supabase');
-          } else {
-            const newUser = {
-              id: session.user.id,
-              email: session.user.email || '',
-              first_name: session.user.user_metadata?.full_name?.split(' ')[0] || '',
-              last_name: session.user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
-              profile_image_url: session.user.user_metadata?.avatar_url || '',
-              role: 'student',
-              subscription_tier: 'free',
-            };
-
-            const { data: created } = await supabase.from('users').insert(newUser).select().single();
-            if (created) {
-              setSupabaseUser(mapDbUserToUser(created));
-              setAuthMethod('supabase');
-            }
-          }
+          const userProfile = await fetchUserProfile(session.user);
+          setUser(userProfile);
         }
       } catch (error) {
         console.error('Supabase auth init error:', error);
       } finally {
-        setSupabaseLoading(false);
+        setIsLoading(false);
       }
     };
 
-    initSupabaseAuth();
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const { data: userProfile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (userProfile) {
-          setSupabaseUser(mapDbUserToUser(userProfile));
-          setAuthMethod('supabase');
-        }
-        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        const userProfile = await fetchUserProfile(session.user);
+        setUser(userProfile);
+        setIsLoading(false);
       } else if (event === 'SIGNED_OUT') {
-        setSupabaseUser(null);
-        setAuthMethod(null);
-        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        setUser(null);
+        setIsLoading(false);
+        queryClient.clear();
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        const userProfile = await fetchUserProfile(session.user);
+        setUser(userProfile);
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [queryClient]);
-
-  useEffect(() => {
-    if (replitUser && !supabaseUser) {
-      setAuthMethod('replit');
-    }
-  }, [replitUser, supabaseUser]);
+  }, [fetchUserProfile, queryClient]);
 
   const signInWithGoogle = useCallback(async () => {
     const { error } = await supabaseGoogleSignIn();
@@ -99,28 +102,18 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(async () => {
-    if (authMethod === 'supabase') {
-      const { error } = await supabaseSignOut();
-      if (!error) {
-        setSupabaseUser(null);
-        setAuthMethod(null);
-      }
-      return { error: error ? new Error(error.message) : null };
-    } else {
-      window.location.href = '/api/logout';
-      return { error: null };
+    const { error } = await supabaseSignOut();
+    if (!error) {
+      setUser(null);
+      queryClient.clear();
     }
-  }, [authMethod]);
-
-  const user = supabaseUser || replitUser || null;
-  const isLoading = supabaseLoading && replitLoading;
-  const isAuthenticated = !!user;
+    return { error: error ? new Error(error.message) : null };
+  }, [queryClient]);
 
   return {
     user,
     isLoading,
-    isAuthenticated,
-    authMethod,
+    isAuthenticated: !!user,
     signInWithGoogle,
     signInWithOTP,
     signOut,

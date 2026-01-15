@@ -34,6 +34,8 @@ import CBTMode from "@/pages/CBTMode";
 import GeneratedLessons from "@/pages/GeneratedLessons";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AuthCallback from "@/pages/AuthCallback";
+import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -42,6 +44,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/auth/callback" component={AuthCallback} />
+      <Route path="/login" component={Login} />
+      <Route path="/signup" component={Signup} />
       {isLoading || !isAuthenticated ? (
         <Route path="/" component={Landing} />
       ) : (
