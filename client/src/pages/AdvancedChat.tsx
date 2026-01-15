@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useChatSessions, useProjects, useCreateChatSession } from "@/hooks/useSupabaseData";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +28,6 @@ import {
   Search,
 } from "lucide-react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 
 export default function AdvancedChat() {
   const { user, isLoading: authLoading } = useAuth();
@@ -35,32 +36,20 @@ export default function AdvancedChat() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
-  const [projects, setProjects] = useState<any[]>([]);
   const [selectedProject, setSelectedProject] = useState<any>(null);
   const [projectContext, setProjectContext] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: sessions = [] } = useQuery<any[]>({
-    queryKey: ["/api/chat/sessions"],
-    enabled: !!user,
-  });
+  // Use Supabase hooks for faster data loading
+  const { data: sessions = [], isLoading: sessionsLoading } = useChatSessions();
+  const { data: projects = [] } = useProjects();
+  const createSessionMutation = useCreateChatSession();
 
   useEffect(() => {
-    if (user && (sessions as any[]).length === 0 && !isLoading) {
-      const initChat = async () => {
-        try {
-          await apiRequest("POST", "/api/chat/sessions", {
-            title: "Advanced AI Workspace",
-            mode: "chat",
-          });
-          queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-        } catch (err) {
-          console.error("Failed to initialize session", err);
-        }
-      };
-      initChat();
+    if (user && sessions.length === 0 && !sessionsLoading && !isLoading && !createSessionMutation.isPending) {
+      createSessionMutation.mutate({ title: "Advanced AI Workspace", mode: "chat" });
     }
-  }, [user, sessions]);
+  }, [user, sessions, sessionsLoading]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -81,15 +70,9 @@ export default function AdvancedChat() {
     return keywords.some(k => text.toLowerCase().includes(k));
   };
 
-  const loadProjects = async () => {
-    try {
-      const response = await apiRequest("GET", "/api/projects");
-      const data = await response.json();
-      setProjects(data);
-    } catch (error) {
-      console.error("Failed to load projects:", error);
-      toast({ title: "Error", description: "Failed to load projects", variant: "destructive" });
-    }
+  // Projects are already loaded via useProjects hook - no need to fetch again
+  const loadProjects = () => {
+    // projectsList is already available from the Supabase hook
   };
 
   const handleSelectProject = async (project: any) => {
