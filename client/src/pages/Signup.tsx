@@ -101,17 +101,12 @@ export default function Signup() {
         return;
       }
 
-      if (data?.session) {
+      if (data?.session || data?.user) {
         toast({
           title: "Account Created!",
           description: "Welcome to LERNORY! Redirecting to dashboard...",
         });
         setLocation('/dashboard');
-      } else if (data?.user) {
-        toast({
-          title: "Check Your Email",
-          description: "We sent you a confirmation email. Please verify to continue.",
-        });
       }
     } catch (err) {
       toast({

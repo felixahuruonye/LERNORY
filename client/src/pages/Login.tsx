@@ -74,7 +74,7 @@ export default function Login() {
         return;
       }
 
-      if (data?.session) {
+      if (data?.user) {
         toast({
           title: "Welcome Back!",
           description: "You have been logged in successfully.",

@@ -27,7 +27,10 @@ export function useSupabaseAuth(): UseSupabaseAuthReturn {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching user profile:', error);
+        // Only log serious errors, not table missing during setup
+        if (error.message !== "Could not find the table 'public.users' in the schema cache") {
+          console.error('Error fetching user profile:', error);
+        }
         return null;
       }
 
