@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
 import { signInWithGoogle, signInWithEmail } from "@/lib/supabase";
-import { Loader2, Zap, Mail, ArrowLeft } from "lucide-react";
+import { Loader2, Zap, Mail, ArrowLeft, LogIn } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Link } from "wouter";
 
@@ -49,16 +49,26 @@ export default function Login() {
     try {
       const { error } = await signInWithEmail(email);
       if (error) {
-        toast({
-          title: "Login Failed",
-          description: error.message,
-          variant: "destructive",
-        });
+        // Check if error indicates user doesn't exist - redirect to signup
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes('not found') || errorMsg.includes('invalid') || errorMsg.includes('no user')) {
+          toast({
+            title: "Account Not Found",
+            description: "Let's create an account for you!",
+          });
+          setLocation(`/signup?email=${encodeURIComponent(email)}`);
+        } else {
+          toast({
+            title: "Login Failed",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
       } else {
         setEmailSent(true);
         toast({
-          title: "Check Your Email",
-          description: "We sent you a magic link to sign in",
+          title: "Magic Link Sent!",
+          description: "Check your email and click the link to sign in instantly",
         });
       }
     } catch (err) {
@@ -156,19 +166,26 @@ export default function Login() {
                       data-testid="input-email"
                     />
                   </div>
+
+                  {/* Primary Login button with gradient */}
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base"
+                    size="lg"
+                    className="w-full text-base bg-gradient-to-r from-primary to-chart-2 border-primary"
                     disabled={isLoading}
                     data-testid="button-email-login"
                   >
                     {isLoading ? (
                       <Loader2 className="h-5 w-5 animate-spin mr-2" />
                     ) : (
-                      <Mail className="h-5 w-5 mr-2" />
+                      <LogIn className="h-5 w-5 mr-2" />
                     )}
-                    Send Magic Link
+                    Login with Email
                   </Button>
+
+                  <p className="text-xs text-center text-muted-foreground">
+                    We'll send you a secure magic link to sign in instantly
+                  </p>
                 </form>
 
                 <p className="text-center text-sm text-muted-foreground">

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,17 +7,27 @@ import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
 import { signInWithGoogle, signInWithEmail } from "@/lib/supabase";
-import { Loader2, Zap, Mail, ArrowLeft, CheckCircle } from "lucide-react";
+import { Loader2, Zap, Mail, ArrowLeft, CheckCircle, UserPlus } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Link } from "wouter";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+
+  // Pre-fill email from URL if coming from login page
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const emailParam = params.get('email');
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, [searchString]);
 
   const handleGoogleSignup = async () => {
     setIsGoogleLoading(true);
@@ -183,17 +193,22 @@ export default function Signup() {
                     </div>
                     <Button
                       type="submit"
-                      className="w-full h-12 text-base"
+                      size="lg"
+                      className="w-full text-base bg-gradient-to-r from-chart-2 to-primary border-primary"
                       disabled={isLoading}
                       data-testid="button-email-signup"
                     >
                       {isLoading ? (
                         <Loader2 className="h-5 w-5 animate-spin mr-2" />
                       ) : (
-                        <Mail className="h-5 w-5 mr-2" />
+                        <UserPlus className="h-5 w-5 mr-2" />
                       )}
-                      Sign Up with Email
+                      Create Account
                     </Button>
+
+                    <p className="text-xs text-center text-muted-foreground">
+                      We'll send you a magic link to set up your account instantly
+                    </p>
                   </form>
 
                   <p className="text-center text-sm text-muted-foreground">

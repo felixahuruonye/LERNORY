@@ -42,6 +42,31 @@ export async function getUserFromSupabase(userId: string) {
   return data;
 }
 
+export async function checkEmailExists(email: string): Promise<{ exists: boolean; error?: string }> {
+  try {
+    // Use getUserByEmail instead of listUsers for security (single lookup, not full list)
+    const { data, error } = await supabaseAdmin.auth.admin.getUserByEmail(email);
+    
+    if (error) {
+      // "User not found" means email doesn't exist - this is expected
+      if (error.message.includes('not found') || error.message.includes('User not found')) {
+        return { exists: false };
+      }
+      console.error('Error checking email:', error);
+      return { exists: false, error: error.message };
+    }
+    
+    return { exists: !!data?.user };
+  } catch (error: any) {
+    // Handle "user not found" as expected case
+    if (error.message?.includes('not found')) {
+      return { exists: false };
+    }
+    console.error('Error checking email existence:', error);
+    return { exists: false, error: error.message };
+  }
+}
+
 export async function upsertUserToSupabase(user: {
   id: string;
   email?: string;
