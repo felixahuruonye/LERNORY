@@ -1,8 +1,9 @@
 {
-  "name": "LERNORY - AI Learning Platform",
+  "name": "LERNORY ULTRA - AI Learning Platform",
   "short_name": "LERNORY",
-  "description": "AI-powered education platform with voice-first learning for African students",
+  "description": "AI-powered education platform with voice-first learning, magic link authentication, and personalized study plans for students",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#8b5cf6",
@@ -23,5 +24,7 @@
   ],
   "categories": ["education", "productivity"],
   "screenshots": [],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "id": "lernory-ultra-pwa"
 }

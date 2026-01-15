@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lernory-cache-v1';
+const CACHE_NAME = 'lernory-cache-v2';
 const OFFLINE_URL = '/offline.html';
 
 const STATIC_ASSETS = [
@@ -6,7 +6,15 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
-  '/offline.html'
+  '/offline.html',
+  '/login',
+  '/signup'
+];
+
+const AUTH_URLS = [
+  '/login',
+  '/signup',
+  '/auth/callback'
 ];
 
 self.addEventListener('install', (event) => {
@@ -36,15 +44,22 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
-  if (event.request.url.includes('/api/')) {
+  const url = new URL(event.request.url);
+  
+  if (url.pathname.includes('/api/')) {
     event.respondWith(
       fetch(event.request).catch(() => {
         return new Response(
-          JSON.stringify({ error: 'You are offline' }),
+          JSON.stringify({ error: 'You are offline. Please check your connection.' }),
           { headers: { 'Content-Type': 'application/json' } }
         );
       })
     );
+    return;
+  }
+
+  if (url.hostname.includes('supabase')) {
+    event.respondWith(fetch(event.request));
     return;
   }
 
