@@ -38,38 +38,27 @@ export function useAuth() {
         .eq('id', authUser.id)
         .single();
 
-      // If table doesn't exist or user not found, just use basic user
-      if (error) {
-        return basicUser;
-      }
-
-      if (userProfile) {
+      // If user exists in DB, return their full profile
+      if (!error && userProfile) {
         return mapDbUserToUser(userProfile);
       }
 
-      // Try to create profile, but don't fail if it doesn't work
-      try {
-        const newUser = {
-          id: authUser.id,
-          email: authUser.email || '',
-          first_name: basicUser.firstName,
-          last_name: basicUser.lastName,
-          profile_image_url: basicUser.profileImageUrl,
-          role: 'student',
-          subscription_tier: 'free',
-        };
-
-        const { data: created } = await supabase
-          .from('users')
-          .insert(newUser)
-          .select()
-          .single();
-
-        if (created) {
-          return mapDbUserToUser(created);
-        }
-      } catch {
-        // Ignore insert errors
+      // User not found - try to create profile in background (non-blocking insert)
+      if (error?.code === 'PGRST116') {
+        // Fire and forget - don't wait for insert result
+        (async () => {
+          try {
+            await supabase.from('users').insert({
+              id: authUser.id,
+              email: authUser.email || '',
+              first_name: basicUser.firstName,
+              last_name: basicUser.lastName,
+              profile_image_url: basicUser.profileImageUrl,
+              role: 'student',
+              subscription_tier: 'free',
+            });
+          } catch {}
+        })();
       }
 
       return basicUser;
@@ -109,16 +98,24 @@ export function useAuth() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const userProfile = await fetchUserProfile(session.user);
-        setUser(userProfile);
+        // Set basic user immediately for instant redirect
+        const basicUser = createUserFromAuth(session.user);
+        setUser(basicUser);
         setIsLoading(false);
+        
+        // Fetch full profile in background (non-blocking)
+        fetchUserProfile(session.user).then(fullProfile => {
+          if (isMounted) setUser(fullProfile);
+        }).catch(() => {});
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsLoading(false);
         queryClient.clear();
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        const userProfile = await fetchUserProfile(session.user);
-        setUser(userProfile);
+        // Background profile refresh
+        fetchUserProfile(session.user).then(fullProfile => {
+          if (isMounted) setUser(fullProfile);
+        }).catch(() => {});
       }
     });
 
