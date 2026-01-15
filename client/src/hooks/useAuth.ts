@@ -3,12 +3,34 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase, signInWithGoogle as supabaseGoogleSignIn, signInWithEmail as supabaseEmailSignIn, signOut as supabaseSignOut } from '@/lib/supabase';
 import type { User } from "@shared/schema";
 
+// Create a basic user from Supabase auth data
+function createUserFromAuth(authUser: any): User {
+  const now = new Date();
+  return {
+    id: authUser.id,
+    email: authUser.email || '',
+    firstName: authUser.user_metadata?.full_name?.split(' ')[0] || authUser.user_metadata?.name?.split(' ')[0] || '',
+    lastName: authUser.user_metadata?.full_name?.split(' ').slice(1).join(' ') || authUser.user_metadata?.name?.split(' ').slice(1).join(' ') || '',
+    profileImageUrl: authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || '',
+    role: 'student',
+    schoolId: null,
+    subscriptionTier: 'free',
+    subscriptionExpiresAt: null,
+    paystackCustomerId: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUserProfile = useCallback(async (authUser: any) => {
+  const fetchUserProfile = useCallback(async (authUser: any): Promise<User> => {
+    // Always create a basic user from auth data first
+    const basicUser = createUserFromAuth(authUser);
+    
     try {
       const { data: userProfile, error } = await supabase
         .from('users')
@@ -16,40 +38,43 @@ export function useAuth() {
         .eq('id', authUser.id)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching user profile:', error);
-        return null;
+      // If table doesn't exist or user not found, just use basic user
+      if (error) {
+        return basicUser;
       }
 
-      if (!userProfile) {
+      if (userProfile) {
+        return mapDbUserToUser(userProfile);
+      }
+
+      // Try to create profile, but don't fail if it doesn't work
+      try {
         const newUser = {
           id: authUser.id,
           email: authUser.email || '',
-          first_name: authUser.user_metadata?.full_name?.split(' ')[0] || authUser.user_metadata?.name?.split(' ')[0] || '',
-          last_name: authUser.user_metadata?.full_name?.split(' ').slice(1).join(' ') || authUser.user_metadata?.name?.split(' ').slice(1).join(' ') || '',
-          profile_image_url: authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || '',
+          first_name: basicUser.firstName,
+          last_name: basicUser.lastName,
+          profile_image_url: basicUser.profileImageUrl,
           role: 'student',
           subscription_tier: 'free',
         };
 
-        const { data: created, error: insertError } = await supabase
+        const { data: created } = await supabase
           .from('users')
           .insert(newUser)
           .select()
           .single();
 
-        if (insertError) {
-          console.error('Error creating user profile:', insertError);
-          return null;
+        if (created) {
+          return mapDbUserToUser(created);
         }
-
-        return mapDbUserToUser(created);
+      } catch {
+        // Ignore insert errors
       }
 
-      return mapDbUserToUser(userProfile);
-    } catch (error) {
-      console.error('Error in fetchUserProfile:', error);
-      return null;
+      return basicUser;
+    } catch {
+      return basicUser;
     }
   }, []);
 
@@ -63,7 +88,7 @@ export function useAuth() {
           setUser(userProfile);
         }
       } catch (error) {
-        console.error('Supabase auth init error:', error);
+        // Silent fail - just mark as not loading
       } finally {
         setIsLoading(false);
       }

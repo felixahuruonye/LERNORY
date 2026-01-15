@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -36,53 +36,85 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import AuthCallback from "@/pages/AuthCallback";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
-import NotFound from "@/pages/not-found";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center animate-pulse">
+            <svg className="h-7 w-7 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated - show public routes
+  if (!isAuthenticated) {
+    return (
+      <Switch>
+        <Route path="/auth/callback" component={AuthCallback} />
+        <Route path="/login" component={Login} />
+        <Route path="/signup" component={Signup} />
+        <Route path="/pricing" component={Pricing} />
+        <Route path="/" component={Landing} />
+        <Route>
+          <Redirect to="/" />
+        </Route>
+      </Switch>
+    );
+  }
+
+  // Authenticated - show all app routes
   return (
     <Switch>
       <Route path="/auth/callback" component={AuthCallback} />
-      <Route path="/login" component={Login} />
-      <Route path="/signup" component={Signup} />
-      {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
-      ) : (
-        <>
-          <Route path="/" component={AdvancedDashboard} />
-          <Route path="/dashboard" component={AdvancedDashboard} />
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/old-dashboard" component={Dashboard} />
-          <Route path="/chat" component={Chat} />
-          <Route path="/advanced-chat" component={AdvancedChat} />
-          <Route path="/image-gallery" component={ImageGallery} />
-          <Route path="/image-gen" component={ImageGenAdvanced} />
-          <Route path="/workspace" component={ProjectWorkspace} />
-          <Route path="/project-workspace" component={ProjectWorkspace} />
-          <Route path="/memory" component={MemoryPanel} />
-          <Route path="/study-plans" component={StudyPlans} />
-          <Route path="/pricing" component={Pricing} />
-          <Route path="/settings" component={SettingsPanel} />
-          <Route path="/audio" component={AudioSystem} />
-          <Route path="/agents" component={AgentsPanel} />
-          <Route path="/website-generator" component={WebsiteGenerator} />
-          <Route path="/website-menu" component={WebsiteMenu} />
-          <Route path="/website-learn/:id" component={WebsiteLearn} />
-          <Route path="/website-debug/:id" component={WebsiteDebug} />
-          <Route path="/view/:id" component={ViewWebsite} />
-          <Route path="/live-session" component={LiveSession} />
-          <Route path="/live-session/:id" component={LiveSession} />
-          <Route path="/generated-lessons" component={GeneratedLessons} />
-          <Route path="/courses" component={Courses} />
-          <Route path="/marketplace" component={Marketplace} />
-          <Route path="/exams" component={Exams} />
-          <Route path="/cbt-mode" component={CBTMode} />
-          <Route path="/notifications" component={Notifications} />
-          <Route path="/live-ai" component={LiveAI} />
-        </>
-      )}
-      <Route component={NotFound} />
+      <Route path="/login">
+        <Redirect to="/dashboard" />
+      </Route>
+      <Route path="/signup">
+        <Redirect to="/dashboard" />
+      </Route>
+      <Route path="/" component={AdvancedDashboard} />
+      <Route path="/dashboard" component={AdvancedDashboard} />
+      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/old-dashboard" component={Dashboard} />
+      <Route path="/chat" component={Chat} />
+      <Route path="/advanced-chat" component={AdvancedChat} />
+      <Route path="/image-gallery" component={ImageGallery} />
+      <Route path="/image-gen" component={ImageGenAdvanced} />
+      <Route path="/workspace" component={ProjectWorkspace} />
+      <Route path="/project-workspace" component={ProjectWorkspace} />
+      <Route path="/memory" component={MemoryPanel} />
+      <Route path="/study-plans" component={StudyPlans} />
+      <Route path="/pricing" component={Pricing} />
+      <Route path="/settings" component={SettingsPanel} />
+      <Route path="/audio" component={AudioSystem} />
+      <Route path="/agents" component={AgentsPanel} />
+      <Route path="/website-generator" component={WebsiteGenerator} />
+      <Route path="/website-menu" component={WebsiteMenu} />
+      <Route path="/website-learn/:id" component={WebsiteLearn} />
+      <Route path="/website-debug/:id" component={WebsiteDebug} />
+      <Route path="/view/:id" component={ViewWebsite} />
+      <Route path="/live-session" component={LiveSession} />
+      <Route path="/live-session/:id" component={LiveSession} />
+      <Route path="/generated-lessons" component={GeneratedLessons} />
+      <Route path="/courses" component={Courses} />
+      <Route path="/marketplace" component={Marketplace} />
+      <Route path="/exams" component={Exams} />
+      <Route path="/cbt-mode" component={CBTMode} />
+      <Route path="/notifications" component={Notifications} />
+      <Route path="/live-ai" component={LiveAI} />
+      <Route>
+        <Redirect to="/dashboard" />
+      </Route>
     </Switch>
   );
 }
