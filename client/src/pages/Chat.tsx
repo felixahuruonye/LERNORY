@@ -76,8 +76,7 @@ export default function Chat() {
     queryKey: ["/api/chat/messages", currentSessionId],
     enabled: !!user && !!currentSessionId,
     queryFn: async () => {
-      const res = await fetch(`/api/chat/messages?sessionId=${currentSessionId}`);
-      if (!res.ok) throw new Error("Failed to load messages");
+      const res = await apiRequest("GET", `/api/chat/messages?sessionId=${currentSessionId}`);
       const data = await res.json();
       return data.sort((a: ChatMessageWithAttachments, b: ChatMessageWithAttachments) => {
         const timeA = new Date(a.createdAt || 0).getTime();

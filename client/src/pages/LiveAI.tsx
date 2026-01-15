@@ -146,6 +146,115 @@ export default function LiveAI() {
     };
   };
 
+  // Audio context for playing Gemini audio
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const pendingAudioRef = useRef<string | null>(null);
+  const audioQueueRef = useRef<ArrayBuffer[]>([]);
+  const isPlayingQueueRef = useRef<boolean>(false);
+
+  const playGeminiAudio = async (audioBase64: string, mimeType: string = "audio/mp3") => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const audioContext = audioContextRef.current;
+      
+      // Resume audio context if suspended (browser autoplay policy)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
+      // Decode base64 to array buffer
+      const binaryString = atob(audioBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Handle PCM audio (from Gemini Live streaming)
+      if (mimeType.includes("pcm") || mimeType.includes("rate=24000")) {
+        await playPCMAudio(bytes.buffer, 24000);
+        return;
+      }
+      
+      // Try to decode as encoded audio (MP3, WAV, etc.)
+      try {
+        const audioBuffer = await audioContext.decodeAudioData(bytes.buffer.slice(0));
+        
+        // Play the audio
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        
+        setIsSpeaking(true);
+        source.onended = () => {
+          setIsSpeaking(false);
+        };
+        
+        source.start(0);
+        console.log("Playing Gemini audio response");
+      } catch (decodeError) {
+        console.log("Standard decode failed, trying as PCM:", decodeError);
+        // Try as raw PCM audio
+        await playPCMAudio(bytes.buffer, 24000);
+      }
+    } catch (error) {
+      console.error("Error playing Gemini audio:", error);
+      // Fallback to browser TTS if audio playback fails
+      if (pendingAudioRef.current) {
+        speakText(pendingAudioRef.current);
+        pendingAudioRef.current = null;
+      }
+    }
+  };
+
+  // Play raw PCM audio (16-bit signed, mono)
+  const playPCMAudio = async (arrayBuffer: ArrayBuffer, sampleRate: number = 24000) => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const audioContext = audioContextRef.current;
+      
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
+      // Convert 16-bit PCM to Float32
+      const int16Array = new Int16Array(arrayBuffer);
+      const float32Array = new Float32Array(int16Array.length);
+      
+      for (let i = 0; i < int16Array.length; i++) {
+        float32Array[i] = int16Array[i] / 32768.0;
+      }
+      
+      // Create audio buffer
+      const audioBuffer = audioContext.createBuffer(1, float32Array.length, sampleRate);
+      audioBuffer.getChannelData(0).set(float32Array);
+      
+      // Play the audio
+      const source = audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContext.destination);
+      
+      setIsSpeaking(true);
+      source.onended = () => {
+        setIsSpeaking(false);
+      };
+      
+      source.start(0);
+      console.log("Playing PCM audio response");
+    } catch (error) {
+      console.error("Error playing PCM audio:", error);
+      if (pendingAudioRef.current) {
+        speakText(pendingAudioRef.current);
+        pendingAudioRef.current = null;
+      }
+    }
+  };
+
   const handleGeminiMessage = async (data: any) => {
     switch (data.type) {
       case "session_started":
@@ -165,16 +274,29 @@ export default function LiveAI() {
           await saveMessageToDatabase("user", userTranscript);
         }
         break;
+      case "audio_output":
+        // Gemini audio response - play it directly
+        if (data.audio) {
+          await playGeminiAudio(data.audio, data.mimeType || "audio/mp3");
+        }
+        break;
       case "ai_response":
         const aiMessage = data.text?.replace(/LEARNORY/g, "Learnory").trim() || "";
         if (aiMessage) {
-          // If there's a userTranscript in the response and we haven't added it yet
-          if (data.userTranscript) {
-            // User transcript already handled by user_transcript message
-          }
           addMessage("assistant", aiMessage);
           await saveMessageToDatabase("assistant", aiMessage);
-          speakText(aiMessage);
+          
+          // Only use browser TTS if no Gemini audio was sent
+          if (!data.hasAudio && data.useBrowserTTS !== false) {
+            pendingAudioRef.current = aiMessage;
+            // Wait a moment for audio_output message
+            setTimeout(() => {
+              if (pendingAudioRef.current === aiMessage) {
+                speakText(aiMessage);
+                pendingAudioRef.current = null;
+              }
+            }, 500);
+          }
         }
         setIsProcessing(false);
         break;
