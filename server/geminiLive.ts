@@ -56,23 +56,19 @@ export async function handleGeminiLiveConnection(ws: WS, userId: string) {
     message: "Connected to LEARNORY AI Voice with Gemini Live streaming.",
   }));
 
-  ws.on("message", async (message: Buffer) => {
+  ws.on("message", async (message: Buffer, isBinary: boolean) => {
     try {
-      // Check if it's binary audio data
-      if (message[0] !== 0x7b) { // Not starting with '{' - likely binary
+      // Route based on isBinary flag for reliable binary detection
+      if (isBinary) {
+        // Binary PCM audio frame - send directly to Gemini Live
         await handleBinaryAudio(session, message);
         return;
       }
 
+      // JSON text message
       const data = JSON.parse(message.toString());
       
       switch (data.type) {
-        case "audio_input":
-          await handleAudioInput(session, data);
-          break;
-        case "audio_chunk":
-          await handleAudioChunk(session, data);
-          break;
         case "audio_end":
           await handleAudioEnd(session);
           break;
@@ -207,14 +203,16 @@ async function startReceivingResponses(session: GeminiLiveSession) {
 
 async function handleBinaryAudio(session: GeminiLiveSession, audioData: Buffer) {
   if (!session.liveSession) {
-    // Fallback to base64 processing
-    const base64 = audioData.toString('base64');
-    await handleAudioInput(session, { audio: base64 });
+    // No fallback - require live session for binary PCM streaming
+    session.ws.send(JSON.stringify({
+      type: "error",
+      message: "Gemini Live session not connected. Please reconnect.",
+    }));
     return;
   }
 
   try {
-    // Send raw audio to Gemini Live session
+    // Send raw PCM audio directly to Gemini Live session
     await session.liveSession.sendRealtimeInput({
       audio: audioData,
       mimeType: "audio/pcm;rate=16000",
@@ -225,31 +223,15 @@ async function handleBinaryAudio(session: GeminiLiveSession, audioData: Buffer) 
       session.ws.send(JSON.stringify({ type: "receiving_audio" }));
     }
   } catch (error) {
-    console.error("Error sending binary audio:", error);
+    console.error("Error sending binary audio to Gemini:", error);
+    session.ws.send(JSON.stringify({
+      type: "error",
+      message: "Failed to stream audio to Gemini Live",
+    }));
   }
 }
 
-async function handleAudioChunk(session: GeminiLiveSession, data: any) {
-  if (!data.chunk) return;
-
-  if (session.liveSession) {
-    try {
-      // Decode base64 and send to live session
-      const audioBuffer = Buffer.from(data.chunk, 'base64');
-      await session.liveSession.sendRealtimeInput({
-        audio: audioBuffer,
-        mimeType: "audio/pcm;rate=16000",
-      });
-      
-      if (!session.isReceivingAudio) {
-        session.isReceivingAudio = true;
-        session.ws.send(JSON.stringify({ type: "receiving_audio" }));
-      }
-    } catch (error) {
-      console.error("Error sending audio chunk:", error);
-    }
-  }
-}
+// Note: handleAudioChunk removed - all audio now uses binary PCM frames via handleBinaryAudio
 
 async function handleAudioEnd(session: GeminiLiveSession) {
   session.isReceivingAudio = false;
@@ -265,168 +247,9 @@ async function handleAudioEnd(session: GeminiLiveSession) {
   }
 }
 
-async function handleAudioInput(session: GeminiLiveSession, data: any) {
-  if (!GOOGLE_API_KEY) {
-    session.ws.send(JSON.stringify({
-      type: "error",
-      message: "AI service not configured",
-    }));
-    return;
-  }
-
-  const audioBase64 = data.audio;
-  if (!audioBase64) {
-    session.ws.send(JSON.stringify({
-      type: "error",
-      message: "No audio data provided",
-    }));
-    return;
-  }
-
-  session.ws.send(JSON.stringify({ type: "processing_started" }));
-
-  // If live session is available, use it
-  if (session.liveSession) {
-    try {
-      const audioBuffer = Buffer.from(audioBase64, 'base64');
-      await session.liveSession.sendRealtimeInput({
-        audio: audioBuffer,
-        mimeType: "audio/webm",
-      });
-      await session.liveSession.sendRealtimeInput({ endOfTurn: true });
-      return;
-    } catch (error) {
-      console.error("Live session audio failed, using fallback:", error);
-    }
-  }
-
-  // Fallback: Use generateContent with audio input/output
-  await processAudioWithFallback(session, audioBase64);
-}
-
-async function processAudioWithFallback(session: GeminiLiveSession, audioBase64: string) {
-  try {
-    const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY! });
-    
-    const systemPrompt = `You are LEARNORY, an advanced AI tutor specializing in Nigerian education.
-Voice: ${session.selectedVoice}
-
-IMPORTANT RESPONSE FORMAT:
-1. First, transcribe what the student said in brackets: [User said: "...their words..."]
-2. Then, provide your helpful response
-
-Keep responses conversational and brief for voice. Speak naturally as if in a friendly tutoring session.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: systemPrompt },
-            {
-              inlineData: {
-                mimeType: "audio/webm",
-                data: audioBase64,
-              },
-            },
-          ],
-        },
-      ],
-      config: {
-        responseModalities: [Modality.TEXT],
-      },
-    });
-
-    const fullResponse = response.text || "I heard you, but I'm not sure how to respond. Could you please repeat that?";
-    
-    // Extract user transcript
-    let userTranscript = "";
-    let aiResponse = fullResponse;
-    
-    const transcriptMatch = fullResponse.match(/\[User said:\s*"(.+?)"\]/i);
-    if (transcriptMatch) {
-      userTranscript = transcriptMatch[1];
-      aiResponse = fullResponse.replace(transcriptMatch[0], "").trim();
-    }
-    
-    if (userTranscript) {
-      session.ws.send(JSON.stringify({
-        type: "user_transcript",
-        text: userTranscript,
-      }));
-    }
-    
-    // Try to generate TTS audio
-    const audioData = await generateTTSAudio(session, aiResponse);
-    
-    if (audioData) {
-      session.ws.send(JSON.stringify({
-        type: "audio_output",
-        audio: audioData,
-        mimeType: "audio/mp3",
-      }));
-    }
-    
-    session.ws.send(JSON.stringify({
-      type: "ai_response",
-      text: aiResponse,
-      voice: session.selectedVoice,
-      userTranscript: userTranscript || undefined,
-      hasAudio: !!audioData,
-      useBrowserTTS: !audioData,
-    }));
-
-    session.ws.send(JSON.stringify({ type: "processing_complete" }));
-
-  } catch (error: any) {
-    console.error("Fallback audio processing error:", error);
-    session.ws.send(JSON.stringify({
-      type: "error",
-      message: error.message || "Failed to process audio",
-    }));
-    session.ws.send(JSON.stringify({ type: "processing_complete" }));
-  }
-}
-
-async function generateTTSAudio(session: GeminiLiveSession, text: string): Promise<string | null> {
-  if (!GOOGLE_API_KEY) return null;
-  
-  try {
-    const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
-    
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `Please read this aloud naturally and warmly: "${text}"` }],
-        },
-      ],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: session.selectedVoice,
-            },
-          },
-        },
-      } as any,
-    });
-
-    const parts = response.candidates?.[0]?.content?.parts || [];
-    for (const part of parts) {
-      if ((part as any).inlineData?.mimeType?.startsWith("audio/")) {
-        return (part as any).inlineData.data;
-      }
-    }
-  } catch (error) {
-    console.error("TTS generation error:", error);
-  }
-  
-  return null;
-}
+// Note: handleAudioInput removed - all audio now uses binary PCM frames via handleBinaryAudio
+// Note: processAudioWithFallback removed - all audio now uses Gemini Live binary streaming only
+// Note: generateTTSAudio removed - all audio now uses Gemini Live streaming only
 
 async function handleTextInput(session: GeminiLiveSession, text: string) {
   if (!GOOGLE_API_KEY) {
@@ -437,63 +260,32 @@ async function handleTextInput(session: GeminiLiveSession, text: string) {
     return;
   }
 
-  session.ws.send(JSON.stringify({ type: "processing_started" }));
-
-  // If live session available, send text through it
-  if (session.liveSession) {
-    try {
-      await session.liveSession.send({ text });
-      return;
-    } catch (error) {
-      console.error("Live session text failed, using fallback:", error);
-    }
-  }
-
-  // Fallback to generateContent
-  try {
-    const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
-    
-    const systemPrompt = `You are LEARNORY, an advanced AI tutor specializing in Nigerian education.
-Keep responses conversational and brief for voice interaction.
-Student says: ${text}`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
-      contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
-    });
-
-    const textResponse = response.text || "I'm not sure how to respond.";
-    
-    // Generate TTS
-    const audioData = await generateTTSAudio(session, textResponse);
-    
-    if (audioData) {
-      session.ws.send(JSON.stringify({
-        type: "audio_output",
-        audio: audioData,
-        mimeType: "audio/mp3",
-      }));
-    }
-    
-    session.ws.send(JSON.stringify({
-      type: "ai_response",
-      text: textResponse,
-      voice: session.selectedVoice,
-      hasAudio: !!audioData,
-      useBrowserTTS: !audioData,
-    }));
-
-    session.ws.send(JSON.stringify({ type: "processing_complete" }));
-
-  } catch (error: any) {
-    console.error("Text processing error:", error);
+  // Strict Live-only enforcement - no fallback
+  if (!session.liveSession) {
     session.ws.send(JSON.stringify({
       type: "error",
-      message: error.message || "Failed to process text",
+      message: "Gemini Live session not connected. Please reconnect.",
+    }));
+    return;
+  }
+
+  session.ws.send(JSON.stringify({ type: "processing_started" }));
+
+  try {
+    // Send text through Gemini Live session only
+    await session.liveSession.send({ text });
+    // Response will come through the receive() loop in startReceivingResponses
+  } catch (error) {
+    console.error("Live session text failed:", error);
+    session.ws.send(JSON.stringify({
+      type: "error",
+      message: "Failed to send text to Gemini Live. Please try again.",
     }));
     session.ws.send(JSON.stringify({ type: "processing_complete" }));
   }
 }
+
+// Note: generateTTSAudio removed - all audio now uses Gemini Live streaming only
 
 function closeSession(sessionId: string) {
   const session = activeSessions.get(sessionId);

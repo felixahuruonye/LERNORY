@@ -39,7 +39,6 @@ export default function LiveAI() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [whisperStatus, setWhisperStatus] = useState<"online" | "offline">("online");
-  const [usingBrowserAPI, setUsingBrowserAPI] = useState(false);
   const [showUploadMode, setShowUploadMode] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -55,11 +54,9 @@ export default function LiveAI() {
   const [selectedVoice, setSelectedVoice] = useState("Aoede");
   const [isGeminiConnected, setIsGeminiConnected] = useState(false);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  // Note: MediaRecorder refs removed - all audio uses PCM streaming via ScriptProcessor
   const messageCountRef = useRef(0);
   const initRef = useRef(false);
-  const recognitionRef = useRef<any>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mouthAnimationRef = useRef<boolean>(false);
   const sessionIdRef = useRef<string | null>(null);
@@ -146,24 +143,31 @@ export default function LiveAI() {
     };
   };
 
-  // Audio context for playing Gemini audio
+  // Audio context for playing Gemini audio with queueing
   const audioContextRef = useRef<AudioContext | null>(null);
-  const pendingAudioRef = useRef<string | null>(null);
   const audioQueueRef = useRef<ArrayBuffer[]>([]);
-  const isPlayingQueueRef = useRef<boolean>(false);
+  const isPlayingRef = useRef<boolean>(false);
+  const nextPlayTimeRef = useRef<number>(0);
 
+  // Initialize audio context for playback
+  const getAudioContext = async (): Promise<AudioContext> => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 24000, // Gemini outputs at 24kHz
+      });
+    }
+    
+    if (audioContextRef.current.state === 'suspended') {
+      await audioContextRef.current.resume();
+    }
+    
+    return audioContextRef.current;
+  };
+
+  // Queue-based audio playback for seamless streaming
   const playGeminiAudio = async (audioBase64: string, mimeType: string = "audio/mp3") => {
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      
-      const audioContext = audioContextRef.current;
-      
-      // Resume audio context if suspended (browser autoplay policy)
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
+      const audioContext = await getAudioContext();
       
       // Decode base64 to array buffer
       const binaryString = atob(audioBase64);
@@ -172,55 +176,31 @@ export default function LiveAI() {
         bytes[i] = binaryString.charCodeAt(i);
       }
       
-      // Handle PCM audio (from Gemini Live streaming)
+      // Handle PCM audio (from Gemini Live streaming at 24kHz)
       if (mimeType.includes("pcm") || mimeType.includes("rate=24000")) {
-        await playPCMAudio(bytes.buffer, 24000);
+        await queuePCMAudio(bytes.buffer, 24000);
         return;
       }
       
       // Try to decode as encoded audio (MP3, WAV, etc.)
       try {
         const audioBuffer = await audioContext.decodeAudioData(bytes.buffer.slice(0));
-        
-        // Play the audio
-        const source = audioContext.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioContext.destination);
-        
-        setIsSpeaking(true);
-        source.onended = () => {
-          setIsSpeaking(false);
-        };
-        
-        source.start(0);
+        await scheduleAudioBuffer(audioBuffer);
         console.log("Playing Gemini audio response");
       } catch (decodeError) {
         console.log("Standard decode failed, trying as PCM:", decodeError);
-        // Try as raw PCM audio
-        await playPCMAudio(bytes.buffer, 24000);
+        await queuePCMAudio(bytes.buffer, 24000);
       }
     } catch (error) {
       console.error("Error playing Gemini audio:", error);
-      // Fallback to browser TTS if audio playback fails
-      if (pendingAudioRef.current) {
-        speakText(pendingAudioRef.current);
-        pendingAudioRef.current = null;
-      }
+      // No browser TTS fallback - Gemini audio only
     }
   };
 
-  // Play raw PCM audio (16-bit signed, mono)
-  const playPCMAudio = async (arrayBuffer: ArrayBuffer, sampleRate: number = 24000) => {
+  // Queue PCM audio chunks for seamless playback
+  const queuePCMAudio = async (arrayBuffer: ArrayBuffer, sampleRate: number = 24000) => {
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      
-      const audioContext = audioContextRef.current;
-      
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
+      const audioContext = await getAudioContext();
       
       // Convert 16-bit PCM to Float32
       const int16Array = new Int16Array(arrayBuffer);
@@ -234,25 +214,37 @@ export default function LiveAI() {
       const audioBuffer = audioContext.createBuffer(1, float32Array.length, sampleRate);
       audioBuffer.getChannelData(0).set(float32Array);
       
-      // Play the audio
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-      
-      setIsSpeaking(true);
-      source.onended = () => {
-        setIsSpeaking(false);
-      };
-      
-      source.start(0);
-      console.log("Playing PCM audio response");
+      // Schedule for seamless playback
+      await scheduleAudioBuffer(audioBuffer);
     } catch (error) {
-      console.error("Error playing PCM audio:", error);
-      if (pendingAudioRef.current) {
-        speakText(pendingAudioRef.current);
-        pendingAudioRef.current = null;
-      }
+      console.error("Error queuing PCM audio:", error);
     }
+  };
+
+  // Schedule audio buffer for seamless playback with queue
+  const scheduleAudioBuffer = async (audioBuffer: AudioBuffer) => {
+    const audioContext = await getAudioContext();
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    
+    // Calculate when to start this buffer (for seamless playback)
+    const currentTime = audioContext.currentTime;
+    const startTime = Math.max(currentTime, nextPlayTimeRef.current);
+    
+    // Update next play time for seamless scheduling
+    nextPlayTimeRef.current = startTime + audioBuffer.duration;
+    
+    setIsSpeaking(true);
+    source.onended = () => {
+      // Only set speaking to false if no more audio is queued
+      if (audioContext.currentTime >= nextPlayTimeRef.current - 0.1) {
+        setIsSpeaking(false);
+      }
+    };
+    
+    source.start(startTime);
+    console.log(`Scheduled audio at ${startTime.toFixed(2)}s, duration: ${audioBuffer.duration.toFixed(2)}s`);
   };
 
   const handleGeminiMessage = async (data: any) => {
@@ -285,18 +277,7 @@ export default function LiveAI() {
         if (aiMessage) {
           addMessage("assistant", aiMessage);
           await saveMessageToDatabase("assistant", aiMessage);
-          
-          // Only use browser TTS if no Gemini audio was sent
-          if (!data.hasAudio && data.useBrowserTTS !== false) {
-            pendingAudioRef.current = aiMessage;
-            // Wait a moment for audio_output message
-            setTimeout(() => {
-              if (pendingAudioRef.current === aiMessage) {
-                speakText(aiMessage);
-                pendingAudioRef.current = null;
-              }
-            }, 500);
-          }
+          // Gemini audio only - no browser TTS fallback
         }
         setIsProcessing(false);
         break;
@@ -311,18 +292,7 @@ export default function LiveAI() {
     }
   };
 
-  const sendAudioToGemini = async (audioBase64: string) => {
-    if (geminiWsRef.current?.readyState !== WebSocket.OPEN) {
-      connectToGeminiLive();
-      setTimeout(() => sendAudioToGemini(audioBase64), 500);
-      return;
-    }
-
-    geminiWsRef.current.send(JSON.stringify({
-      type: "audio_input",
-      audio: audioBase64,
-    }));
-  };
+  // Note: sendAudioToGemini removed - audio now streams as raw binary PCM frames only
 
   const sendTextToGemini = (text: string) => {
     if (geminiWsRef.current?.readyState !== WebSocket.OPEN) {
@@ -357,15 +327,13 @@ export default function LiveAI() {
         try {
           console.log("🔄 Creating chat session...");
           const { apiRequest } = await import("@/lib/queryClient");
-          const session = await apiRequest("/api/chat/sessions", {
-            method: "POST",
-            body: JSON.stringify({
-              title: "Live AI Session - " + new Date().toLocaleString(),
-              mode: "live-ai",
-              summary: "Interactive voice-based learning session"
-            })
+          const response = await apiRequest("POST", "/api/chat/sessions", {
+            title: "Live AI Session - " + new Date().toLocaleString(),
+            mode: "live-ai",
+            summary: "Interactive voice-based learning session"
           });
           
+          const session = await response.json();
           console.log("📊 Session response:", session);
           
           if (session.id) {
@@ -380,12 +348,11 @@ export default function LiveAI() {
         }
       })();
 
-      // Use Browser Speech Recognition API for voice input
-      // This will be used when user clicks "Unmute to Talk"
-      setUsingBrowserAPI(true);
-      console.log("✅ Browser Speech Recognition available - waiting for user to unmute");
+      // Initialize Gemini Live connection
+      connectToGeminiLive();
+      console.log("✅ Gemini Live initialized - waiting for user to unmute");
       
-      // Auto-greet with proper persistence and audio playback
+      // Auto-greet with text only (voice comes from Gemini when user unmutes)
       setTimeout(async () => {
         const greetings = [
           "Hello! I'm your LEARNORY AI tutor. What would you like to learn today?",
@@ -410,19 +377,16 @@ export default function LiveAI() {
         };
         checkAndSave();
         
-        // Speak the greeting (but DON'T auto-unmute - wait for user to click unmute button)
-        console.log("🎙️ Playing greeting...");
-        await playAudioGreeting(greeting);
+        console.log("🎙️ Greeting displayed - waiting for user to unmute for voice");
       }, 1000);
     }
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
       if (silenceTimeoutRef.current) {
         clearTimeout(silenceTimeoutRef.current);
       }
+      // Clean up PCM streaming
+      stopPCMStreaming();
     };
   }, []);
 
@@ -499,15 +463,10 @@ export default function LiveAI() {
             pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
           }
           
-          // Send PCM to Gemini Live
+          // Send raw binary PCM frame directly
           if (geminiWsRef.current?.readyState === WebSocket.OPEN) {
-            // Send as base64
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-            geminiWsRef.current.send(JSON.stringify({
-              type: "audio_chunk",
-              chunk: base64,
-              mimeType: "audio/pcm;rate=16000",
-            }));
+            // Send as raw binary ArrayBuffer - NOT base64 JSON
+            geminiWsRef.current.send(pcmData.buffer);
           }
         } else {
           silenceFrames++;
@@ -568,311 +527,9 @@ export default function LiveAI() {
     setIsListening(false);
   };
 
-  // Voice activity detection - streams to Gemini Live when connected, otherwise Whisper
-  const startVoiceActivityDetection = (mediaRecorder: MediaRecorder) => {
-    let isRecording = false;
-    let silenceTimer: NodeJS.Timeout | null = null;
-    const SILENCE_THRESHOLD = 1500; // 1.5 seconds of silence = end of speech
-    const STREAM_TIMESLICE = 500; // Stream audio every 500ms for real-time
-
-    // Check if we should use true streaming (Gemini connected)
-    const useStreaming = isGeminiConnected && geminiWsRef.current?.readyState === WebSocket.OPEN;
-
-    // Create audio context from the mediaRecorder's stream
-    const stream = mediaRecorder.stream as MediaStream;
-    const audioContext = new (window as any).AudioContext();
-    const analyser = audioContext.createAnalyser();
-    const microphone = audioContext.createMediaStreamSource(stream);
-    microphone.connect(analyser);
-
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    
-    // For streaming: accumulate chunks and send when silence detected
-    let streamingChunks: Blob[] = [];
-
-    const checkVoiceActivity = () => {
-      analyser.getByteFrequencyData(dataArray);
-      const sum = dataArray.reduce((a, b) => a + b, 0);
-      const average = sum / dataArray.length;
-      const hasVoice = average > 30; // Threshold for voice detection
-
-      if (hasVoice && !isRecording) {
-        // Start recording when voice detected
-        isRecording = true;
-        audioChunksRef.current = [];
-        streamingChunks = [];
-        if (mediaRecorder.state === "inactive") {
-          // Use timeslice for more responsive streaming when Gemini is connected
-          if (useStreaming) {
-            mediaRecorder.start(STREAM_TIMESLICE);
-          } else {
-            mediaRecorder.start();
-          }
-        }
-        setIsListening(true);
-        console.log("Recording started" + (useStreaming ? " (streaming mode)" : ""));
-        
-        if (silenceTimer) clearTimeout(silenceTimer);
-      } else if (!hasVoice && isRecording) {
-        // Start silence timer
-        if (!silenceTimer) {
-          silenceTimer = setTimeout(async () => {
-            // End recording after silence threshold
-            isRecording = false;
-            if (mediaRecorder.state === "recording") {
-              mediaRecorder.stop();
-            }
-            setIsListening(false);
-            
-            // Check if Gemini Live is connected for real-time audio streaming
-            if (useStreaming && geminiWsRef.current?.readyState === WebSocket.OPEN) {
-              console.log("Recording stopped - Signaling end to Gemini Live");
-              // Send audio_end signal to trigger processing of accumulated chunks
-              geminiWsRef.current.send(JSON.stringify({
-                type: "audio_end",
-              }));
-              setIsProcessing(true);
-            } else {
-              console.log("Recording stopped - Processing with Whisper");
-              // Fall back to Whisper for transcription
-              setTimeout(() => transcribeWithWhisper(), 100);
-            }
-            silenceTimer = null;
-          }, SILENCE_THRESHOLD);
-        }
-      } else if (hasVoice && isRecording && silenceTimer) {
-        // Clear silence timer if voice continues
-        clearTimeout(silenceTimer);
-        silenceTimer = null;
-      }
-
-      requestAnimationFrame(checkVoiceActivity);
-    };
-
-    checkVoiceActivity();
-  };
-
-  // Stream recorded audio to Gemini Live as base64 and get transcript
-  const streamAudioToGeminiLive = async () => {
-    if (audioChunksRef.current.length === 0) {
-      console.log("No audio to stream");
-      return;
-    }
-
-    try {
-      // Create audio blob from chunks
-      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      
-      // Convert to base64
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64Audio = (reader.result as string).split(",")[1];
-        if (base64Audio) {
-          setIsProcessing(true);
-          
-          // Also try to get a transcript via local speech recognition for chat history
-          // Send audio to Gemini for processing
-          sendAudioToGemini(base64Audio);
-          
-          // Add a placeholder that will be updated when we get response
-          // The server should return the transcript in the response
-        }
-      };
-      reader.readAsDataURL(audioBlob);
-
-      audioChunksRef.current = [];
-      
-      // Restart listening after a brief pause
-      setTimeout(() => {
-        if (mediaRecorderRef.current && initRef.current && !isMuted && isCallActive) {
-          startVoiceActivityDetection(mediaRecorderRef.current);
-        }
-      }, 500);
-    } catch (error) {
-      console.error("Error streaming audio to Gemini:", error);
-      // Fall back to Whisper
-      transcribeWithWhisper();
-    }
-  };
-
-  // Transcribe audio with OpenAI Whisper API
-  const transcribeWithWhisper = async () => {
-    if (audioChunksRef.current.length === 0) {
-      console.log("No audio to transcribe");
-      return;
-    }
-
-    try {
-      // Create audio blob from chunks
-      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-      const formData = new FormData();
-      formData.append("audio", audioBlob, "recording.wav");
-
-      // Send to backend Whisper endpoint
-      const response = await fetch("/api/transcribe", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || "Transcription failed");
-      }
-
-      const data = await response.json();
-      const transcript = data.text?.trim();
-
-      // Check if transcript is an error message from the backend (Whisper quota exceeded)
-      const isErrorMessage = transcript && (
-        transcript.includes("Transcription unavailable") || 
-        transcript.includes("quota exceeded") ||
-        transcript.includes("OpenAI") ||
-        transcript.startsWith("[")
-      );
-
-      if (isErrorMessage) {
-        // Treat quota/error messages as failed transcription - fallback to Browser API
-        console.warn("⚠️ Whisper error message received - Switching to Browser Speech API");
-        setWhisperStatus("offline");
-        setUsingBrowserAPI(true);
-        
-        // Show user notification
-        toast({
-          title: "🎤 Switched to Browser Voice",
-          description: "Using backup voice recognition - please speak again",
-          variant: "default",
-        });
-
-        // Automatically start Browser Speech Recognition as fallback
-        startBrowserSpeechRecognition();
-        audioChunksRef.current = [];
-        return;
-      }
-
-      if (transcript) {
-        console.log("✓ Whisper: Transcribed", transcript);
-        handleSendMessage(transcript);
-      }
-
-      audioChunksRef.current = [];
-      
-      // Restart listening - ensure media recorder is ready
-      if (mediaRecorderRef.current && initRef.current && mediaRecorderRef.current.state === "inactive") {
-        startVoiceActivityDetection(mediaRecorderRef.current);
-      }
-    } catch (error: any) {
-      console.error("Whisper transcription error:", error);
-      console.warn("⚠️ OpenAI Whisper failed - Switching to Browser Speech API");
-      
-      // Switch to Browser Speech Recognition on ANY Whisper error
-      setWhisperStatus("offline");
-      setUsingBrowserAPI(true);
-      
-      // Show user notification
-      toast({
-        title: "🎤 Switched to Browser Voice",
-        description: "Using backup voice recognition - please speak again",
-        variant: "default",
-      });
-
-      // Automatically start Browser Speech Recognition as fallback
-      startBrowserSpeechRecognition();
-    }
-  };
-
-  // Fallback to Browser Speech Recognition API - SIMPLE & CLEAN
-  const startBrowserSpeechRecognition = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast({
-        title: "Speech Recognition Not Supported",
-        description: "Please type your question",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Stop any existing recognition
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch (e) {
-        // Already stopped
-      }
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false; // Stop after detecting speech
-    recognition.interimResults = false; // Don't send interim results
-    recognition.lang = "en-US";
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      console.log("🎤 Listening - Please speak now...");
-      setIsListening(true);
-    };
-
-    recognition.onresult = (event: any) => {
-      // Skip if muted
-      if (isMuted || isProcessing) {
-        return;
-      }
-
-      // Collect ONLY new FINAL results
-      let finalTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          const transcript = event.results[i][0].transcript.trim();
-          if (transcript) {
-            finalTranscript += (finalTranscript ? " " : "") + transcript;
-          }
-        }
-      }
-
-      if (finalTranscript) {
-        console.log("✅ RECOGNIZED:", finalTranscript);
-        
-        // Interrupt current speech if speaking
-        if (isSpeaking) {
-          window.speechSynthesis.cancel();
-          setIsSpeaking(false);
-          mouthAnimationRef.current = false;
-        }
-        
-        // Send immediately
-        handleSendMessage(finalTranscript);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      if (event.error !== "no-speech" && event.error !== "aborted") {
-        console.error("🎤 Speech error:", event.error);
-      }
-    };
-
-    recognition.onend = () => {
-      console.log("🎤 Listening stopped");
-      setIsListening(false);
-      
-      // Auto-restart ONLY if user not muted and call is active
-      if (usingBrowserAPI && initRef.current && !isMuted && isCallActive && !isProcessing) {
-        try {
-          console.log("🔄 Restarting listener...");
-          recognition.start();
-        } catch (e) {
-          console.warn("Could not restart:", e);
-        }
-      }
-    };
-
-    try {
-      recognition.start();
-      console.log("✅ Speech Recognition STARTED");
-    } catch (e) {
-      console.warn("Speech already started:", e);
-    }
-    recognitionRef.current = recognition;
-  };
+  // Note: startVoiceActivityDetection removed - voice now uses continuous PCM streaming via initializeContinuousListening
+  // Note: streamAudioToGeminiLive removed - PCM streams continuously as binary frames
+  // Note: transcribeWithWhisper removed - all voice now uses Gemini Live binary PCM streaming only
 
 
   // Save message to both UI and database for permanent transcript
@@ -907,16 +564,12 @@ export default function LiveAI() {
         return;
       }
 
-      await fetch("/api/chat/save-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          sessionId: currentSessionId,
-          role,
-          content,
-          timestamp: new Date().toISOString(),
-        }),
+      const { apiRequest } = await import("@/lib/queryClient");
+      await apiRequest("POST", "/api/chat/save-message", {
+        sessionId: currentSessionId,
+        role,
+        content,
+        timestamp: new Date().toISOString(),
       });
       console.log(`✓ Message saved to database: ${role}`);
     } catch (error) {
@@ -939,103 +592,22 @@ export default function LiveAI() {
       .trim();
   };
 
-  // Play greeting audio (don't auto-unmute after - wait for user to click unmute)
-  const playAudioGreeting = async (text: string) => {
-    setIsSpeaking(true);
-    mouthAnimationRef.current = true;
-    setIsMuted(true); // Keep muted during greeting
 
-    try {
-      const cleanText = cleanTextForSpeech(text);
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 0.95;
-      utterance.pitch = voice === "female" ? 1.2 : 0.8;
-      utterance.volume = 0.7;
-      
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        mouthAnimationRef.current = false;
-        // Stay muted - user must click "Unmute to Talk" to start listening
-      };
-      
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        mouthAnimationRef.current = false;
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.error("Speech synthesis error:", e);
-      setIsSpeaking(false);
-      mouthAnimationRef.current = false;
-    }
-  };
-
-  // Play audio with mouth animation (clean text, no markdown symbols)
-  // Called for AI responses AFTER user has sent a message
+  // Play audio with mouth animation - Gemini audio only, no browser TTS
+  // This is now only used for visual feedback when Gemini audio plays
   const playAudio = async (text: string) => {
+    // Gemini handles audio playback via playGeminiAudio
+    // This function is kept for mouth animation sync
     setIsSpeaking(true);
     mouthAnimationRef.current = true;
     
-    // AUTO-MUTE: Mute mic while AI is speaking to prevent it from hearing itself
+    // Auto-mute mic while AI is speaking
     setIsMuted(true);
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        // Already stopped
-      }
-      console.log("🔇 Auto-muted: Stopping speech recognition while AI speaks");
-    }
-
-    try {
-      const cleanText = cleanTextForSpeech(text);
-      
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 0.95;
-      utterance.pitch = voice === "female" ? 1.2 : 0.8;
-      utterance.volume = 0.7;
-      
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        mouthAnimationRef.current = false;
-        
-        // AUTO-UNMUTE: Unmute mic when AI finishes speaking (now ready for next question)
-        setIsMuted(false);
-        if (usingBrowserAPI && initRef.current && isCallActive) {
-          console.log("🔊 Auto-unmuted: Ready for next question - call startBrowserSpeechRecognition");
-          startBrowserSpeechRecognition();
-        }
-      };
-      
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        mouthAnimationRef.current = false;
-        
-        // AUTO-UNMUTE on error too
-        setIsMuted(false);
-        if (usingBrowserAPI && initRef.current && isCallActive) {
-          startBrowserSpeechRecognition();
-        }
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.error("Speech synthesis error:", e);
-      setIsSpeaking(false);
-      mouthAnimationRef.current = false;
-      
-      // AUTO-UNMUTE on error
-      setIsMuted(false);
-      if (usingBrowserAPI && initRef.current && isCallActive) {
-        startBrowserSpeechRecognition();
-      }
-    }
-  };
-
-  // Speak text using TTS (wrapper for playAudio used by Gemini Live)
-  const speakText = (text: string) => {
-    playAudio(text);
+    stopPCMStreaming();
+    console.log("🔇 Auto-muted during AI response");
+    
+    // The audio will be played by Gemini via playGeminiAudio
+    // Speaking state will be managed by that function
   };
 
   const handleSendMessage = async (userText?: string) => {
@@ -1045,8 +617,7 @@ export default function LiveAI() {
     setMessageInput("");
     setIsProcessing(true);
     
-    // INTERRUPT: Stop any current speech synthesis immediately
-    window.speechSynthesis.cancel();
+    // Stop any current audio playback
     setIsSpeaking(false);
     mouthAnimationRef.current = false;
 
@@ -1056,11 +627,10 @@ export default function LiveAI() {
       // Save user message to database for permanent transcript
       await saveMessageToDatabase("user", text);
 
-      // If Whisper is offline and user types, auto-recover when they message
-      if (!usingBrowserAPI && whisperStatus === "offline") {
+      // If Whisper was offline and user types, auto-recover
+      if (whisperStatus === "offline") {
         console.log("Attempting to re-enable Whisper API...");
         setWhisperStatus("online");
-        setUsingBrowserAPI(false);
         localStorage.setItem("learnory_whisper_status", "online");
         
         toast({
@@ -1122,15 +692,7 @@ export default function LiveAI() {
       });
     } finally {
       setIsProcessing(false);
-      // Resume listening after message is processed
-      if (recognitionRef.current && initRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (e) {
-          // Recognition may already be running
-          console.log("Voice recognition already active");
-        }
-      }
+      // PCM streaming continues automatically if not muted
     }
   };
 
@@ -1150,21 +712,18 @@ export default function LiveAI() {
 
   // End call - stop microphone and redirect to chat page
   const handleEndCall = () => {
-    console.log("📞 Ending call...");
+    console.log("Ending call...");
     
-    // Stop speech synthesis
-    window.speechSynthesis.cancel();
+    // Stop audio playback
     setIsSpeaking(false);
     mouthAnimationRef.current = false;
     
-    // Stop speech recognition
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
+    // Stop PCM streaming
+    stopPCMStreaming();
     
-    // Close media recorder
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
+    // Close WebSocket connections
+    if (geminiWsRef.current) {
+      geminiWsRef.current.close();
     }
     
     setIsCallActive(false);
@@ -1172,7 +731,7 @@ export default function LiveAI() {
     setIsMuted(true);
     
     toast({
-      title: "📞 Call Ended",
+      title: "Call Ended",
       description: "Microphone disabled. Your conversation has been saved.",
     });
     
@@ -1388,35 +947,21 @@ export default function LiveAI() {
                         if (!granted) return;
                       }
                       
-                      // Gate voice input: use Gemini Live audio when connected, otherwise Browser Speech API
-                      // Wait briefly for WebSocket connection if we just connected
+                      // Use Gemini Live for voice input - wait for WebSocket connection
                       const waitForConnection = async () => {
                         // Give WebSocket a moment to connect
                         await new Promise(resolve => setTimeout(resolve, 500));
                         
-                        if (geminiWsRef.current?.readyState === WebSocket.OPEN) {
-                          console.log("Using Gemini Live for voice input (streaming mode)");
-                          initializeContinuousListening();
-                        } else if (usingBrowserAPI && isCallActive) {
-                          console.log("Using Browser Speech API for voice input");
-                          startBrowserSpeechRecognition();
-                        } else {
-                          console.log("Using MediaRecorder for voice input (fallback)");
-                          initializeContinuousListening();
-                        }
+                        // Use Gemini-only PCM streaming
+                        console.log("Using Gemini Live for voice input (PCM streaming)");
+                        initializeContinuousListening();
                       };
                       waitForConnection();
                       toast({ title: "Voice Enabled", description: "Microphone is now active - speak whenever you're ready" });
                     } else {
-                      // User wants to mute
+                      // User wants to mute - stop PCM streaming
                       setIsMuted(true);
-                      if (recognitionRef.current) {
-                        try {
-                          recognitionRef.current.stop();
-                        } catch (e) {
-                          // Already stopped
-                        }
-                      }
+                      stopPCMStreaming();
                       toast({ title: "Microphone Muted", description: "Microphone is now off" });
                     }
                   }}
