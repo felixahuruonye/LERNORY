@@ -1,23 +1,15 @@
-const CACHE_NAME = 'lernory-cache-v2';
+const CACHE_NAME = 'lernory-cache-v3';
 const OFFLINE_URL = '/offline.html';
 
 const STATIC_ASSETS = [
-  '/',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
-  '/offline.html',
-  '/login',
-  '/signup'
-];
-
-const AUTH_URLS = [
-  '/login',
-  '/signup',
-  '/auth/callback'
+  '/offline.html'
 ];
 
 self.addEventListener('install', (event) => {
+  console.log('Service Worker: Installing new version...');
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS).catch((err) => {
@@ -29,16 +21,26 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  console.log('Service Worker: Activating new version...');
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
           .filter((cacheName) => cacheName !== CACHE_NAME)
-          .map((cacheName) => caches.delete(cacheName))
+          .map((cacheName) => {
+            console.log('Service Worker: Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          })
       );
     })
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -63,15 +65,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (url.pathname.startsWith('/src/') || url.pathname.includes('.ts') || url.pathname.includes('.tsx')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
-        }
         return response;
       })
       .catch(() => {
@@ -81,7 +82,7 @@ self.addEventListener('fetch', (event) => {
           }
           if (event.request.mode === 'navigate') {
             return caches.match(OFFLINE_URL).then(offlineResponse => {
-              return offlineResponse || caches.match('/');
+              return offlineResponse || new Response('Offline', { status: 503 });
             });
           }
           return new Response('Offline', { status: 503 });

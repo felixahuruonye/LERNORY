@@ -45,16 +45,35 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Register service worker
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then((registration) => {
               console.log('SW registered:', registration.scope);
+              
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('New SW available, reloading...');
+                      newWorker.postMessage({ type: 'SKIP_WAITING' });
+                      window.location.reload();
+                    }
+                  });
+                }
+              });
+              
+              registration.update();
             })
             .catch((error) => {
               console.log('SW registration failed:', error);
             });
+        });
+        
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          console.log('SW controller changed, reloading...');
+          window.location.reload();
         });
       }
     </script>
