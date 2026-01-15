@@ -79,18 +79,29 @@ export function useAuth() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // Add timeout to prevent hanging forever
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Auth timeout')), 5000)
+        );
         
-        if (session?.user) {
-          const userProfile = await fetchUserProfile(session.user);
-          setUser(userProfile);
+        const sessionPromise = supabase.auth.getSession();
+        const result = await Promise.race([sessionPromise, timeoutPromise]) as any;
+        
+        if (!isMounted) return;
+        
+        if (result?.data?.session?.user) {
+          const userProfile = await fetchUserProfile(result.data.session.user);
+          if (isMounted) setUser(userProfile);
         }
       } catch (error) {
+        console.warn('Auth initialization error:', error);
         // Silent fail - just mark as not loading
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
@@ -112,6 +123,7 @@ export function useAuth() {
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, [fetchUserProfile, queryClient]);
