@@ -84,7 +84,7 @@ export function VoiceSettings({
             </SelectContent>
           </Select>
           <p className="text-xs text-slate-500 mt-1">
-            Gemini 2.0 Live API integration coming soon
+            Powered by Gemini 2.0 Live API
           </p>
         </div>
 

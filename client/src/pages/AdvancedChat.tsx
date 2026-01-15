@@ -270,14 +270,15 @@ export default function AdvancedChat() {
             <Send className="w-4 h-4" />
             <span className="hidden sm:inline">Send</span>
           </Button>
-          <Button 
-            variant="outline" 
-            size="icon" 
-            className="hover-elevate"
-            onClick={() => toast({ title: "Voice System", description: "Gemini Multimodal Live Voice API coming soon!" })}
-          >
-            <Mic className="h-4 w-4" />
-          </Button>
+          <Link href="/live-ai">
+            <Button 
+              variant="outline" 
+              size="icon"
+              data-testid="button-voice-chat"
+            >
+              <Mic className="h-4 w-4" />
+            </Button>
+          </Link>
           <Link href="/project-workspace">
             <Button variant="outline" size="icon" className="sm:hidden" data-testid="button-go-workspace-mobile">
               <FolderOpen className="w-4 h-4" />
