@@ -1,4 +1,3 @@
-// Replit Auth integration blueprint reference: javascript_log_in_with_replit
 // WebSocket integration blueprint reference: javascript_websocket
 // Gemini integration blueprint reference: javascript_gemini
 import type { Express, Request, Response } from "express";
@@ -10,7 +9,8 @@ import path from "path";
 // @ts-ignore - multer types not available but package is installed
 import multer from "multer";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth } from "./replitAuth";
+import { supabaseAuth, optionalSupabaseAuth, type AuthenticatedRequest } from "./supabaseAuth";
 import {
   chatWithAI,
   chatWithAISmartFallback,
@@ -40,9 +40,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/auth/user', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const user = await storage.getUser(userId);
       res.json(user);
     } catch (error) {
@@ -52,7 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vapi public key endpoint
-  app.get('/api/vapi-config', isAuthenticated, (req: Request, res: Response) => {
+  app.get('/api/vapi-config', supabaseAuth, (req: Request, res: Response) => {
     try {
       const publicKey = process.env.VAPI_PUBLIC_KEY;
       if (!publicKey) {
@@ -66,9 +66,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Chat routes
-  app.get('/api/chat/messages', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/chat/messages', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const sessionId = req.query.sessionId as string;
       
       const messages = sessionId 
@@ -82,9 +82,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Save message to permanent transcript (used for greetings and system messages)
-  app.post('/api/chat/save-message', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/chat/save-message', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { sessionId, role, content } = req.body;
 
       if (!sessionId) {
@@ -130,9 +130,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/chat/send', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/chat/send', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       let { content, sessionId, includeUserContext, context: extraContext, isAdvanced } = req.body;
 
       if (!content?.trim()) {
@@ -421,9 +421,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Clear all chat messages for user
-  app.post('/api/chat/clear', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/chat/clear', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       await storage.deleteChatMessagesByUser(userId);
       res.json({ message: "Chat cleared successfully" });
     } catch (error) {
@@ -433,9 +433,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Memory export/backup routes
-  app.get('/api/memory/export', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/memory/export', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const messages = await storage.getChatMessagesByUser(userId);
       const memories = await storage.getMemoryEntriesByUser(userId);
       
@@ -455,9 +455,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/memory/backup', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/memory/backup', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const messages = await storage.getChatMessagesByUser(userId);
       const backup = {
         backupId: `backup_${Date.now()}`,
@@ -471,9 +471,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.delete('/api/memory/clear', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/memory/clear', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       await storage.deleteChatMessagesByUser(userId);
       res.json({ success: true, message: "Memory cleared" });
     } catch (error) {
@@ -482,7 +482,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Admin routes
-  app.get('/api/admin/users', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/admin/users', supabaseAuth, async (req: any, res: Response) => {
     try {
       // In a real app, check admin flag on user
       const users = await storage.getUsers?.() || [];
@@ -492,7 +492,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.get('/api/admin/stats', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/admin/stats', supabaseAuth, async (req: any, res: Response) => {
     try {
       const users = await storage.getUsers?.() || [];
       const revenue = users.reduce((acc: number, u: any) => {
@@ -507,9 +507,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Memory preferences routes
-  app.get('/api/memory/learned-preferences', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/memory/learned-preferences', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const entries = await storage.getMemoryEntriesByUser(userId);
       
       // Aggregate learned preferences from all auto_learned entries
@@ -565,9 +565,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/memory/preferences', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/memory/preferences', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { categoryId, itemKey, value } = req.body;
       
       await storage.createMemoryEntry({
@@ -583,9 +583,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/memory/preferences/add', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/memory/preferences/add', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { categoryId, key, value } = req.body;
       
       await storage.createMemoryEntry({
@@ -602,7 +602,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Courses routes
-  app.get('/api/courses', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/courses', supabaseAuth, async (req: any, res: Response) => {
     try {
       const courses = await storage.getAllCourses();
       res.json(courses);
@@ -612,9 +612,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Project routes
-  app.get('/api/projects', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/projects', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const projects = await storage.getProjectsByUser(userId);
       res.json(projects);
     } catch (error) {
@@ -622,7 +622,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.get('/api/projects/:id/tasks', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/projects/:id/tasks', supabaseAuth, async (req: any, res: Response) => {
     try {
       const tasks = await storage.getTasksByProject(req.params.id);
       res.json(tasks);
@@ -630,9 +630,9 @@ If they ask about similar topics or reference past conversations, remind them wh
       res.status(500).json({ message: "Failed to fetch tasks" });
     }
   });
-  app.get('/api/chat/sessions', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/chat/sessions', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const sessions = await storage.getChatSessionsByUser(userId);
       res.json(sessions);
     } catch (error) {
@@ -641,9 +641,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/chat/sessions', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/chat/sessions', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { title, mode } = req.body;
       const session = await storage.createChatSession({ userId, title: title || "New Chat", mode: mode || "chat", summary: "" });
       res.json(session);
@@ -653,7 +653,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.patch('/api/chat/sessions/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.patch('/api/chat/sessions/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -665,10 +665,10 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.delete('/api/chat/sessions/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/chat/sessions/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { id } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       
       // Verify ownership before deleting
       const session = await storage.getChatSession(id);
@@ -689,7 +689,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Internet search route
-  app.post('/api/chat/search', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/chat/search', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { query } = req.body;
       if (!query?.trim()) {
@@ -706,9 +706,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Bulk delete chat sessions
-  app.post('/api/chat/sessions/bulk-delete', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/chat/sessions/bulk-delete', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { sessionIds } = req.body;
 
       if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
@@ -742,13 +742,13 @@ If they ask about similar topics or reference past conversations, remind them wh
   // File upload handler with Gemini API fallback to OpenAI/OpenRouter
   const uploadMulter = multer({ storage: multer.memoryStorage() });
   
-  app.post('/api/chat/analyze-file', isAuthenticated, uploadMulter.single('file'), async (req: any, res: Response) => {
+  app.post('/api/chat/analyze-file', supabaseAuth, uploadMulter.single('file'), async (req: any, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
       
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { originalname, mimetype, buffer } = req.file;
       const { description } = req.body;
       
@@ -823,9 +823,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Website Generator routes
-  app.get('/api/websites', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/websites', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const websites = await storage.getGeneratedWebsitesByUser(userId);
       res.json(websites);
     } catch (error) {
@@ -834,7 +834,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.get('/api/websites/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/websites/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const website = await storage.getGeneratedWebsite(req.params.id);
       if (!website) {
@@ -848,9 +848,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/websites/generate', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/websites/generate', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { prompt } = req.body;
 
       if (!prompt?.trim()) {
@@ -880,7 +880,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.patch('/api/websites/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.patch('/api/websites/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { title, description, htmlCode, cssCode, jsCode, isFavorite } = req.body;
       
@@ -904,7 +904,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.delete('/api/websites/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/websites/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       await storage.deleteGeneratedWebsite(req.params.id);
       res.json({ message: "Website deleted successfully" });
@@ -914,7 +914,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/websites/:id/explain', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/websites/:id/explain', supabaseAuth, async (req: any, res: Response) => {
     try {
       const website = await storage.getGeneratedWebsite(req.params.id);
       if (!website) {
@@ -934,7 +934,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/websites/:id/debug', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/websites/:id/debug', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { debugPrompt } = req.body;
       
@@ -988,7 +988,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Transcribe audio from chat voice input
-  app.post('/api/chat/transcribe-voice', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/chat/transcribe-voice', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { audioDataUrl } = req.body;
       
@@ -1027,9 +1027,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Live Session routes
-  app.get('/api/live-sessions', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/live-sessions', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const sessions = await storage.getLiveSessionsByHost(userId);
       res.json(sessions);
     } catch (error) {
@@ -1038,9 +1038,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/live-sessions', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/live-sessions', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { title, settings } = req.body;
 
       const session = await storage.createLiveSession({
@@ -1058,7 +1058,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.patch('/api/live-sessions/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.patch('/api/live-sessions/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -1075,9 +1075,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   const upload = multer({ storage: multer.memoryStorage() });
 
   // Transcript routes
-  app.post('/api/transcripts', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/transcripts', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { sessionId, segments, audioUrl } = req.body;
 
       const transcript = await storage.createTranscript({
@@ -1096,7 +1096,7 @@ If they ask about similar topics or reference past conversations, remind them wh
 
 
   // Lesson routes
-  app.get('/api/lessons', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/lessons', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { courseId } = req.query;
       let lessons: any[] = [];
@@ -1112,9 +1112,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/lessons/generate', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/lessons/generate', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { transcriptText, courseId } = req.body;
 
       // Use AI to generate structured lesson
@@ -1135,9 +1135,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Course routes
-  app.get('/api/courses', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/courses', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const user = await storage.getUser(userId);
 
       let courses;
@@ -1154,9 +1154,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/courses', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/courses', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { title, description, price } = req.body;
 
       const course = await storage.createCourse({
@@ -1176,7 +1176,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/courses/generate-syllabus', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/courses/generate-syllabus', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { topic } = req.body;
 
@@ -1191,7 +1191,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Quiz/Exam routes
-  app.get('/api/quizzes', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/quizzes', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { courseId } = req.query;
       let quizzes: any[] = [];
@@ -1207,9 +1207,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/quizzes', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/quizzes', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { courseId, title, description, difficulty, timeLimit, questions, rubric } = req.body;
 
       const quiz = await storage.createQuiz({
@@ -1230,9 +1230,9 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/quiz-attempts', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/quiz-attempts', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { quizId, answers } = req.body;
 
       // Get quiz for rubric
@@ -1271,9 +1271,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // File upload routes
-  app.post('/api/files/upload', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/files/upload', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { fileName, fileType, fileSize, fileUrl } = req.body;
 
       const upload = await storage.createFileUpload({
@@ -1295,7 +1295,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Notes & Export routes
-  app.post('/api/notes/summarize', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/notes/summarize', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { text, length } = req.body;
 
@@ -1308,7 +1308,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/notes/flashcards', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/notes/flashcards', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { text } = req.body;
 
@@ -1322,9 +1322,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Purchase/Marketplace routes
-  app.post('/api/purchases', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/purchases', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { courseId, amount } = req.body;
 
       const user = await storage.getUser(userId);
@@ -1376,7 +1376,7 @@ If they ask about similar topics or reference past conversations, remind them wh
     }
   });
 
-  app.post('/api/purchases/verify', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/purchases/verify', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { reference } = req.body;
 
@@ -1387,7 +1387,7 @@ If they ask about similar topics or reference past conversations, remind them wh
 
         if (verification.data.status === 'success') {
           // Find and update purchase
-          const purchases = await storage.getPurchasesByBuyer(req.user.claims.sub);
+          const purchases = await storage.getPurchasesByBuyer(req.userId);
           const purchase = purchases.find(p => p.paystackReference === reference);
 
           if (purchase) {
@@ -1410,9 +1410,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Analytics routes
-  app.post('/api/analytics/event', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/analytics/event', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { eventType, eventData } = req.body;
 
       await storage.createAnalyticsEvent({
@@ -1430,9 +1430,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Memory/Performance tracking routes
-  app.get('/api/memory/entries', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/memory/entries', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const entries = await storage.getMemoryEntriesByUser(userId);
       res.json(entries);
     } catch (error) {
@@ -1442,7 +1442,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Generate lesson from transcript
-  app.post('/api/generate-lesson', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/generate-lesson', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { text } = req.body;
       
@@ -1459,9 +1459,9 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Generate lesson from text using LEARNORY AI (for manual text entries)
-  app.post('/api/generate-lesson-from-text', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/generate-lesson-from-text', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { text, recordingId } = req.body;
       
       if (!text?.trim()) {
@@ -1490,7 +1490,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // AI Fix endpoint - Fix text with LEARNORY AI
-  app.post('/api/ai-fix-text', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/ai-fix-text', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { text } = req.body;
       
@@ -1509,7 +1509,7 @@ If they ask about similar topics or reference past conversations, remind them wh
   });
 
   // Summarize and correct text using OpenAI
-  app.post('/api/summarize-and-correct', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/summarize-and-correct', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { text } = req.body;
       
@@ -1625,9 +1625,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Topic explanation endpoint
-  app.post('/api/explain-topic', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/explain-topic', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { subject, topic, difficulty = 'medium' } = req.body;
 
       if (!subject?.trim() || !topic?.trim()) {
@@ -1682,9 +1682,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Generate custom image endpoint
-  app.post('/api/generate-image', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/generate-image', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { prompt, relatedTopic } = req.body;
 
       if (!prompt?.trim()) {
@@ -1708,9 +1708,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Get all generated images by user
-  app.get('/api/generated-images', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/generated-images', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const images = await storage.getGeneratedImagesByUser(userId);
       res.json(images);
     } catch (error) {
@@ -1720,9 +1720,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Delete a generated image
-  app.delete('/api/generated-images/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/generated-images/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const imageId = req.params.id;
 
       if (!imageId) {
@@ -1740,9 +1740,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Learning history endpoint
-  app.get('/api/learning-history', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/learning-history', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const limit = req.query.limit ? parseInt(req.query.limit) : 50;
       const history = await storage.getLearningHistoryByUser(userId, limit);
       res.json(history);
@@ -1753,9 +1753,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Learning insights endpoint (for dashboard analytics)
-  app.get('/api/learning/insights', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/learning/insights', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { generateLearningInsights } = await import("./tutorSystem");
       const insights = await generateLearningInsights(userId);
       res.json(insights);
@@ -1766,9 +1766,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Focus areas analysis endpoint
-  app.get('/api/focus-areas', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/focus-areas', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const history = await storage.getLearningHistoryByUser(userId, 100);
       
       // Analyze subjects and topics
@@ -1800,9 +1800,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Export user data endpoint (PDF/JSON)
-  app.post('/api/export-data', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/export-data', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { format = 'json', dataType = 'all' } = req.body;
 
       const history = await storage.getLearningHistoryByUser(userId, 100);
@@ -1834,9 +1834,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Notification routes
-  app.get('/api/notifications', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/notifications', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       const notifications = await storage.getNotificationsByUser(userId, limit);
       res.json(notifications);
@@ -1846,9 +1846,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/notifications', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/notifications', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { type, title, message, icon, actionUrl } = req.body;
 
       const notification = await storage.createNotification({
@@ -1868,7 +1868,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.get('/api/notifications/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/notifications/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const notification = await storage.getNotification(req.params.id);
       if (!notification) {
@@ -1881,7 +1881,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.patch('/api/notifications/:id/read', isAuthenticated, async (req: any, res: Response) => {
+  app.patch('/api/notifications/:id/read', supabaseAuth, async (req: any, res: Response) => {
     try {
       const notification = await storage.markNotificationAsRead(req.params.id);
       if (!notification) {
@@ -1894,7 +1894,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.delete('/api/notifications/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/notifications/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       await storage.deleteNotification(req.params.id);
       res.json({ message: "Notification deleted successfully" });
@@ -1905,9 +1905,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // LIVE AI Routes
-  app.post('/api/live-ai/voice-start', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/live-ai/voice-start', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
 
       const conversation = await storage.createVoiceConversation({
         userId,
@@ -1920,9 +1920,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/live-ai/document-upload', isAuthenticated, upload.single('file'), async (req: any, res: Response) => {
+  app.post('/api/live-ai/document-upload', supabaseAuth, upload.single('file'), async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { fileName: bodyFileName, fileType: bodyFileType } = req.body;
 
       // Get file from upload
@@ -1992,9 +1992,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.get('/api/live-ai/documents', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/live-ai/documents', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const docs = await storage.getDocumentUploadsByUser(userId);
       res.json(docs);
     } catch (error) {
@@ -2003,9 +2003,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.get('/api/live-ai/conversations', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/live-ai/conversations', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const conversations = await storage.getVoiceConversationsByUser(userId);
       res.json(conversations);
     } catch (error) {
@@ -2014,9 +2014,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/live-ai/feature', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/live-ai/feature', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { featureType, context } = req.body;
 
       const feature = await storage.createLiveAiFeature({
@@ -2034,7 +2034,7 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Real-time Audio API: Transcribe voice to text
-  app.post('/api/audio/transcribe', isAuthenticated, upload.single('audio'), async (req: any, res: Response) => {
+  app.post('/api/audio/transcribe', supabaseAuth, upload.single('audio'), async (req: any, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No audio file provided" });
@@ -2090,7 +2090,7 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Real-time Audio API: Convert text to speech
-  app.post('/api/audio/speak', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/audio/speak', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { text, voice = "alloy" } = req.body;
 
@@ -2112,9 +2112,9 @@ KEY_WORDS: [keywords separated by commas]`,
 
 
   // Send notifications for all previous chat history
-  app.post('/api/notifications/send-chat-history', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/notifications/send-chat-history', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       console.log(`[Notifications] Fetching chat history for user: ${userId}`);
       
       // Get all chat sessions for user
@@ -2164,9 +2164,9 @@ KEY_WORDS: [keywords separated by commas]`,
   // (Other CBT methods simplified - focusing on question generation for MVP)
 
   // Recording API endpoints
-  app.get('/api/recordings', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/recordings', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const recordings = await storage.getRecordingsByUser(userId);
       res.json(recordings);
     } catch (error: any) {
@@ -2175,9 +2175,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/recordings', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/recordings', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { title, audioData, transcript, duration, sessionId } = req.body;
 
       console.log("Saving recording for user:", userId, "Title:", title, "Transcript length:", transcript?.length);
@@ -2215,9 +2215,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.delete('/api/recordings/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/recordings/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { id } = req.params;
       
       // Verify recording belongs to user before deleting
@@ -2232,9 +2232,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Generated Lessons API endpoints
-  app.get('/api/generated-lessons', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/generated-lessons', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const lessons = await storage.getGeneratedLessonsByUser(userId);
       res.json(lessons);
     } catch (error: any) {
@@ -2243,9 +2243,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/generated-lessons', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/generated-lessons', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { title, objectives, keyPoints, summary, recordingId } = req.body;
 
       if (!title?.trim()) {
@@ -2268,7 +2268,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.delete('/api/generated-lessons/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/generated-lessons/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { id } = req.params;
       await storage.deleteGeneratedLesson(id);
@@ -2280,7 +2280,7 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Generate exam questions with LEARNORY - Feature: Real exam questions generated by AI (up to 250 per subject)
-  app.post('/api/cbt/generate-questions', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/cbt/generate-questions', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { examType, subject, count = 250 } = req.body;
 
@@ -2298,10 +2298,10 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // CBT Grading with LEARNORY - Feature 1: AI-powered grading and explanations
-  app.post('/api/cbt/grade', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/cbt/grade', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { questions, answers, sessionId, examType, subjects } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
 
       if (!questions || !answers) {
         return res.status(400).json({ message: 'Questions and answers required' });
@@ -2355,9 +2355,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Exam History - Feature 2: Retrieve past exam attempts
-  app.get('/api/cbt/history', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/cbt/history', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const history = await storage.getCbtExamHistoryByUser(userId);
       res.json(history);
     } catch (error: any) {
@@ -2366,9 +2366,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Analytics Dashboard - Feature 5: Performance tracking per topic
-  app.get('/api/cbt/analytics', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/cbt/analytics', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const analytics = await storage.getCbtAnalyticsByUser(userId);
       res.json(analytics);
     } catch (error: any) {
@@ -2377,10 +2377,10 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Delete exam from history - Feature: Remove exam records
-  app.delete('/api/cbt/history/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/cbt/history/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { id } = req.params;
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       
       // Verify ownership before deleting
       const history = await storage.getCbtExamHistoryByUser(userId);
@@ -2404,7 +2404,7 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Admin Content Management - Feature 3: Upload and manage question banks
-  app.post('/api/admin/cbt/import-questions', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/admin/cbt/import-questions', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { examId, subject, questions } = req.body;
 
@@ -2446,7 +2446,7 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Question Licensing Info - Feature 4: Retrieve licensing metadata
-  app.get('/api/cbt/licensing/:questionId', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/cbt/licensing/:questionId', supabaseAuth, async (req: any, res: Response) => {
     try {
       const licensing = await storage.getCbtQuestionLicensing(req.params.questionId);
       res.json(licensing);
@@ -2456,9 +2456,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Project Workspace Routes
-  app.get('/api/projects', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/projects', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const projects = await storage.getProjectsByUser(userId);
       res.json(projects);
     } catch (error: any) {
@@ -2466,9 +2466,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/projects', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/projects', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { name, description } = req.body;
       const project = await storage.createProject({ userId, name, description });
       res.json(project);
@@ -2477,7 +2477,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.delete('/api/projects/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/projects/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       await storage.deleteProject(req.params.id);
       res.json({ success: true });
@@ -2486,7 +2486,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.get('/api/projects/:projectId/files', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/projects/:projectId/files', supabaseAuth, async (req: any, res: Response) => {
     try {
       const files = await storage.getFilesByProject(req.params.projectId);
       res.json(files);
@@ -2495,7 +2495,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/projects/:projectId/files', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/projects/:projectId/files', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { name, content } = req.body;
       const file = await storage.createFile({ projectId: req.params.projectId, name, content });
@@ -2505,7 +2505,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.delete('/api/files/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/files/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       await storage.deleteFile(req.params.id);
       res.json({ success: true });
@@ -2514,7 +2514,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.get('/api/projects/:projectId/tasks', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/projects/:projectId/tasks', supabaseAuth, async (req: any, res: Response) => {
     try {
       const tasks = await storage.getTasksByProject(req.params.projectId);
       res.json(tasks);
@@ -2523,7 +2523,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/projects/:projectId/tasks', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/projects/:projectId/tasks', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { title, status } = req.body;
       const task = await storage.createTask({ projectId: req.params.projectId, title, status: status || 'pending' });
@@ -2533,7 +2533,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.patch('/api/tasks/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.patch('/api/tasks/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       const task = await storage.updateTask(req.params.id, req.body);
       res.json(task);
@@ -2542,7 +2542,7 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.delete('/api/tasks/:id', isAuthenticated, async (req: any, res: Response) => {
+  app.delete('/api/tasks/:id', supabaseAuth, async (req: any, res: Response) => {
     try {
       await storage.deleteTask(req.params.id);
       res.json({ success: true });
@@ -2552,9 +2552,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Global Search API - queries all data types
-  app.get('/api/search', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/search', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const query = (req.query.q as string)?.toLowerCase() || "";
       
       if (!query.trim()) {
@@ -2638,9 +2638,9 @@ KEY_WORDS: [keywords separated by commas]`,
   });
 
   // Pricing & Payment Routes
-  app.post('/api/payments/initialize', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/payments/initialize', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const { tierId } = req.body;
       
       const user = await storage.getUser(userId);
@@ -2688,10 +2688,10 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/payments/verify', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/payments/verify', supabaseAuth, async (req: any, res: Response) => {
     try {
       const { reference, tierId } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
 
       const paystackResponse = await verifyPayment(reference);
 
@@ -2716,9 +2716,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.get('/api/subscription/status', isAuthenticated, async (req: any, res: Response) => {
+  app.get('/api/subscription/status', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       const user = await storage.getUser(userId);
       
       res.json({
@@ -2731,9 +2731,9 @@ KEY_WORDS: [keywords separated by commas]`,
     }
   });
 
-  app.post('/api/subscription/cancel', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/subscription/cancel', supabaseAuth, async (req: any, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.userId;
       await storage.updateUser(userId, { subscriptionTier: 'free', subscriptionExpiresAt: null });
       res.json({ success: true, message: "Subscription cancelled" });
     } catch (error) {
