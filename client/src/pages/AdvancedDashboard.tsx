@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
+import { useDashboardStats, useSubscription, useUnreadNotifications } from "@/hooks/useSupabaseData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import {
   Search,
@@ -29,6 +30,7 @@ import {
   ChevronRight,
   BookOpen,
   Crown,
+  TrendingUp,
 } from "lucide-react";
 
 // Fuzzy search algorithm
@@ -97,26 +99,14 @@ export default function AdvancedDashboard() {
     { label: "Lessons", value: "lesson", icon: BookOpen },
   ];
 
-  // Global search query hook
-  // Subscription status
-  const { data: subscriptionStatus } = useQuery({
-    queryKey: ['/api/subscription/status'],
-    enabled: !!user,
-  });
+  // Supabase hooks for fast direct data loading
+  const { data: dashboardStats, isLoading: statsLoading } = useDashboardStats();
+  const { data: subscription } = useSubscription();
+  const { data: unreadNotifications = [] } = useUnreadNotifications();
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
 
-  // Global search query hook
-  const { data: searchResults = { results: [] }, isLoading: searchLoading } = useQuery({
-    queryKey: ['/api/search', searchQuery],
-    queryFn: async () => {
-      if (!searchQuery.trim()) return { results: [] };
-      const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) return { results: [] };
-      return res.json();
-    },
-    enabled: !!searchQuery && showSearchDropdown,
-  });
+  // Local fuzzy search for tools (no API call needed)
+  const searchResults = { results: [] as any[] };
 
   // Load search history from localStorage on mount
   useEffect(() => {
@@ -226,10 +216,42 @@ export default function AdvancedDashboard() {
     return iconMap[iconName] || Search;
   };
 
-  if (authLoading || !user) {
+  // Show skeleton while auth loads, but render dashboard structure immediately
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+        <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-primary/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center gap-3">
+                <Sparkles className="h-6 w-6 text-primary" />
+                <Skeleton className="h-6 w-32" />
+              </div>
+              <div className="flex gap-3">
+                <Skeleton className="h-9 w-20" />
+                <Skeleton className="h-9 w-9 rounded-full" />
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Skeleton className="h-10 w-64 mb-4" />
+          <Skeleton className="h-5 w-48 mb-12" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-12">
+            {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-lg" />)}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} className="h-48 rounded-lg" />)}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
-        <div className="animate-pulse text-muted-foreground">Loading LERNORY...</div>
+        <div className="text-muted-foreground">Please log in to access the dashboard</div>
       </div>
     );
   }
@@ -400,10 +422,10 @@ export default function AdvancedDashboard() {
 
             {/* Right Controls */}
             <div className="flex items-center gap-3">
-              {subscriptionStatus?.tier && subscriptionStatus.tier !== 'free' && (
+              {subscription?.pricing_tiers?.name && subscription.pricing_tiers.name !== 'free' && (
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs" data-testid="badge-subscription">
                   <Crown className="h-3 w-3 text-primary" />
-                  <span className="font-medium text-primary capitalize">{subscriptionStatus.tier}</span>
+                  <span className="font-medium text-primary capitalize">{subscription.pricing_tiers.name}</span>
                 </div>
               )}
               <Link href="/pricing">
@@ -416,7 +438,9 @@ export default function AdvancedDashboard() {
               <Button variant="ghost" size="icon" asChild className="hover-elevate relative" data-testid="link-notifications">
                 <Link href="/notifications">
                   <Bell className="h-5 w-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                  {unreadNotifications.length > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                  )}
                 </Link>
               </Button>
               <Button variant="ghost" size="icon" asChild className="hover-elevate" data-testid="link-settings">
@@ -449,7 +473,7 @@ export default function AdvancedDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {quickActions.map((action) => (
             <Link key={action.label} href={action.href}>
               <Card className={`${action.color} hover-elevate cursor-pointer h-full transition-all`} data-testid={`card-action-${action.label.toLowerCase().replace(" ", "-")}`}>
@@ -460,6 +484,54 @@ export default function AdvancedDashboard() {
               </Card>
             </Link>
           ))}
+        </div>
+
+        {/* Learning Stats from Supabase */}
+        <div className="mb-12">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Your Learning Progress
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {statsLoading ? (
+              <>
+                {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}
+              </>
+            ) : (
+              <>
+                <Card className="p-4 text-center border-primary/20" data-testid="stat-chats">
+                  <MessageSquare className="h-5 w-5 mx-auto mb-1 text-blue-500" />
+                  <p className="text-2xl font-bold">{dashboardStats?.chatSessionsCount || 0}</p>
+                  <p className="text-xs text-muted-foreground">Chat Sessions</p>
+                </Card>
+                <Card className="p-4 text-center border-primary/20" data-testid="stat-exams">
+                  <Monitor className="h-5 w-5 mx-auto mb-1 text-amber-500" />
+                  <p className="text-2xl font-bold">{dashboardStats?.examResultsCount || 0}</p>
+                  <p className="text-xs text-muted-foreground">Exams Taken</p>
+                </Card>
+                <Card className="p-4 text-center border-primary/20" data-testid="stat-plans">
+                  <BookOpen className="h-5 w-5 mx-auto mb-1 text-green-500" />
+                  <p className="text-2xl font-bold">{dashboardStats?.studyPlansCount || 0}</p>
+                  <p className="text-xs text-muted-foreground">Study Plans</p>
+                </Card>
+                <Card className="p-4 text-center border-primary/20" data-testid="stat-websites">
+                  <Code2 className="h-5 w-5 mx-auto mb-1 text-emerald-500" />
+                  <p className="text-2xl font-bold">{dashboardStats?.websitesCount || 0}</p>
+                  <p className="text-xs text-muted-foreground">Websites</p>
+                </Card>
+                <Card className="p-4 text-center border-primary/20" data-testid="stat-images">
+                  <ImageIcon className="h-5 w-5 mx-auto mb-1 text-orange-500" />
+                  <p className="text-2xl font-bold">{dashboardStats?.imagesCount || 0}</p>
+                  <p className="text-xs text-muted-foreground">Images</p>
+                </Card>
+                <Card className="p-4 text-center border-primary/20" data-testid="stat-lessons">
+                  <Brain className="h-5 w-5 mx-auto mb-1 text-purple-500" />
+                  <p className="text-2xl font-bold">{dashboardStats?.lessonsCount || 0}</p>
+                  <p className="text-xs text-muted-foreground">Lessons</p>
+                </Card>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Search Categories */}
