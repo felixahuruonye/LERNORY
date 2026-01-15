@@ -8,7 +8,9 @@ interface GeminiLiveSession {
   userId: string;
   sessionId: string;
   audioBuffer: Buffer[];
+  audioChunks: string[]; // For streaming chunks
   isConnected: boolean;
+  isReceivingAudio: boolean;
   selectedVoice: string;
   language: string;
 }
@@ -31,7 +33,9 @@ export async function handleGeminiLiveConnection(ws: WS, userId: string) {
     userId,
     sessionId,
     audioBuffer: [],
+    audioChunks: [],
     isConnected: true,
+    isReceivingAudio: false,
     selectedVoice: "Aoede",
     language: "en",
   };
@@ -53,6 +57,25 @@ export async function handleGeminiLiveConnection(ws: WS, userId: string) {
       switch (data.type) {
         case "audio_input":
           await handleAudioInput(session, data);
+          break;
+        case "audio_chunk":
+          // Real-time streaming: accumulate chunks
+          if (data.chunk) {
+            session.audioChunks.push(data.chunk);
+            if (!session.isReceivingAudio) {
+              session.isReceivingAudio = true;
+              ws.send(JSON.stringify({ type: "receiving_audio" }));
+            }
+          }
+          break;
+        case "audio_end":
+          // End of audio stream, process accumulated chunks
+          if (session.audioChunks.length > 0) {
+            const combinedAudio = session.audioChunks.join("");
+            session.audioChunks = [];
+            session.isReceivingAudio = false;
+            await handleAudioInput(session, { audio: combinedAudio });
+          }
           break;
         case "text_input":
           await handleTextInput(session, data.text);
@@ -114,7 +137,11 @@ async function handleAudioInput(session: GeminiLiveSession, data: any) {
 Voice: ${session.selectedVoice}
 Language preference: ${session.language}
 
-IMPORTANT: Keep responses conversational and brief for voice. Speak naturally as if in a friendly tutoring session.
+IMPORTANT RESPONSE FORMAT:
+1. First, transcribe what the student said in brackets: [User said: "...their words..."]
+2. Then, provide your helpful response
+
+Keep responses conversational and brief for voice. Speak naturally as if in a friendly tutoring session.
 Focus on:
 - Being encouraging and supportive
 - Explaining concepts clearly and simply
@@ -142,12 +169,31 @@ Focus on:
       },
     });
 
-    const textResponse = response.text || "I heard you, but I'm not sure how to respond. Could you please repeat that?";
+    const fullResponse = response.text || "I heard you, but I'm not sure how to respond. Could you please repeat that?";
+    
+    // Extract user transcript if present in format [User said: "..."]
+    let userTranscript = "";
+    let aiResponse = fullResponse;
+    
+    const transcriptMatch = fullResponse.match(/\[User said:\s*"(.+?)"\]/i);
+    if (transcriptMatch) {
+      userTranscript = transcriptMatch[1];
+      aiResponse = fullResponse.replace(transcriptMatch[0], "").trim();
+    }
+    
+    // Send user transcript if found
+    if (userTranscript) {
+      session.ws.send(JSON.stringify({
+        type: "user_transcript",
+        text: userTranscript,
+      }));
+    }
     
     session.ws.send(JSON.stringify({
       type: "ai_response",
-      text: textResponse,
+      text: aiResponse,
       voice: session.selectedVoice,
+      userTranscript: userTranscript || undefined,
     }));
 
     session.ws.send(JSON.stringify({ type: "processing_complete" }));

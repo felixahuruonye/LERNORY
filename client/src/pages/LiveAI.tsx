@@ -146,7 +146,7 @@ export default function LiveAI() {
     };
   };
 
-  const handleGeminiMessage = (data: any) => {
+  const handleGeminiMessage = async (data: any) => {
     switch (data.type) {
       case "session_started":
         console.log("Gemini session started:", data.sessionId);
@@ -157,9 +157,26 @@ export default function LiveAI() {
       case "processing_complete":
         setIsProcessing(false);
         break;
+      case "user_transcript":
+        // User's spoken words transcribed by Gemini
+        const userTranscript = data.text?.trim() || "";
+        if (userTranscript) {
+          addMessage("user", userTranscript);
+          await saveMessageToDatabase("user", userTranscript);
+        }
+        break;
       case "ai_response":
-        addMessage("assistant", data.text);
-        speakText(data.text);
+        const aiMessage = data.text?.replace(/LEARNORY/g, "Learnory").trim() || "";
+        if (aiMessage) {
+          // If there's a userTranscript in the response and we haven't added it yet
+          if (data.userTranscript) {
+            // User transcript already handled by user_transcript message
+          }
+          addMessage("assistant", aiMessage);
+          await saveMessageToDatabase("assistant", aiMessage);
+          speakText(aiMessage);
+        }
+        setIsProcessing(false);
         break;
       case "error":
         toast({
@@ -308,9 +325,29 @@ export default function LiveAI() {
       const mediaRecorder = new MediaRecorder(stream);
       audioChunksRef.current = []; // Reset audio chunks
       
+      // Check if Gemini Live is connected for real-time streaming
+      const isGeminiLiveActive = geminiWsRef.current?.readyState === WebSocket.OPEN;
+      
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          
+          // True real-time streaming: send chunk immediately when Gemini WS is open
+          if (isGeminiLiveActive && geminiWsRef.current?.readyState === WebSocket.OPEN) {
+            // Convert chunk to base64 and send immediately
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64 = (reader.result as string).split(",")[1];
+              if (base64 && geminiWsRef.current?.readyState === WebSocket.OPEN) {
+                geminiWsRef.current.send(JSON.stringify({
+                  type: "audio_chunk",
+                  chunk: base64,
+                  isPartial: true,
+                }));
+              }
+            };
+            reader.readAsDataURL(event.data);
+          }
         }
       };
 
@@ -318,12 +355,12 @@ export default function LiveAI() {
       setIsListening(true);
       
       toast({ 
-        title: "✓ Voice Ready", 
+        title: "Voice Ready", 
         description: "Listening... Speak naturally!" 
       });
-      console.log("✓ Microphone ready - Waiting for speech");
+      console.log("Microphone ready - Waiting for speech" + (isGeminiLiveActive ? " (streaming mode)" : ""));
       
-      // Start voice activity detection
+      // Start voice activity detection with Gemini Live streaming when connected
       startVoiceActivityDetection(mediaRecorder);
     } catch (error: any) {
       console.error("Microphone access error:", error);
@@ -335,11 +372,15 @@ export default function LiveAI() {
     }
   };
 
-  // Voice activity detection and Whisper transcription
+  // Voice activity detection - streams to Gemini Live when connected, otherwise Whisper
   const startVoiceActivityDetection = (mediaRecorder: MediaRecorder) => {
     let isRecording = false;
     let silenceTimer: NodeJS.Timeout | null = null;
     const SILENCE_THRESHOLD = 1500; // 1.5 seconds of silence = end of speech
+    const STREAM_TIMESLICE = 500; // Stream audio every 500ms for real-time
+
+    // Check if we should use true streaming (Gemini connected)
+    const useStreaming = isGeminiConnected && geminiWsRef.current?.readyState === WebSocket.OPEN;
 
     // Create audio context from the mediaRecorder's stream
     const stream = mediaRecorder.stream as MediaStream;
@@ -349,6 +390,9 @@ export default function LiveAI() {
     microphone.connect(analyser);
 
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    
+    // For streaming: accumulate chunks and send when silence detected
+    let streamingChunks: Blob[] = [];
 
     const checkVoiceActivity = () => {
       analyser.getByteFrequencyData(dataArray);
@@ -360,27 +404,43 @@ export default function LiveAI() {
         // Start recording when voice detected
         isRecording = true;
         audioChunksRef.current = [];
+        streamingChunks = [];
         if (mediaRecorder.state === "inactive") {
-          mediaRecorder.start();
+          // Use timeslice for more responsive streaming when Gemini is connected
+          if (useStreaming) {
+            mediaRecorder.start(STREAM_TIMESLICE);
+          } else {
+            mediaRecorder.start();
+          }
         }
         setIsListening(true);
-        console.log("🎤 Recording started");
+        console.log("Recording started" + (useStreaming ? " (streaming mode)" : ""));
         
         if (silenceTimer) clearTimeout(silenceTimer);
       } else if (!hasVoice && isRecording) {
         // Start silence timer
         if (!silenceTimer) {
-          silenceTimer = setTimeout(() => {
+          silenceTimer = setTimeout(async () => {
             // End recording after silence threshold
             isRecording = false;
             if (mediaRecorder.state === "recording") {
               mediaRecorder.stop();
             }
             setIsListening(false);
-            console.log("🎤 Recording stopped - Processing with Whisper");
             
-            // Send to Whisper for transcription
-            setTimeout(() => transcribeWithWhisper(), 100);
+            // Check if Gemini Live is connected for real-time audio streaming
+            if (useStreaming && geminiWsRef.current?.readyState === WebSocket.OPEN) {
+              console.log("Recording stopped - Signaling end to Gemini Live");
+              // Send audio_end signal to trigger processing of accumulated chunks
+              geminiWsRef.current.send(JSON.stringify({
+                type: "audio_end",
+              }));
+              setIsProcessing(true);
+            } else {
+              console.log("Recording stopped - Processing with Whisper");
+              // Fall back to Whisper for transcription
+              setTimeout(() => transcribeWithWhisper(), 100);
+            }
             silenceTimer = null;
           }, SILENCE_THRESHOLD);
         }
@@ -394,6 +454,49 @@ export default function LiveAI() {
     };
 
     checkVoiceActivity();
+  };
+
+  // Stream recorded audio to Gemini Live as base64 and get transcript
+  const streamAudioToGeminiLive = async () => {
+    if (audioChunksRef.current.length === 0) {
+      console.log("No audio to stream");
+      return;
+    }
+
+    try {
+      // Create audio blob from chunks
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Audio = (reader.result as string).split(",")[1];
+        if (base64Audio) {
+          setIsProcessing(true);
+          
+          // Also try to get a transcript via local speech recognition for chat history
+          // Send audio to Gemini for processing
+          sendAudioToGemini(base64Audio);
+          
+          // Add a placeholder that will be updated when we get response
+          // The server should return the transcript in the response
+        }
+      };
+      reader.readAsDataURL(audioBlob);
+
+      audioChunksRef.current = [];
+      
+      // Restart listening after a brief pause
+      setTimeout(() => {
+        if (mediaRecorderRef.current && initRef.current && !isMuted && isCallActive) {
+          startVoiceActivityDetection(mediaRecorderRef.current);
+        }
+      }, 500);
+    } catch (error) {
+      console.error("Error streaming audio to Gemini:", error);
+      // Fall back to Whisper
+      transcribeWithWhisper();
+    }
   };
 
   // Transcribe audio with OpenAI Whisper API
@@ -759,66 +862,61 @@ export default function LiveAI() {
 
       // If Whisper is offline and user types, auto-recover when they message
       if (!usingBrowserAPI && whisperStatus === "offline") {
-        console.log("🔄 Attempting to re-enable Whisper API...");
+        console.log("Attempting to re-enable Whisper API...");
         setWhisperStatus("online");
         setUsingBrowserAPI(false);
         localStorage.setItem("learnory_whisper_status", "online");
         
         toast({
-          title: "✓ Voice Restored",
+          title: "Voice Restored",
           description: "You can now talk to me again!",
         });
+      }
 
-        // Send notification
-        await fetch("/api/notifications", {
+      // Use Gemini Live WebSocket if connected, otherwise fall back to HTTP API
+      if (isGeminiConnected && geminiWsRef.current?.readyState === WebSocket.OPEN) {
+        // Send via Gemini Live WebSocket for real-time response
+        sendTextToGemini(text);
+        // Response will be handled by handleGeminiMessage
+      } else {
+        // Fall back to HTTP API
+        const response = await fetch("/api/chat/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "system",
-            title: "Voice Transcription Restored",
-            message: "OpenAI Whisper API is now available. You can use voice again!",
-            icon: "✓",
-          })
-        }).catch(err => console.error("Failed to create notification:", err));
+          credentials: "include",
+          body: JSON.stringify({ 
+            content: text, 
+            sessionId: sessionId,
+            includeUserContext: true,
+            autoLearn: true
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to get response");
+        }
+
+        const data = await response.json();
+        console.log("API Response:", data);
+        let aiMessage = data.message || "Got it!";
+        console.log("AI Message to display:", aiMessage);
+        
+        // Clean up display text
+        aiMessage = aiMessage
+          .replace(/LEARNORY/g, "Learnory")
+          .trim();
+        
+        if (!aiMessage || aiMessage.trim() === "") {
+          throw new Error("Empty response from API");
+        }
+        addMessage("assistant", aiMessage);
+        
+        // Save AI message to database for permanent transcript
+        await saveMessageToDatabase("assistant", aiMessage);
+
+        // Speak the response with avatar lip-syncing
+        await playAudio(aiMessage);
       }
-
-      // SAVE TO CHAT HISTORY: Use sessionId if available
-      const response = await fetch("/api/chat/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ 
-          content: text, 
-          sessionId: sessionId, // Save to database with session
-          includeUserContext: true,
-          autoLearn: true // Enable auto-learning from this message
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to get response");
-      }
-
-      const data = await response.json();
-      console.log("API Response:", data);
-      let aiMessage = data.message || "Got it!";
-      console.log("AI Message to display:", aiMessage);
-      
-      // Clean up display text
-      aiMessage = aiMessage
-        .replace(/LEARNORY/g, "Learnory")
-        .trim();
-      
-      if (!aiMessage || aiMessage.trim() === "") {
-        throw new Error("Empty response from API");
-      }
-      addMessage("assistant", aiMessage);
-      
-      // Save AI message to database for permanent transcript
-      await saveMessageToDatabase("assistant", aiMessage);
-
-      // Speak the response with avatar lip-syncing
-      await playAudio(aiMessage);
     } catch (error) {
       console.error("Error:", error);
       toast({
@@ -1006,13 +1104,33 @@ export default function LiveAI() {
               </Card>
 
               {/* Status Indicator */}
-              <div className={`text-sm font-medium ${
+              <div className={`flex items-center gap-2 text-sm font-medium ${
                 isDarkMode ? "text-slate-300" : "text-slate-700"
               }`}>
-                {isMuted && !isProcessing && !isSpeaking && "🔇 Muted - Click Unmute to talk"}
-                {isListening && !isMuted && "🎤 Listening..."}
-                {isSpeaking && "🔊 LEARNORY Speaking..."}
-                {isProcessing && "⏳ Thinking..."}
+                {isMuted && !isProcessing && !isSpeaking && (
+                  <>
+                    <VolumeX className="w-4 h-4" />
+                    <span>Muted - Click Unmute to talk</span>
+                  </>
+                )}
+                {isListening && !isMuted && (
+                  <>
+                    <Mic className="w-4 h-4 animate-pulse text-green-500" />
+                    <span>Listening...</span>
+                  </>
+                )}
+                {isSpeaking && (
+                  <>
+                    <Volume2 className="w-4 h-4 animate-pulse text-blue-500" />
+                    <span>LEARNORY Speaking...</span>
+                  </>
+                )}
+                {isProcessing && (
+                  <>
+                    <Sparkles className="w-4 h-4 animate-spin text-purple-500" />
+                    <span>Thinking...</span>
+                  </>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -1033,12 +1151,12 @@ export default function LiveAI() {
                         content: "Voice mode activated! I'm ready to have a voice conversation with you. Speak naturally!",
                         timestamp: Date.now()
                       }]);
-                      toast({ title: "🎤 Voice Mode", description: "Start speaking to begin conversation" });
+                      toast({ title: "Voice Mode", description: "Start speaking to begin conversation" });
                     } else if (mode === "scan-image" || mode === "summarize") {
                       // Show file upload interface
                       setShowUploadMode(true);
                       setUploadedFile(null);
-                      toast({ title: "📁 " + (mode === "scan-image" ? "Upload Image" : "Upload PDF"), description: "Click the upload button to choose your file" });
+                      toast({ title: (mode === "scan-image" ? "Upload Image" : "Upload PDF"), description: "Click the upload button to choose your file" });
                       setTimeout(() => fileInputRef.current?.click(), 100);
                     } else {
                       // For other modes, pre-fill the message input
@@ -1057,18 +1175,42 @@ export default function LiveAI() {
               {/* Control Buttons - Mute/Unmute and End Call */}
               <div className="w-full max-w-sm flex gap-2">
                 <Button
-                  onClick={() => {
+                  onClick={async () => {
                     if (isMuted) {
                       // User wants to unmute and start listening
                       setIsMuted(false);
-                      console.log("🎤 User clicked Unmute - Starting speech recognition...");
-                      console.log("usingBrowserAPI:", usingBrowserAPI, "isCallActive:", isCallActive);
-                      if (usingBrowserAPI && isCallActive) {
-                        startBrowserSpeechRecognition();
-                      } else {
-                        console.warn("⚠️ Cannot start: usingBrowserAPI=", usingBrowserAPI, "isCallActive=", isCallActive);
+                      console.log("User clicked Unmute - Starting speech recognition...");
+                      
+                      // Auto-connect to Gemini Live WebSocket if not connected
+                      if (!isGeminiConnected) {
+                        connectToGeminiLive();
                       }
-                      toast({ title: "🎤 Unmuted", description: "Microphone is now active - speak whenever you're ready" });
+                      
+                      // Request mic permission if needed
+                      if (micPermission !== "granted") {
+                        const granted = await requestMicrophonePermission();
+                        if (!granted) return;
+                      }
+                      
+                      // Gate voice input: use Gemini Live audio when connected, otherwise Browser Speech API
+                      // Wait briefly for WebSocket connection if we just connected
+                      const waitForConnection = async () => {
+                        // Give WebSocket a moment to connect
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                        if (geminiWsRef.current?.readyState === WebSocket.OPEN) {
+                          console.log("Using Gemini Live for voice input (streaming mode)");
+                          initializeContinuousListening();
+                        } else if (usingBrowserAPI && isCallActive) {
+                          console.log("Using Browser Speech API for voice input");
+                          startBrowserSpeechRecognition();
+                        } else {
+                          console.log("Using MediaRecorder for voice input (fallback)");
+                          initializeContinuousListening();
+                        }
+                      };
+                      waitForConnection();
+                      toast({ title: "Voice Enabled", description: "Microphone is now active - speak whenever you're ready" });
                     } else {
                       // User wants to mute
                       setIsMuted(true);
@@ -1079,7 +1221,7 @@ export default function LiveAI() {
                           // Already stopped
                         }
                       }
-                      toast({ title: "🔇 Muted", description: "Microphone is now off" });
+                      toast({ title: "Microphone Muted", description: "Microphone is now off" });
                     }
                   }}
                   variant={isMuted ? "default" : "outline"}
