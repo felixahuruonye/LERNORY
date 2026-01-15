@@ -356,10 +356,9 @@ export default function LiveAI() {
       (async () => {
         try {
           console.log("🔄 Creating chat session...");
-          const response = await fetch("/api/chat/sessions", {
+          const { apiRequest } = await import("@/lib/queryClient");
+          const session = await apiRequest("/api/chat/sessions", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
             body: JSON.stringify({
               title: "Live AI Session - " + new Date().toLocaleString(),
               mode: "live-ai",
@@ -367,11 +366,6 @@ export default function LiveAI() {
             })
           });
           
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          
-          const session = await response.json();
           console.log("📊 Session response:", session);
           
           if (session.id) {
@@ -432,58 +426,120 @@ export default function LiveAI() {
     };
   }, []);
 
-  // Initialize Whisper voice listening
+  // PCM Audio streaming refs
+  const pcmContextRef = useRef<AudioContext | null>(null);
+  const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmStreamRef = useRef<MediaStream | null>(null);
+  const isStreamingRef = useRef<boolean>(false);
+
+  // Initialize PCM audio streaming for Gemini Live
   const initializeContinuousListening = async () => {
     try {
-      // Request microphone permission with MAXIMUM sensitivity and clarity
+      // Request microphone permission
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
-          noiseSuppression: false, // Disable to hear all frequencies
-          autoGainControl: true, // Enable to boost quiet voices
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000, // Request 16kHz for Gemini
         } as any
       });
       
-      const mediaRecorder = new MediaRecorder(stream);
-      audioChunksRef.current = []; // Reset audio chunks
+      pcmStreamRef.current = stream;
       
-      // Check if Gemini Live is connected for real-time streaming
-      const isGeminiLiveActive = geminiWsRef.current?.readyState === WebSocket.OPEN;
+      // Connect to Gemini Live first
+      if (geminiWsRef.current?.readyState !== WebSocket.OPEN) {
+        connectToGeminiLive();
+        // Wait for connection
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
       
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+      // Create audio context at 16kHz
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 16000,
+      });
+      pcmContextRef.current = audioContext;
+      
+      // Create media stream source
+      const source = audioContext.createMediaStreamSource(stream);
+      
+      // Create script processor for PCM extraction (4096 buffer size)
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      pcmProcessorRef.current = processor;
+      
+      // Voice activity detection
+      let silenceFrames = 0;
+      const SILENCE_THRESHOLD = 0.01;
+      const SILENCE_FRAMES_LIMIT = 25; // ~1.5 seconds at 16kHz
+      let hasVoice = false;
+      
+      processor.onaudioprocess = (e) => {
+        if (!isStreamingRef.current) return;
+        
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Calculate RMS for voice activity detection
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sum += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sum / inputData.length);
+        
+        if (rms > SILENCE_THRESHOLD) {
+          silenceFrames = 0;
+          if (!hasVoice) {
+            hasVoice = true;
+            console.log("🎤 Voice detected - streaming to Gemini");
+          }
           
-          // True real-time streaming: send chunk immediately when Gemini WS is open
-          if (isGeminiLiveActive && geminiWsRef.current?.readyState === WebSocket.OPEN) {
-            // Convert chunk to base64 and send immediately
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              const base64 = (reader.result as string).split(",")[1];
-              if (base64 && geminiWsRef.current?.readyState === WebSocket.OPEN) {
-                geminiWsRef.current.send(JSON.stringify({
-                  type: "audio_chunk",
-                  chunk: base64,
-                  isPartial: true,
-                }));
-              }
-            };
-            reader.readAsDataURL(event.data);
+          // Convert Float32 to Int16 PCM
+          const pcmData = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            const s = Math.max(-1, Math.min(1, inputData[i]));
+            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+          
+          // Send PCM to Gemini Live
+          if (geminiWsRef.current?.readyState === WebSocket.OPEN) {
+            // Send as base64
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+            geminiWsRef.current.send(JSON.stringify({
+              type: "audio_chunk",
+              chunk: base64,
+              mimeType: "audio/pcm;rate=16000",
+            }));
+          }
+        } else {
+          silenceFrames++;
+          if (hasVoice && silenceFrames > SILENCE_FRAMES_LIMIT) {
+            hasVoice = false;
+            console.log("🎤 Silence detected - signaling end of turn");
+            
+            // Signal end of audio input
+            if (geminiWsRef.current?.readyState === WebSocket.OPEN) {
+              geminiWsRef.current.send(JSON.stringify({
+                type: "audio_end",
+              }));
+              setIsProcessing(true);
+            }
+            silenceFrames = 0;
           }
         }
       };
-
-      mediaRecorderRef.current = mediaRecorder;
+      
+      // Connect the audio graph
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+      
+      isStreamingRef.current = true;
       setIsListening(true);
       
       toast({ 
         title: "Voice Ready", 
         description: "Listening... Speak naturally!" 
       });
-      console.log("Microphone ready - Waiting for speech" + (isGeminiLiveActive ? " (streaming mode)" : ""));
+      console.log("🎙️ PCM Audio streaming initialized at 16kHz");
       
-      // Start voice activity detection with Gemini Live streaming when connected
-      startVoiceActivityDetection(mediaRecorder);
     } catch (error: any) {
       console.error("Microphone access error:", error);
       toast({
@@ -492,6 +548,24 @@ export default function LiveAI() {
         variant: "destructive",
       });
     }
+  };
+
+  // Stop PCM streaming
+  const stopPCMStreaming = () => {
+    isStreamingRef.current = false;
+    if (pcmProcessorRef.current) {
+      pcmProcessorRef.current.disconnect();
+      pcmProcessorRef.current = null;
+    }
+    if (pcmContextRef.current) {
+      pcmContextRef.current.close();
+      pcmContextRef.current = null;
+    }
+    if (pcmStreamRef.current) {
+      pcmStreamRef.current.getTracks().forEach(track => track.stop());
+      pcmStreamRef.current = null;
+    }
+    setIsListening(false);
   };
 
   // Voice activity detection - streams to Gemini Live when connected, otherwise Whisper
