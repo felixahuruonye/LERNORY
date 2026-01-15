@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { InstallPrompt, InstallButton } from "@/components/InstallPrompt";
 import {
   Mic,
   Brain,
@@ -14,6 +15,7 @@ import {
   Users,
   TrendingUp,
   Globe,
+  Download,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -198,6 +200,7 @@ export default function Landing() {
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </Button>
+              <InstallButton />
             </div>
           </ScrollReveal>
 
@@ -467,6 +470,9 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
     </div>
   );
 }
