@@ -41,6 +41,16 @@ A three-tier fallback system is implemented for AI:
 -   **CBT Mode**: Simulation of Computer-Based Testing for JAMB, WAEC, NECO with subject selection, flexible durations, real-time timer, and progress tracking.
 -   **Pricing & Subscription System**: Three pricing tiers (Free, Pro, Premium) integrated with Paystack, with database schemas for `pricingTiers` and `subscriptions`.
 
+## Recent Changes (January 2026)
+- **Authentication Sync**: Added automatic user sync from Supabase Auth to local PostgreSQL database in both `supabaseAuth` and `optionalSupabaseAuth` middleware to prevent foreign key constraint violations
+- **Database Schema**: Added `subscription_tier`, `subscription_expires_at`, and `paystack_customer_id` columns to users table
+- **Gemini AI**: Fixed chatWithGemini function calls to use proper message format with system role
+- **Code Fixes**: Fixed Set iteration using Array.from(), corrected getCoursesByCreator to getCoursesByTeacher
+- **Design Compliance**: Removed hover-elevate/active-elevate classes from Button components per design guidelines
+
+### Known Configuration Issues
+- **Google OAuth**: Must be enabled in Supabase dashboard for OAuth login to work. Currently only email/password authentication is available until Google provider is configured in Supabase.
+
 ## External Dependencies
 ### Core Infrastructure
 -   **Neon Database**: Serverless PostgreSQL (`@neondatabase/serverless`)
