@@ -1,33 +1,32 @@
-import { useState, useEffect } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
-import { signInWithGoogle, signInWithEmail } from "@/lib/supabase";
-import { Loader2, Zap, Mail, ArrowLeft, CheckCircle, UserPlus } from "lucide-react";
+import { signInWithGoogle, signUpWithEmailPassword } from "@/lib/supabase";
+import { Loader2, Zap, UserPlus, ArrowLeft, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Link } from "wouter";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
-  const searchString = useSearch();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
 
-  // Pre-fill email from URL if coming from login page
-  useEffect(() => {
-    const params = new URLSearchParams(searchString);
-    const emailParam = params.get('email');
-    if (emailParam) {
-      setEmail(emailParam);
-    }
-  }, [searchString]);
+  const features = [
+    "AI-powered tutoring for all subjects",
+    "Personalized study plans and schedules",
+    "Practice exams with detailed feedback",
+    "Track your progress with analytics",
+  ];
 
   const handleGoogleSignup = async () => {
     setIsGoogleLoading(true);
@@ -42,8 +41,8 @@ export default function Signup() {
       }
     } catch (err) {
       toast({
-        title: "Signup Failed",
-        description: "An unexpected error occurred",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -53,28 +52,71 @@ export default function Signup() {
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    
+    if (!email || !password || !confirmPassword) {
+      toast({
+        title: "Missing Fields",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "Passwords Don't Match",
+        description: "Please make sure your passwords match.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const { error } = await signInWithEmail(email);
+      const { data, error } = await signUpWithEmailPassword(email, password);
+      
       if (error) {
+        if (error.message.toLowerCase().includes('already registered')) {
+          toast({
+            title: "Account Exists",
+            description: "This email is already registered. Please log in instead.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Signup Failed",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      if (data?.session) {
         toast({
-          title: "Signup Failed",
-          description: error.message,
-          variant: "destructive",
+          title: "Account Created!",
+          description: "Welcome to LERNORY! Redirecting to dashboard...",
         });
-      } else {
-        setEmailSent(true);
+        setLocation('/dashboard');
+      } else if (data?.user) {
         toast({
           title: "Check Your Email",
-          description: "We sent you a magic link to create your account",
+          description: "We sent you a confirmation email. Please verify to continue.",
         });
       }
     } catch (err) {
       toast({
-        title: "Signup Failed",
-        description: "An unexpected error occurred",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -82,26 +124,17 @@ export default function Signup() {
     }
   };
 
-  const features = [
-    "AI-powered personalized tutoring",
-    "Voice-first learning experience",
-    "CBT exam preparation for JAMB, WAEC, NECO",
-    "Smart course generation",
-  ];
-
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 backdrop-blur-lg bg-background/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5">
+      <header className="fixed top-0 left-0 right-0 z-50 border-b bg-background/80 backdrop-blur-sm">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <Link href="/">
               <div className="flex items-center gap-2 cursor-pointer">
                 <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center">
                   <Zap className="h-5 w-5 text-primary-foreground" />
                 </div>
-                <span className="text-xl font-display font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
-                  LERNORY
-                </span>
+                <span className="font-display font-bold text-xl">LERNORY</span>
               </div>
             </Link>
             <ThemeToggle />
@@ -133,106 +166,113 @@ export default function Signup() {
               <div className="mx-auto mb-4 h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center">
                 <Zap className="h-7 w-7 text-primary-foreground" />
               </div>
-              <CardTitle className="text-2xl font-display">Get Started</CardTitle>
-              <CardDescription>Create your free account to begin learning</CardDescription>
+              <CardTitle className="text-2xl font-display">Create Account</CardTitle>
+              <CardDescription>Sign up to start learning with AI</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {emailSent ? (
-                <div className="text-center py-8">
-                  <Mail className="h-12 w-12 text-primary mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Check Your Email</h3>
-                  <p className="text-muted-foreground mb-4">
-                    We sent a magic link to <strong>{email}</strong>
-                  </p>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setEmailSent(false)}
-                    data-testid="button-try-different-email"
-                  >
-                    Try a different email
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    className="w-full h-12 text-base"
-                    onClick={handleGoogleSignup}
-                    disabled={isGoogleLoading}
-                    data-testid="button-google-signup"
-                  >
-                    {isGoogleLoading ? (
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                    ) : (
-                      <SiGoogle className="h-5 w-5 mr-2" />
-                    )}
-                    Continue with Google
-                  </Button>
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">Or</span>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleEmailSignup} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email address</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="Enter your email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        data-testid="input-email"
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      size="lg"
-                      className="w-full text-base bg-gradient-to-r from-chart-2 to-primary border-primary"
-                      disabled={isLoading}
-                      data-testid="button-email-signup"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      ) : (
-                        <UserPlus className="h-5 w-5 mr-2" />
-                      )}
-                      Create Account
-                    </Button>
-
-                    <p className="text-xs text-center text-muted-foreground">
-                      We'll send you a magic link to set up your account instantly
-                    </p>
-                  </form>
-
-                  <p className="text-center text-sm text-muted-foreground">
-                    Already have an account?{" "}
-                    <Link href="/login" className="text-primary hover:underline" data-testid="link-login">
-                      Log in
-                    </Link>
-                  </p>
-
-                  <p className="text-center text-xs text-muted-foreground">
-                    By signing up, you agree to our Terms of Service and Privacy Policy
-                  </p>
-                </>
-              )}
-
               <Button
-                variant="ghost"
+                variant="outline"
                 className="w-full"
-                onClick={() => setLocation("/")}
-                data-testid="button-back-home"
+                size="lg"
+                onClick={handleGoogleSignup}
+                disabled={isGoogleLoading}
+                data-testid="button-google-signup"
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Home
+                {isGoogleLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                ) : (
+                  <SiGoogle className="h-5 w-5 mr-2" />
+                )}
+                Continue with Google
               </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleEmailSignup} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    data-testid="input-email"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Create a password (min 6 characters)"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      data-testid="input-password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowPassword(!showPassword)}
+                      data-testid="button-toggle-password"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    data-testid="input-confirm-password"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full bg-gradient-to-r from-chart-2 to-primary border-primary"
+                  disabled={isLoading}
+                  data-testid="button-email-signup"
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  ) : (
+                    <UserPlus className="h-5 w-5 mr-2" />
+                  )}
+                  Create Account
+                </Button>
+              </form>
+
+              <p className="text-center text-sm text-muted-foreground">
+                Already have an account?{" "}
+                <Link href="/login" className="text-primary hover:underline" data-testid="link-login">
+                  Log in
+                </Link>
+              </p>
             </CardContent>
           </Card>
         </div>

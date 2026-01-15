@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
-import { signInWithGoogle, signInWithEmail } from "@/lib/supabase";
-import { Loader2, Zap, Mail, ArrowLeft, LogIn } from "lucide-react";
+import { signInWithGoogle, signInWithEmailPassword } from "@/lib/supabase";
+import { Loader2, Zap, LogIn, Eye, EyeOff } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Link } from "wouter";
 
@@ -15,9 +15,10 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
@@ -32,8 +33,8 @@ export default function Login() {
       }
     } catch (err) {
       toast({
-        title: "Login Failed",
-        description: "An unexpected error occurred",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -43,20 +44,26 @@ export default function Login() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email || !password) {
+      toast({
+        title: "Missing Fields",
+        description: "Please enter both email and password.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const { error } = await signInWithEmail(email);
+      const { data, error } = await signInWithEmailPassword(email, password);
+      
       if (error) {
-        // Check if error indicates user doesn't exist - redirect to signup
-        const errorMsg = error.message.toLowerCase();
-        if (errorMsg.includes('not found') || errorMsg.includes('invalid') || errorMsg.includes('no user')) {
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
           toast({
-            title: "Account Not Found",
-            description: "Let's create an account for you!",
+            title: "Login Failed",
+            description: "Invalid email or password. Please try again or create an account.",
+            variant: "destructive",
           });
-          setLocation(`/signup?email=${encodeURIComponent(email)}`);
         } else {
           toast({
             title: "Login Failed",
@@ -64,17 +71,20 @@ export default function Login() {
             variant: "destructive",
           });
         }
-      } else {
-        setEmailSent(true);
+        return;
+      }
+
+      if (data?.session) {
         toast({
-          title: "Magic Link Sent!",
-          description: "Check your email and click the link to sign in instantly",
+          title: "Welcome Back!",
+          description: "You have been logged in successfully.",
         });
+        setLocation('/dashboard');
       }
     } catch (err) {
       toast({
-        title: "Login Failed",
-        description: "An unexpected error occurred",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -83,22 +93,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 backdrop-blur-lg bg-background/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/">
-              <div className="flex items-center gap-2 cursor-pointer">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center">
-                  <Zap className="h-5 w-5 text-primary-foreground" />
-                </div>
-                <span className="text-xl font-display font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
-                  LERNORY
-                </span>
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-background to-primary/5">
+      <header className="fixed top-0 left-0 right-0 z-50 border-b bg-background/80 backdrop-blur-sm">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/">
+            <div className="flex items-center gap-2 cursor-pointer">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center">
+                <Zap className="h-5 w-5 text-primary-foreground" />
               </div>
-            </Link>
-            <ThemeToggle />
-          </div>
+              <span className="font-display font-bold text-xl">LERNORY</span>
+            </div>
+          </Link>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -109,103 +115,99 @@ export default function Login() {
               <Zap className="h-7 w-7 text-primary-foreground" />
             </div>
             <CardTitle className="text-2xl font-display">Welcome Back</CardTitle>
-            <CardDescription>Sign in to continue your learning journey</CardDescription>
+            <CardDescription>Log in to continue your learning journey</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {emailSent ? (
-              <div className="text-center py-8">
-                <Mail className="h-12 w-12 text-primary mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Check Your Email</h3>
-                <p className="text-muted-foreground mb-4">
-                  We sent a magic link to <strong>{email}</strong>
-                </p>
-                <Button
-                  variant="ghost"
-                  onClick={() => setEmailSent(false)}
-                  data-testid="button-try-different-email"
-                >
-                  Try a different email
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Button
-                  variant="outline"
-                  className="w-full h-12 text-base"
-                  onClick={handleGoogleLogin}
-                  disabled={isGoogleLoading}
-                  data-testid="button-google-login"
-                >
-                  {isGoogleLoading ? (
-                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  ) : (
-                    <SiGoogle className="h-5 w-5 mr-2" />
-                  )}
-                  Continue with Google
-                </Button>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Or</span>
-                  </div>
-                </div>
-
-                <form onSubmit={handleEmailLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email address</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="Enter your email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      data-testid="input-email"
-                    />
-                  </div>
-
-                  {/* Primary Login button with gradient */}
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="w-full text-base bg-gradient-to-r from-primary to-chart-2 border-primary"
-                    disabled={isLoading}
-                    data-testid="button-email-login"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                    ) : (
-                      <LogIn className="h-5 w-5 mr-2" />
-                    )}
-                    Login with Email
-                  </Button>
-
-                  <p className="text-xs text-center text-muted-foreground">
-                    We'll send you a secure magic link to sign in instantly
-                  </p>
-                </form>
-
-                <p className="text-center text-sm text-muted-foreground">
-                  Don't have an account?{" "}
-                  <Link href="/signup" className="text-primary hover:underline" data-testid="link-signup">
-                    Sign up
-                  </Link>
-                </p>
-              </>
-            )}
-
             <Button
-              variant="ghost"
+              variant="outline"
               className="w-full"
-              onClick={() => setLocation("/")}
-              data-testid="button-back-home"
+              size="lg"
+              onClick={handleGoogleLogin}
+              disabled={isGoogleLoading}
+              data-testid="button-google-login"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Home
+              {isGoogleLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              ) : (
+                <SiGoogle className="h-5 w-5 mr-2" />
+              )}
+              Continue with Google
             </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Or</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  data-testid="input-email"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    data-testid="input-password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowPassword(!showPassword)}
+                    data-testid="button-toggle-password"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full bg-gradient-to-r from-primary to-chart-2 border-primary"
+                disabled={isLoading}
+                data-testid="button-email-login"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                ) : (
+                  <LogIn className="h-5 w-5 mr-2" />
+                )}
+                Log In
+              </Button>
+            </form>
+
+            <p className="text-center text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <Link href="/signup" className="text-primary hover:underline" data-testid="link-signup">
+                Sign up
+              </Link>
+            </p>
           </CardContent>
         </Card>
       </main>
