@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { useMemoryEntries } from "@/hooks/useSupabaseData";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Link } from "wouter";
 import {
@@ -29,6 +31,10 @@ import {
 export default function MemoryPanel() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  
+  // Use Supabase hook for faster loading
+  const { data: memoryEntries = [], isLoading: entriesLoading } = useMemoryEntries();
+  
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -36,8 +42,13 @@ export default function MemoryPanel() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [memoryCategories, setMemoryCategories] = useState([
+  const [memoryCategories, setMemoryCategories] = useState<{
+    id: string;
+    title: string;
+    icon: any;
+    color: string;
+    items: { key: string; value: string }[];
+  }[]>([
     {
       id: "preferences",
       title: "Learning Preferences",
@@ -82,47 +93,28 @@ export default function MemoryPanel() {
     },
   ]);
 
-  // Load learned preferences on mount
+  // Transform Supabase memory entries into categories
   useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const response = await apiRequest("GET", "/api/memory/learned-preferences");
-        const learned = await response.json();
-        
-        setMemoryCategories((prev) =>
-          prev.map((cat) => {
-            const categoryData = learned[cat.id];
-            if (!categoryData) return cat;
-            
-            const items = Object.entries(categoryData).map(([key, value]) => ({
-              key,
-              value: String(value),
-            }));
-            
-            return { ...cat, items };
-          })
-        );
+    if (!entriesLoading && memoryEntries.length > 0) {
+      // Group entries by category
+      const entriesByCategory: Record<string, any[]> = {};
+      memoryEntries.forEach((entry: any) => {
+        const cat = entry.category || 'preferences';
+        if (!entriesByCategory[cat]) entriesByCategory[cat] = [];
+        entriesByCategory[cat].push({
+          key: entry.id,
+          value: entry.content || entry.value || '',
+        });
+      });
 
-        // Log AI learning activity
-        if (learned.autoLearned) {
-          const learnedCount = 
-            (learned.autoLearned.subjects?.length || 0) + 
-            (learned.autoLearned.goals?.length || 0) + 
-            (learned.autoLearned.skills?.length || 0);
-          
-          if (learnedCount > 0) {
-            console.log(`🧠 AI has learned ${learnedCount} preferences from your interactions!`);
-          }
-        }
-      } catch (error) {
-        console.error("Load preferences error:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadPreferences();
-  }, []);
+      setMemoryCategories((prev) =>
+        prev.map((cat) => ({
+          ...cat,
+          items: entriesByCategory[cat.id] || [],
+        }))
+      );
+    }
+  }, [memoryEntries, entriesLoading]);
 
   const handleSaveMemoryItem = async (categoryId: string, itemKey: string) => {
     setIsSaving(true);
@@ -277,10 +269,29 @@ export default function MemoryPanel() {
     });
   };
 
-  if (authLoading || !user || isLoading) {
+  if (authLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading your learning memory...</div>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+        <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/80 border-b border-primary/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-9 w-9 rounded-md" />
+                <div className="flex items-center gap-3">
+                  <Brain className="h-6 w-6 text-primary" />
+                  <Skeleton className="h-7 w-36" />
+                </div>
+              </div>
+              <Skeleton className="h-9 w-9 rounded-full" />
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Skeleton className="h-24 w-full mb-8 rounded-lg" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-48 rounded-lg" />)}
+          </div>
+        </main>
       </div>
     );
   }
