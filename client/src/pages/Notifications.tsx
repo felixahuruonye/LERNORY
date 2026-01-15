@@ -1,12 +1,15 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Trash2, ArrowRight, Check, Send, Loader, AlertCircle, Eye, BookOpen } from "lucide-react";
-import { deleteNotification, markNotificationAsRead, sendChatHistoryNotifications, requestNotificationPermission } from "@/lib/notificationService";
+import { deleteNotification, sendChatHistoryNotifications, requestNotificationPermission } from "@/lib/notificationService";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useNotifications, useExamResults, useMarkNotificationRead } from "@/hooks/useSupabaseData";
 import { apiRequest } from "@/lib/queryClient";
 
 interface Notification {
@@ -36,6 +39,7 @@ function Notifications() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [sendingHistory, setSendingHistory] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<"default" | "granted" | "denied">("default");
   const [selectedReviewExam, setSelectedReviewExam] = useState<ExamHistory | null>(null);
@@ -47,32 +51,38 @@ function Notifications() {
     }
   }, []);
 
-  const { data: notifications = [], isLoading, refetch } = useQuery<Notification[]>({
-    queryKey: ["/api/notifications"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/notifications");
-      if (!response.ok) throw new Error("Failed to fetch");
-      return response.json();
-    },
-  });
-
-  const { data: examHistory = [] } = useQuery<ExamHistory[]>({
-    queryKey: ["/api/cbt/history"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/cbt/history");
-      if (!response.ok) throw new Error("Failed to fetch exam history");
-      return response.json();
-    },
-  });
+  // Use Supabase hooks for faster loading
+  const { data: notificationsData = [], isLoading, refetch } = useNotifications();
+  const { data: examResultsData = [] } = useExamResults();
+  const markReadMutation = useMarkNotificationRead();
+  
+  // Transform data to match expected interface
+  const notifications: Notification[] = notificationsData.map((n: any) => ({
+    id: n.id,
+    type: n.type || 'info',
+    title: n.title,
+    message: n.message || '',
+    actionUrl: n.action_url,
+    read: n.read || false,
+    createdAt: n.created_at,
+  }));
+  
+  const examHistory: ExamHistory[] = examResultsData.map((e: any) => ({
+    id: e.id,
+    examType: e.exam_type,
+    subjects: e.subjects || [],
+    score: e.score,
+    totalQuestions: e.total_questions,
+    correctAnswers: e.correct_answers || 0,
+    summary: e.summary || '',
+    questions: e.questions,
+    userAnswers: e.user_answers,
+    createdAt: e.created_at,
+  }));
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteNotification(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
-  });
-
-  const readMutation = useMutation({
-    mutationFn: (id: string) => markNotificationAsRead(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['supabase', 'notifications', user?.id] }),
   });
 
   const deleteExamMutation = useMutation({
@@ -81,11 +91,11 @@ function Notifications() {
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cbt/history"] });
-      toast({ title: "✅ Exam deleted", description: "Exam removed from history" });
+      queryClient.invalidateQueries({ queryKey: ['supabase', 'exam-results', user?.id] });
+      toast({ title: "Exam deleted", description: "Exam removed from history" });
     },
     onError: () => {
-      toast({ title: "❌ Error", description: "Failed to delete exam" });
+      toast({ title: "Error", description: "Failed to delete exam", variant: "destructive" });
     },
   });
 
@@ -318,11 +328,14 @@ function Notifications() {
 
         {/* Notifications Section */}
         <div>
-          <h2 className="text-2xl font-bold text-white mb-4">🔔 Notifications</h2>
+          <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+            <AlertCircle className="h-6 w-6" />
+            Notifications
+          </h2>
           {isLoading ? (
-            <Card className="p-8 bg-slate-800/50 border-slate-700">
-              <p className="text-gray-400 text-center">Loading...</p>
-            </Card>
+            <div className="space-y-3">
+              {[1,2,3].map(i => <Skeleton key={i} className="h-24 rounded-lg" />)}
+            </div>
           ) : notifications.length === 0 ? (
             <Card className="p-12 bg-slate-800/50 border-slate-700 text-center">
               <p className="text-gray-400">No notifications yet. Click "Send Chat History" to get started!</p>
@@ -339,7 +352,7 @@ function Notifications() {
                     </div>
                     <div className="flex gap-2">
                       {!n.read && (
-                        <Button size="icon" variant="ghost" onClick={() => readMutation.mutate(n.id)}>
+                        <Button size="icon" variant="ghost" onClick={() => markReadMutation.mutate(n.id)}>
                           <Check className="w-4 h-4" />
                         </Button>
                       )}

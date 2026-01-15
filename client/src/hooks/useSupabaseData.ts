@@ -63,13 +63,14 @@ export function useCreateChatSession() {
       return session;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supabase', 'chat-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['supabase', 'chat-sessions', user?.id] });
     },
   });
 }
 
 export function useDeleteChatSession() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   return useMutation({
     mutationFn: async (id: string) => {
@@ -77,7 +78,7 @@ export function useDeleteChatSession() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supabase', 'chat-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['supabase', 'chat-sessions', user?.id] });
     },
   });
 }
@@ -115,6 +116,7 @@ export function useUnreadNotifications() {
 
 export function useMarkNotificationRead() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   return useMutation({
     mutationFn: async (id: string) => {
@@ -122,7 +124,8 @@ export function useMarkNotificationRead() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supabase', 'notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['supabase', 'notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['supabase', 'notifications-unread', user?.id] });
     },
   });
 }
@@ -158,7 +161,7 @@ export function useCreateStudyPlan() {
       return plan;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supabase', 'study-plans'] });
+      queryClient.invalidateQueries({ queryKey: ['supabase', 'study-plans', user?.id] });
     },
   });
 }

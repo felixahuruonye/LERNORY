@@ -47,7 +47,11 @@ export default function AdvancedChat() {
 
   useEffect(() => {
     if (user && sessions.length === 0 && !sessionsLoading && !isLoading && !createSessionMutation.isPending) {
-      createSessionMutation.mutate({ title: "Advanced AI Workspace", mode: "chat" });
+      createSessionMutation.mutate({ title: "Advanced AI Workspace", mode: "chat" }, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['supabase', 'chat-sessions', user.id] });
+        }
+      });
     }
   }, [user, sessions, sessionsLoading]);
 
