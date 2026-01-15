@@ -1,0 +1,135 @@
+{
+  "colorScheme": "light",
+  "fonts": [
+    {
+      "family": "customFont",
+      "count": 23
+    },
+    {
+      "family": "customFont Fallback",
+      "count": 23
+    },
+    {
+      "family": "Circular",
+      "count": 23
+    },
+    {
+      "family": "custom-font",
+      "count": 23
+    },
+    {
+      "family": "Helvetica Neue",
+      "count": 23
+    },
+    {
+      "family": "Helvetica",
+      "count": 23
+    },
+    {
+      "family": "Arial",
+      "count": 23
+    },
+    {
+      "family": "sans-serif",
+      "count": 23
+    }
+  ],
+  "colors": {
+    "primary": "#72E3AD",
+    "accent": "#50C896",
+    "background": "#FCFCFC",
+    "textPrimary": "#171717",
+    "link": "#50C896"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "customFont",
+      "heading": "customFont"
+    },
+    "fontStacks": {
+      "body": [
+        "customFont",
+        "customFont Fallback",
+        "Circular",
+        "custom-font",
+        "Helvetica Neue",
+        "Helvetica",
+        "Arial",
+        "sans-serif"
+      ],
+      "heading": [
+        "customFont",
+        "customFont Fallback",
+        "Circular",
+        "custom-font",
+        "Helvetica Neue",
+        "Helvetica",
+        "Arial",
+        "sans-serif"
+      ],
+      "paragraph": [
+        "customFont",
+        "customFont Fallback",
+        "Circular",
+        "custom-font",
+        "Helvetica Neue",
+        "Helvetica",
+        "Arial",
+        "sans-serif"
+      ]
+    },
+    "fontSizes": {
+      "h1": "30px",
+      "h2": "14px",
+      "body": "12px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 8,
+    "borderRadius": "4px"
+  },
+  "components": {
+    "input": {
+      "background": "#F6F6F6",
+      "textColor": "#171717",
+      "borderColor": "#C7C7C7",
+      "borderRadius": "6px",
+      "borderRadiusCorners": {
+        "topLeft": "6px",
+        "topRight": "6px",
+        "bottomRight": "6px",
+        "bottomLeft": "6px"
+      },
+      "shadow": "none"
+    }
+  },
+  "images": {
+    "logo": "File saved at: attached_assets/logo.svg",
+    "favicon": "File saved at: attached_assets/favicon.png",
+    "ogImage": "/dashboard/img/supabase-logo.png"
+  },
+  "__framework_hints": [],
+  "__llm_logo_reasoning": {
+    "selectedIndex": 0,
+    "reasoning": "Strong indicators: header logo linking to homepage, header location, visible, top-left position, highest logo on page, alt matches logo/brand, alt contains brand name \"Supabase\", src contains brand name \"Supabase\", reasonable size. Score: 138 (clear winner by 95 points)",
+    "confidence": 0.9
+  },
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": -1,
+      "text": "N/A",
+      "reasoning": "LLM failed"
+    },
+    "secondary": {
+      "index": -1,
+      "text": "N/A",
+      "reasoning": "LLM failed"
+    },
+    "confidence": 0
+  },
+  "confidence": {
+    "buttons": 0,
+    "colors": 0,
+    "overall": 0
+  }
+}

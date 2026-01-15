@@ -1,0 +1,91 @@
+This is the update I want you to make on the learnory app.
+
+Read the entire codebase and fix all the errors issues on the app. Do not delete any files, just remove the replit database, authentication realtime, move database, API keys, server authentication to supabase using the URL and Anon key below, don't remove any servers or files that control the learnory app. Do not create any more issues or bugs into the code, write a very clean code. 
+
+Supabase URL https://supabase.com/dashboard/project/nfudflrajpmluhwwhhrc
+
+Supabase Anon key eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mdWRmbHJhanBtbHVod3doaHJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4NTA1NzcsImV4cCI6MjA3OTQyNjU3N30.KLxRB1iw-cYpT53gdJc66cJZO5VhvisnmWItTViiODc
+
+Save all the backend to supabase so it can host it permanently, do not save anything into replit.
+
+Now your Role: You are a Senior Full-Stack Engineer. Mission: Migrate the "Learnory Ultra" platform from Replit/Express to a modern Supabase + Vite + React stack, don't delete files that replit created that control the learnory app.
+
+Step 1: Database & Backend Migration
+
+Move all logic from replitSystem.ts and the Express server to Supabase.
+
+Convert the 8 modules (tutorSystem, mockExamEngine, gamification, etc.) into client-side logic or Supabase Edge Functions where necessary, don't delete it files.
+
+Set up the Supabase schema to include: users, credits, exam_results, memory_entries, and subscriptions, move all the tables, storages, and database from replit to the new supabase.
+
+Step 2: Real-Time Authentication
+
+Replace Replit Auth with Supabase Auth.
+
+Add Google OAuth (Social Login) and Email OTP (One-Time Password) for security.
+
+Ensure the login flow is secure, using Row Level Security (RLS) so students only see their own data.
+
+On the home page remove the school button.
+
+Step 3: UI & UX (Figma Preservation)
+
+DO NOT CHANGE the 8D Dashboard UI.
+
+Maintain the Glassmorphism, Neon effects, and Figma transitions. Don't delete or remove anything.
+
+Preserve all existing Framer Motion animations and Tailwind CSS styles.
+
+Step 4: PWA & Admin
+
+Add a manifest.json and service worker to make Learnory a Progressive Web App (PWA) that students can install on their phones.
+
+Create a protected /admin dashboard that pulls live revenue and user data from Supabase.
+
+Technical Constraint: Use TypeScript and Vite. Ensure the frontend is ready for a one-click deployment to Vercel.
+
+make sure you save all API keys to supabase and .env file on the code. 
+
+Now remove and delete all the openai API codes and API key use the new Gemini API key to run everything, delete the old Gemini API key. 
+Task: Replace the OpenAI Whisper implementation with Gemini 2.0 Multimodal Live API.
+1. Remove Legacy Code:
+Identify and delete all Whisper API calls and dependencies from the project.
+Remove the old logic that handles audio-to-text transcription before sending it to the AI.
+2. Implement Gemini Live API:
+Integrate the Multimodal Live API (WebSockets) using the @google/generative-ai library.
+Set up Real-time Bidirectional Audio: Use the browser's AudioWorklet or MediaRecorder to stream the student's voice directly to Gemini 2.0 Flash.
+Configure the model to respond in Native Audio: The AI should speak back directly without converting to text first. Use one of the 5 steerable expressive voices (e.g., 'Aoede' or 'Charon').
+3. Error Correction & Optimization:
+Scan the tutorSystem.ts and learnorySystem.ts for any broken references caused by the Whisper removal.
+Fix all "Type Errors" in the React components related to audio streaming.
+Ensure the Voice Activity Detection (VAD) is set up so the AI knows when the student has finished asking a question in a noisy classroom.
+4. UI Updates:
+Update the "Voice Assistant" button to use a pulsing animation when Gemini is listening.
+Add a "Live Transcript" overlay that shows what the student said in real-time, powered by Gemini's internal understanding.
+
+Here is my new Gemini API key, make sure it saved on supabase and .env file. 
+Google Gemini API key in the secret.
+Gemini 2.0 Multimodal Live APl will serve as the AI voice navigator on the app, user can talk with it in live AI and live session.
+
+Now make the entire learnory app to feet in a mobile device screen, not zooming, make it feet on any kind of mobile device screen. The upgrade button is not showing on a mobile device screen, fix that.
+
+In search, when the All button is clicked, it should load up all the other search buttons in the page. Also chat history, when clicked it should ask user: to select which history table to view, display learnory chat history and advanced chat history, this buttons should open the actual page chat histories, user can click any chat to view it either in learnory chat, or advanced chat.
+The study plan, when user ask LEARNORY, don't open or use advanced chat, use the normal ask LEARNORY chat feature, this should be able to create study plan depending on what user asked, it should do it real-time on the study plan page.
+Lesson should show the generated lessons in live session into this page.
+
+In settings, under voice settings, make it use realtime voices from Gemini 2.0 Multimodal Live APl, remove any Openai or Vapi API voices, this should show real-time voices from Google studios. Any voice selected, it what will be used to communicate back to the user real-time, it will be the system voice, remove Browser voice to speech, use Gemini 2.0 Multimodal Live APl to replace it. Make sure it working.
+
+Make advanced chat page to stop opening when ask LEARNORY chat feature button is clicked, also make it stop when chat is searched, it should be a tool not the main chat system, ask LEARNORY chat is the main chat system.
+
+Now move advanced chat button to quick actions page in ask LEARNORY chat, in the advanced chat page, move internet search to advanced chat add search Internet button beside my project button, make sure that ask LEARNORY chat doesn't search Internet, it only answers user on the prompt given, using Gemini API to answer accurately. In advanced chat page, if user must search Internet, the must click the search Internet button, for advanced chat to be able to search Internet, this is not automatically.
+Now advanced chat should use Gemini API to generate and help in projects, make it answers accurately, advanced chat is not for teaching or solving questions, is used for helping out in difficult projects using Gemini API. User can upload their project files using the file button and advanced chat will use Gemini API to analyze and solve it.
+
+In ask LEARNORY chat feature, advanced chat add the mic button so user can use it hands free, Gemini 2.0 Multimodal Live APl listen to voice recording and think about the responses or request very fast and give back responses in chat. Fix the image display on chat so the chat really understands the user prompt or message if they want an image or picture, Gemini and learnory features should understand users request before providing responses.
+
+Under course page add the button in the dashboard, user can upload a pdf file, notes videos, pictures, audios, or documents, set up price and upload it to course page, other users on the app can see it. User can delete their own uploads. Now add a button in course page name it create with LEARNORY, now user can upload different hand writing notes or books, they give a prompt on how the PDF should be created, then they upload it as pictures, then they click on create, Gemini will read this pictures and use their prompt and command to build a PDF text book, and automatically upload it to course marketplace, it now automatically give user a preview button to view it, and make changes button, so user can prompt it to make changes, and make it live button, for others on the app to view it automatically, if any new things is posted or uploaded on marketplace, update all user notifications page and a button to view and buy. Still maintain the current designs.
+
+Make sure all the memories, histories on the app are saved on supabase table realtime and automatically, no Data should automatically remove apart from when user delete them, now
+After making all this changes, will focus on pricing page and logics.
+
+In search bar, user can search them.
+
